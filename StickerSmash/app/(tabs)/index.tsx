@@ -7,6 +7,7 @@ import { useFonts } from 'expo-font';
 export default function HomeScreen() {
   const [fontsLoaded] = useFonts({
   'SourceSans3-Regular': require('@/assets/fonts/Source_Sans_3/static/SourceSans3-Regular.ttf'),
+    'Merriweather_36pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_36pt-Bold.ttf'),
   });
 
   if (!fontsLoaded) {
@@ -65,7 +66,7 @@ const styles = StyleSheet.create({
   },
   heading: {
     color: '#2C2C2C',
-    fontFamily: 'Merriweather_700Bold',
+    fontFamily: 'Merriweather_36pt-Bold',
     fontSize: 36,
     fontStyle: 'normal',
     fontWeight: '700',
