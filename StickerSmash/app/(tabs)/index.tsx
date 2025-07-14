@@ -1,47 +1,33 @@
-import { Image } from 'expo-image';
-import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
-import { ThemedView } from '@/components/ThemedView';
-import { IconSymbol } from '@/components/ui/IconSymbol';
-import { useFonts } from 'expo-font';
-import { styles } from '@/styles/styles';
+import { View, Text, Button } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function HomeScreen() {
-  const [fontsLoaded] = useFonts({
-  'SourceSans3-Regular': require('@/assets/fonts/Source_Sans_3/static/SourceSans3-Regular.ttf'),
-    'Merriweather_36pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_36pt-Bold.ttf'),
-  });
-
-  if (!fontsLoaded) {
-    return null; // Or a loading spinner
-  }
+  const resetOnboarding = async () => {
+    await AsyncStorage.removeItem('hasSeenOnboarding');
+    await AsyncStorage.removeItem('isSignedIn');
+    // Optionally, reload the app or navigate to trigger onboarding/auth again
+  };
+  const resetAuth = async () => {
+    await AsyncStorage.removeItem('isSignedIn');
+    // Optionally, reload the app or navigate to trigger onboarding/auth again
+  };
+  const resetAll = async () => {
+    await AsyncStorage.removeItem('hasSeenOnboarding');
+    await AsyncStorage.removeItem('isSignedIn');
+    // Optionally, reload the app or navigate to trigger onboarding/auth again
+  };
 
   return (
-    <ThemedView style={styles.container}>
-      <View style={styles.imageWrapper}>
-        <Image
-          source={require('@/assets/images/OnboardingPurpleBinoculars.png')}
-          style={styles.image}
-          contentFit="cover"
-        />
-      </View>
-      <Text style={styles.heading}>
-        Welcome to{'\n'}Wanderly!
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <Text style={{ fontSize: 24, fontWeight: 'bold' }}>
+        This is the main app screen!
       </Text>
-      <Text style={styles.subtitle}>
-        Let AI plan your perfect trip. Just share your destination, dates, and interests, and we’ll build a personalized itinerary just for you.
+      <Text style={{ marginTop: 16, fontSize: 16 }}>
+        You have finished onboarding.
       </Text>
-<View style={styles.paginationRow}>
-  <View style={styles.pagination}>
-    <View style={styles.dotActive} />
-    <View style={styles.dot} />
-    <View style={styles.dot} />
-  </View>
-<TouchableOpacity style={styles.buttonWrapper} activeOpacity={0.8}>
-  <Text style={styles.arrowText}>{'\u2794'}</Text> {/* Unicode heavy arrow */}
-</TouchableOpacity>
-</View>
-    </ThemedView>
+      <Button title="Reset Onboarding" onPress={resetOnboarding} />
+      <Button title="Reset Auth" onPress={resetAuth} />
+      <Button title="Reset Both" onPress={resetAll} />
+    </View>
   );
 }
-
-

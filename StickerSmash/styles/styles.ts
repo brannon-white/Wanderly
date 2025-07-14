@@ -35,7 +35,7 @@ export const styles = StyleSheet.create({
     borderBottomRightRadius: 50,
     overflow: 'hidden',
     marginBottom: 24,
-    marginTop: -55,
+    marginTop: 5,
   },
   image: {
     width: '100%',
@@ -100,4 +100,30 @@ export const styles = StyleSheet.create({
   arrowIcon: {
     color: '#6A62B7',
   },
+    thirdPageButtonRow: {
+    alignItems: 'center',
+    marginTop: 24,
+    width: '100%',
+  },
+  thirdPageButton: {
+    backgroundColor: '#6A62B7',
+    borderRadius: 40,
+    width: 322,
+    height: 70.714,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arrowTextLarge: {
+    color: '#fff',
+    fontSize: 32,
+    fontWeight: 'bold',
+  },
+  letsGoText: {
+  color: '#fff',
+  letterSpacing: 1,
+  fontFamily: 'Merriweather_36pt-Bold',
+  fontSize: 24,
+  fontStyle: 'normal',
+  fontWeight: '700',
+},
 });
