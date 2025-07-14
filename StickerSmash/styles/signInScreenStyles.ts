@@ -1,0 +1,107 @@
+import { StyleSheet } from 'react-native';
+
+export const styles = StyleSheet.create({
+  background: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingBottom: 0,
+    paddingHorizontal: 0,
+  },
+  backgroundImage: {
+    resizeMode: 'cover',
+    borderRadius: 32,
+  },
+  heading: {
+    position: 'absolute',
+    top: 80,
+    left: 24,
+    color: '#fff',
+    fontSize: 36,
+    fontWeight: 'bold',
+    fontFamily: 'Merriweather_36pt-Bold',
+  },
+  card: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 32,
+    alignItems: 'stretch',
+  },
+  welcome: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    fontFamily: 'Merriweather_36pt-Bold',
+    marginBottom: 24,
+    color: '#222',
+  },
+  googleButton: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 24,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  googleButtonText: {
+    color: '#222',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E0E0E0',
+  },
+  orText: {
+    marginHorizontal: 12,
+    color: '#888',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  label: {
+    color: '#222',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: '#6A62B7',
+    marginBottom: 8,
+  },
+  inputIcon: {
+    fontSize: 18,
+    marginRight: 8,
+  },
+  input: {
+    flex: 1,
+    height: 40,
+    fontSize: 16,
+    color: '#222',
+  },
+  signInButton: {
+    marginTop: 24,
+    backgroundColor: '#6A62B7',
+    borderRadius: 32,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signInButtonText: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: 'bold',
+  },
+});
