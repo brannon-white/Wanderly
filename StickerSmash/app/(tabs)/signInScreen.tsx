@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { styles } from '@/styles/signInScreenStyles';
-import { GoogleSignin, statusCodes, GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import auth from '@react-native-firebase/auth';
+import { GoogleSignin,statusCodes,GoogleSigninButton } from '@react-native-google-signin/google-signin';
 
 GoogleSignin.configure({
   // This is your Web client ID, used for Firebase backend authentication
@@ -35,15 +35,15 @@ export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
     
     // Get the full GoogleUser object first
     const googleUser = await GoogleSignin.signIn(); 
-
+    console.log('Google user object:', googleUser);
     // Now, explicitly check if idToken exists
-    if (!googleUser.idToken) {
+    if (!googleUser.data.idToken) {
       throw new Error('No idToken returned from Google Sign-In. Check scopes or user consent.');
     }
 
     // After this check, TypeScript now knows googleUser.idToken is a 'string'
     // You can then use it directly or assign it to a new const for clarity
-    const idTokenString: string = googleUser.idToken;
+    const idTokenString: string = googleUser.data.idToken;
 
     const googleCredential = auth.GoogleAuthProvider.credential(idTokenString);
     await auth().signInWithCredential(googleCredential);
