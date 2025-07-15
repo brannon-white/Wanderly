@@ -3,12 +3,16 @@ import { View, TouchableOpacity, Text } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { useFonts } from 'expo-font';
 import { styles } from '@/styles/styles';
+import { useNavigation } from '@react-navigation/native';
+
 
 type OnboardingFirstPageProps = {
   onNext?: () => void;
 };
 
 export default function OnboardingFirstPage({ onNext }: OnboardingFirstPageProps) {
+    const navigation = useNavigation();
+
   const [fontsLoaded] = useFonts({
     'SourceSans3-Regular': require('@/assets/fonts/Source_Sans_3/static/SourceSans3-Regular.ttf'),
     'Merriweather_36pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_36pt-Bold.ttf'),
@@ -42,8 +46,7 @@ export default function OnboardingFirstPage({ onNext }: OnboardingFirstPageProps
         <TouchableOpacity
           style={styles.buttonWrapper}
           activeOpacity={0.8}
-          onPress={onNext}
-        >
+          onPress={() => (navigation as any).navigate('OnboardingSecond')}        >
           <Text style={styles.arrowText}>{'\u2794'}</Text>
         </TouchableOpacity>
       </View>

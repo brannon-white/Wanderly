@@ -1,20 +1,30 @@
 import { View, Text, Button } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import auth from '@react-native-firebase/auth';
 
 export default function HomeScreen() {
+  const user = auth().currentUser;
+
   const resetOnboarding = async () => {
     await AsyncStorage.removeItem('hasSeenOnboarding');
     await AsyncStorage.removeItem('isSignedIn');
-    // Optionally, reload the app or navigate to trigger onboarding/auth again
   };
   const resetAuth = async () => {
     await AsyncStorage.removeItem('isSignedIn');
-    // Optionally, reload the app or navigate to trigger onboarding/auth again
   };
   const resetAll = async () => {
     await AsyncStorage.removeItem('hasSeenOnboarding');
     await AsyncStorage.removeItem('isSignedIn');
-    // Optionally, reload the app or navigate to trigger onboarding/auth again
+    signOut();
+  };
+
+  const signOut = async () => {
+    try {
+      await auth().signOut();
+      await AsyncStorage.removeItem('isSignedIn');
+    } catch (error) {
+      console.log('Sign out error:', error);
+    }
   };
 
   return (
@@ -25,8 +35,13 @@ export default function HomeScreen() {
       <Text style={{ marginTop: 16, fontSize: 16 }}>
         You have finished onboarding.
       </Text>
+      {user && (
+        <Text style={{ marginTop: 16, fontSize: 16 }}>
+          Hello, {user.displayName || user.email}
+        </Text>
+      )}
       <Button title="Reset Onboarding" onPress={resetOnboarding} />
-      <Button title="Reset Auth" onPress={resetAuth} />
+      <Button title="Reset Auth" onPress={signOut} />
       <Button title="Reset Both" onPress={resetAll} />
     </View>
   );

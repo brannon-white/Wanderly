@@ -4,6 +4,7 @@ import { styles } from '@/styles/signInScreenStyles';
 import auth from '@react-native-firebase/auth';
 import { GoogleSignin,statusCodes,GoogleSigninButton } from '@react-native-google-signin/google-signin';
 
+
 GoogleSignin.configure({
   // This is your Web client ID, used for Firebase backend authentication
   webClientId: '588805144943-7am9qr0jqsdmt478shb1ftjjas93lj4s.apps.googleusercontent.com',
@@ -11,7 +12,7 @@ GoogleSignin.configure({
   // It's usually the 'reversed client ID' or the 'CLIENT_ID' from your GoogleService-Info.plist
   iosClientId: '588805144943-7am9qr0jqsdmt478shb1ftjjas93lj4s.apps.googleusercontent.com',
   // Uncomment the line below if you need offline access (e.g., to get a refresh token)
-  // offlineAccess: true,
+  // offlineAxccess: true,
 });
 
 export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
@@ -29,33 +30,24 @@ export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
   }, []);
 
   async function signInWithGoogle() {
-  setLoading(true);
-  try {
-    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-    
-    // Get the full GoogleUser object first
-    const googleUser = await GoogleSignin.signIn(); 
-    console.log('Google user object:', googleUser);
-    // Now, explicitly check if idToken exists
-    if (!googleUser.data.idToken) {
-      throw new Error('No idToken returned from Google Sign-In. Check scopes or user consent.');
+    setLoading(true);
+    try {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const googleUser = await GoogleSignin.signIn();
+      console.log('Google user object:', googleUser);
+      if (!googleUser.data.idToken) {
+        throw new Error('No idToken returned from Google Sign-In. Check scopes or user consent.');
+      }
+      const idTokenString: string = googleUser.data.idToken;
+      const googleCredential = auth.GoogleAuthProvider.credential(idTokenString);
+      await auth().signInWithCredential(googleCredential);
+      // Navigate to index page after successful sign-in
+    } catch (error: any) {
+      // ...error handling...
+    } finally {
+      setLoading(false);
     }
-
-    // After this check, TypeScript now knows googleUser.idToken is a 'string'
-    // You can then use it directly or assign it to a new const for clarity
-    const idTokenString: string = googleUser.data.idToken;
-
-    const googleCredential = auth.GoogleAuthProvider.credential(idTokenString);
-    await auth().signInWithCredential(googleCredential);
-    // onSignIn will be called by the auth state observer
-
-  } catch (error: any) {
-    // ... (your existing error handling)
-    console.log('Google sign-in error:', error);
-  } finally {
-    setLoading(false);
   }
-}
 
   async function signOut() {
     try {
