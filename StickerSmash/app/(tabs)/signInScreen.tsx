@@ -1,10 +1,69 @@
-import { View, Text, TouchableOpacity, ImageBackground, TextInput } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { styles } from '@/styles/signInScreenStyles';
+import { GoogleSignin, statusCodes, GoogleSigninButton } from '@react-native-google-signin/google-signin';
+import auth from '@react-native-firebase/auth';
+
+GoogleSignin.configure({
+  webClientId: '588805144943-1f9uii64tqetroqlhvf7qltvaohku583.apps.googleusercontent.com', // Replace with your actual Web client ID
+});
 
 export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const subscriber = auth().onAuthStateChanged(firebaseUser => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        onSignIn?.();
+      }
+    });
+    return subscriber;
+  }, []);
+
+  async function signInWithGoogle() {
+  setLoading(true);
+  try {
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    
+    // Get the full GoogleUser object first
+    const googleUser = await GoogleSignin.signIn(); 
+
+    // Now, explicitly check if idToken exists
+    if (!googleUser.idToken) {
+      throw new Error('No idToken returned from Google Sign-In. Check scopes or user consent.');
+    }
+
+    // After this check, TypeScript now knows googleUser.idToken is a 'string'
+    // You can then use it directly or assign it to a new const for clarity
+    const idTokenString: string = googleUser.idToken;
+
+    const googleCredential = auth.GoogleAuthProvider.credential(idTokenString);
+    await auth().signInWithCredential(googleCredential);
+    // onSignIn will be called by the auth state observer
+
+  } catch (error: any) {
+    // ... (your existing error handling)
+    console.log('Google sign-in error:', error);
+  } finally {
+    setLoading(false);
+  }
+}
+
+  async function signOut() {
+    try {
+      await GoogleSignin.revokeAccess();
+      await auth().signOut();
+      Alert.alert('Signed Out', 'You have been signed out.');
+    } catch (error: any) {
+      Alert.alert('Error', `Could not sign out: ${error.message}`);
+    }
+  }
+
   return (
     <ImageBackground
-      source={require('@/assets/images/OnboardingPurpleBinoculars.png')} // Use your background image path
+      source={require('@/assets/images/OnboardingPurpleBinoculars.png')}
       style={styles.background}
       imageStyle={styles.backgroundImage}
     >
@@ -13,41 +72,54 @@ export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
       </Text>
       <View style={styles.card}>
         <Text style={styles.welcome}>Welcome{'\n'}Back</Text>
-        <TouchableOpacity style={styles.googleButton}>
-          <Text style={styles.googleButtonText}>Continue with Google</Text>
-        </TouchableOpacity>
-        <View style={styles.dividerRow}>
-          <View style={styles.divider} />
-          <Text style={styles.orText}>Or</Text>
-          <View style={styles.divider} />
-        </View>
-        <Text style={styles.label}>Email</Text>
-        <View style={styles.inputRow}>
-          <Text style={styles.inputIcon}>📧</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor="#aaa"
-            defaultValue="brannonwhite01@gmail.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-        </View>
-        <Text style={styles.label}>Password</Text>
-        <View style={styles.inputRow}>
-          <Text style={styles.inputIcon}>🔒</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor="#aaa"
-            secureTextEntry
-            defaultValue="password"
-          />
-        </View>
-        <TouchableOpacity style={styles.signInButton} onPress={onSignIn}>
-          <Text style={styles.signInButtonText}>Sign In</Text>
-        </TouchableOpacity>
+        {user ? (
+          <View>
+            <Text style={styles.label}>Signed in as: {user.displayName || user.email}</Text>
+            <TouchableOpacity style={styles.signInButton} onPress={signOut}>
+              <Text style={styles.signInButtonText}>Sign Out</Text>
+            </TouchableOpacity>
+          </View>
+        ) :(
+          <>
+            <GoogleSigninButton
+              style={styles.googleButton}
+              size={GoogleSigninButton.Size.Wide}
+              color={GoogleSigninButton.Color.Dark}
+              onPress={signInWithGoogle}
+              disabled={loading}
+            />
+            {loading && <ActivityIndicator size="large" color="#0000ff" />}
+            <View style={styles.dividerRow}>
+              <View style={styles.divider} />
+              <Text style={styles.orText}>Or</Text>
+              <View style={styles.divider} />
+            </View>
+            <Text style={styles.label}>Email</Text>
+            <View style={styles.inputRow}>
+              <Text style={styles.inputIcon}>📧</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor="#aaa"
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.inputRow}>
+              <Text style={styles.inputIcon}>🔒</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor="#aaa"
+                secureTextEntry
+              />
+            </View>
+            <TouchableOpacity style={styles.signInButton} onPress={onSignIn}>
+              <Text style={styles.signInButtonText}>Sign In</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </ImageBackground>
-  );
-}
+  )};

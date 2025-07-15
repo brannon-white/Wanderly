@@ -1,5 +1,6 @@
 {
   "expo": {
+    "owner": "brannonwhite",
     "name": "Wanderly",
     "slug": "Wanderly",
     "version": "1.0.0",
@@ -39,6 +40,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ec2b1c88-035f-4134-8141-c00280b4f09c"
+      }
     }
   }
 }
