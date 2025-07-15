@@ -9,6 +9,8 @@ import AuthScreen from './(tabs)/authScreen';
 import SignInScreen from './(tabs)/signInScreen';
 import HomeScreen from './(tabs)/index';
 import auth from '@react-native-firebase/auth';
+import SignUpscreen from './(tabs)/signUpScreen';
+
 
 
 
@@ -63,9 +65,7 @@ export default function RootLayout() {
           children={({ navigation }) => (
             <AuthScreen
               onSignIn={() => navigation.replace('SignIn')}
-              onSignUp={() => {
-                // handle sign up navigation here if needed
-              }}
+              onSignUp={() => navigation.replace('SignUp')}
             />
           )}
           options={{ headerShown: false }}
@@ -85,6 +85,18 @@ export default function RootLayout() {
 <Stack.Screen
   name="Index"
   component={HomeScreen}
+  options={{ headerShown: false }}
+/>
+<Stack.Screen
+  name="SignUp"
+  children={({ navigation }) => (
+    <SignUpscreen
+      onSignUp={async () => {
+        // Optionally set a flag or just navigate to Index or Auth
+        navigation.replace('Index');
+      }}
+    />
+  )}
   options={{ headerShown: false }}
 />
 </Stack.Navigator>
