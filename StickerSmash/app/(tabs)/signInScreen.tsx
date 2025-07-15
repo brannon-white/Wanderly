@@ -5,7 +5,13 @@ import { GoogleSignin, statusCodes, GoogleSigninButton } from '@react-native-goo
 import auth from '@react-native-firebase/auth';
 
 GoogleSignin.configure({
-  webClientId: '588805144943-1f9uii64tqetroqlhvf7qltvaohku583.apps.googleusercontent.com', // Replace with your actual Web client ID
+  // This is your Web client ID, used for Firebase backend authentication
+  webClientId: '588805144943-7am9qr0jqsdmt478shb1ftjjas93lj4s.apps.googleusercontent.com',
+  // This is your iOS client ID, which the native Google Sign-In SDK needs
+  // It's usually the 'reversed client ID' or the 'CLIENT_ID' from your GoogleService-Info.plist
+  iosClientId: '588805144943-7am9qr0jqsdmt478shb1ftjjas93lj4s.apps.googleusercontent.com',
+  // Uncomment the line below if you need offline access (e.g., to get a refresh token)
+  // offlineAccess: true,
 });
 
 export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
