@@ -8,18 +8,22 @@ import OnboardingThirdPage from './(tabs)/onboardingThirdPage';
 import AuthScreen from './(tabs)/authScreen';
 import SignInScreen from './(tabs)/signInScreen';
 import HomeScreen from './(tabs)/index';
+import auth from '@react-native-firebase/auth';
+
 
 
 const Stack = createStackNavigator();
 
 export default function RootLayout() {
-  const [initialRoute, setInitialRoute] = useState<string | null>(null);  useEffect(() => {
+  const [initialRoute, setInitialRoute] = useState<string | null>(null);
+
+  useEffect(() => {
     async function checkFlags() {
       const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
-      const isSignedIn = await AsyncStorage.getItem('isSignedIn');
+      const firebaseUser = auth().currentUser;
       if (hasSeenOnboarding !== 'true') {
         setInitialRoute('OnboardingFirst');
-      } else if (isSignedIn !== 'true') {
+      } else if (!firebaseUser) {
         setInitialRoute('Auth');
       } else {
         setInitialRoute('Index');

@@ -18,36 +18,47 @@ GoogleSignin.configure({
 export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   useEffect(() => {
     const subscriber = auth().onAuthStateChanged(firebaseUser => {
       setUser(firebaseUser);
-      if (firebaseUser) {
-        onSignIn?.();
-      }
+
     });
     return subscriber;
   }, []);
-
-  async function signInWithGoogle() {
-    setLoading(true);
-    try {
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const googleUser = await GoogleSignin.signIn();
-      console.log('Google user object:', googleUser);
-      if (!googleUser.data.idToken) {
-        throw new Error('No idToken returned from Google Sign-In. Check scopes or user consent.');
-      }
-      const idTokenString: string = googleUser.data.idToken;
-      const googleCredential = auth.GoogleAuthProvider.credential(idTokenString);
-      await auth().signInWithCredential(googleCredential);
-      // Navigate to index page after successful sign-in
-    } catch (error: any) {
-      // ...error handling...
-    } finally {
-      setLoading(false);
-    }
+  
+async function signInWithEmail() {
+  setLoading(true);
+  try {
+    await auth().signInWithEmailAndPassword(email, password);
+    onSignIn?.(); // Only after successful sign-in
+  } catch (error: any) {
+    Alert.alert('Error', error.message); // This will show error if sign-in fails
+  } finally {
+    setLoading(false);
   }
+}
+async function signInWithGoogle() {
+  setLoading(true);
+  try {
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    const googleUser = await GoogleSignin.signIn();
+    console.log('Google user object:', googleUser);
+    if (!googleUser.data.idToken) {
+      throw new Error('No idToken returned from Google Sign-In. Check scopes or user consent.');
+    }
+    const idTokenString: string = googleUser.data.idToken;
+    const googleCredential = auth.GoogleAuthProvider.credential(idTokenString);
+    await auth().signInWithCredential(googleCredential);
+    onSignIn?.(); // <-- Add this line to navigate after successful sign-in
+  } catch (error: any) {
+    Alert.alert('Error', error.message);
+  } finally {
+    setLoading(false);
+  }
+}
 
   async function signOut() {
     try {
@@ -95,13 +106,15 @@ export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
             <Text style={styles.label}>Email</Text>
             <View style={styles.inputRow}>
               <Text style={styles.inputIcon}>📧</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor="#aaa"
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              placeholderTextColor="#aaa"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={email}
+              onChangeText={setEmail}
+            />
             </View>
             <Text style={styles.label}>Password</Text>
             <View style={styles.inputRow}>
@@ -111,9 +124,11 @@ export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
                 placeholder="Password"
                 placeholderTextColor="#aaa"
                 secureTextEntry
+                value={password}
+                onChangeText={setPassword}
               />
             </View>
-            <TouchableOpacity style={styles.signInButton} onPress={onSignIn}>
+            <TouchableOpacity style={styles.signInButton} onPress={signInWithEmail}>
               <Text style={styles.signInButtonText}>Sign In</Text>
             </TouchableOpacity>
           </>
