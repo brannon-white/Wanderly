@@ -93,7 +93,7 @@ async function signInWithGoogle() {
             <GoogleSigninButton
               style={styles.googleButton}
               size={GoogleSigninButton.Size.Wide}
-              color={GoogleSigninButton.Color.Dark}
+              color={GoogleSigninButton.Color.Light}
               onPress={signInWithGoogle}
               disabled={loading}
             />
