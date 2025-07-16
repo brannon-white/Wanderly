@@ -31,9 +31,11 @@ export default function SignUpScreen({ onSignUp }: { onSignUp?: () => void }) {
     try {
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
       const googleUser = await GoogleSignin.signIn();
+      // @ts-ignore
       if (!googleUser.data.idToken) {
         throw new Error('No idToken returned from Google Sign-In.');
       }
+      // @ts-ignore
       const googleCredential = auth.GoogleAuthProvider.credential(googleUser.data.idToken);
       await auth().signInWithCredential(googleCredential);
       onSignUp?.();

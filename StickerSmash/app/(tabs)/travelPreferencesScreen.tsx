@@ -2,14 +2,16 @@ import React, { useState,useEffect } from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity,SafeAreaView } from 'react-native';
 import { styles } from '@/styles/travelPreferencesStyles';
 import firestore from '@react-native-firebase/firestore';
-
+import { useNavigation } from '@react-navigation/native';
+import { useOnboarding } from '@/context/OnboardingContext';
 
 export default function TravelPreferencesScreen() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [activities, setActivities] = useState<{ label: string; emoji: string }[]>([]);
   const [loading, setLoading] = useState(true);
-
+  const navigation = useNavigation();
+  const { setActivityPreferences } = useOnboarding();
 
     useEffect(() => {
     const fetchActivities = async () => {
@@ -99,16 +101,30 @@ export default function TravelPreferencesScreen() {
   ))}
 </View>
       </ScrollView>
-      <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={styles.continueButton}
-          disabled={selected.length < 5}
-        >
-          <Text style={styles.continueButtonText}>
-            Continue ({selected.length}/5)
-          </Text>
-        </TouchableOpacity>
-      </View>
+<View style={styles.bottomBar}>
+  {selected.length < 2 && (
+    <Text style={styles.helperText}>
+      Select at least 2 preferences to continue
+    </Text>
+  )}
+<TouchableOpacity
+  style={[
+    styles.continueButton,
+    selected.length < 2 && { opacity: 0.5 }
+  ]}
+  disabled={selected.length < 2}
+  onPress={() => {
+    if (selected.length >= 2) {
+      setActivityPreferences(selected);
+      (navigation as any).navigate('FoodPreferences', {});
+    }
+  }}
+>
+    <Text style={styles.continueButtonText}>
+      Continue
+    </Text>
+  </TouchableOpacity>
+</View>
     </View>
   );
 }

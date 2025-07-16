@@ -2,15 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { styles } from '@/styles/signInScreenStyles';
 import auth from '@react-native-firebase/auth';
-import { GoogleSignin,statusCodes,GoogleSigninButton } from '@react-native-google-signin/google-signin';
-import { GOOGLE_WEB_CLIENT_ID, GOOGLE_IOS_CLIENT_ID } from '@env';
+import Constants from 'expo-constants';
 
+import { GoogleSignin,statusCodes,GoogleSigninButton } from '@react-native-google-signin/google-signin';
+// @ts-ignore
+const { GOOGLE_WEB_CLIENT_ID, GOOGLE_IOS_CLIENT_ID } = Constants.expoConfig.extra;
 GoogleSignin.configure({
   // This is your Web client ID, used for Firebase backend authentication
-  webClientId: '588805144943-7am9qr0jqsdmt478shb1ftjjas93lj4s.apps.googleusercontent.com',
+  webClientId: GOOGLE_WEB_CLIENT_ID,
   // This is your iOS client ID, which the native Google Sign-In SDK needs
   // It's usually the 'reversed client ID' or the 'CLIENT_ID' from your GoogleService-Info.plist
-  iosClientId: '588805144943-7am9qr0jqsdmt478shb1ftjjas93lj4s.apps.googleusercontent.com',
+  iosClientId: GOOGLE_IOS_CLIENT_ID,
   // Uncomment the line below if you need offline access (e.g., to get a refresh token)
   // offlineAxccess: true,
 });
@@ -46,9 +48,11 @@ async function signInWithGoogle() {
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
     const googleUser = await GoogleSignin.signIn();
     console.log('Google user object:', googleUser);
+    // @ts-ignore
     if (!googleUser.data.idToken) {
       throw new Error('No idToken returned from Google Sign-In. Check scopes or user consent.');
     }
+    // @ts-ignore
     const idTokenString: string = googleUser.data.idToken;
     const googleCredential = auth.GoogleAuthProvider.credential(idTokenString);
     await auth().signInWithCredential(googleCredential);

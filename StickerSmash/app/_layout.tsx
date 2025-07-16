@@ -11,16 +11,29 @@ import HomeScreen from './(tabs)/index';
 import auth from '@react-native-firebase/auth';
 import SignUpscreen from './(tabs)/signUpScreen';
 import TravelPreferencesScreen from './(tabs)/travelPreferencesScreen'; // Adjust path as needed
+import FoodPreferencesScreen from './(tabs)/foodPreferencesScreen'; // Add this import
+import UserInfoSignUp from './(tabs)/userInfoSignUp'; // Adjust path as needed
+import { OnboardingProvider } from '@/context/OnboardingContext';
+
+export type RootStackParamList = {
+  OnboardingFirst: undefined;
+  OnboardingSecond: undefined;
+  OnboardingThird: undefined;
+  Auth: undefined;
+  SignIn: undefined;
+  Index: undefined;
+  SignUp: undefined;
+  TravelPreferences: undefined;
+  FoodPreferences: undefined;
+  UserInfoSignUp: undefined;
+  // Add other screens as needed
+};
 
 
-
-
-
-const Stack = createStackNavigator();
+const Stack = createStackNavigator<RootStackParamList>();
 
 export default function RootLayout() {
-  const [initialRoute, setInitialRoute] = useState<string | null>(null);
-
+const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
   useEffect(() => {
     async function checkFlags() {
       const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
@@ -39,6 +52,7 @@ export default function RootLayout() {
   if (!initialRoute) return null;
 
   return (
+    <OnboardingProvider>
       <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
         <Stack.Screen
           name="OnboardingFirst"
@@ -105,6 +119,17 @@ export default function RootLayout() {
   component={TravelPreferencesScreen}
   options={{ headerShown: false }}
 />
+<Stack.Screen
+  name="FoodPreferences"
+  component={FoodPreferencesScreen}
+  options={{ headerShown: false }}
+/>
+<Stack.Screen
+  name="UserInfoSignUp"
+  component={UserInfoSignUp}
+  options={{ headerShown: false }}
+/>
 </Stack.Navigator>
+    </OnboardingProvider>
   );
 }

@@ -67,6 +67,13 @@ export const styles = StyleSheet.create({
     color: '#bdbdbd',
     marginRight: 10,
   },
+  helperText: {
+  color: '#888',
+  fontSize: 16,
+  textAlign: 'center',
+  marginBottom: 8,
+  fontFamily: 'SourceSans3-Regular',
+},
   searchInput: {
     flex: 1,
     fontSize: 20,
@@ -86,33 +93,37 @@ prefButton: {
   borderWidth: 2,
   borderColor: '#eaeaea',
   borderRadius: 32,
-  paddingVertical: 6,
-  paddingHorizontal: 14,
-  marginBottom: 12,
+  paddingVertical: 2,      // Decreased from 6
+  paddingHorizontal: 10,   // Slightly decreased
+  marginBottom: 10,        // Slightly decreased
   backgroundColor: '#fff',
   alignItems: 'center',
   justifyContent: 'center',
   marginRight: 8,
   marginLeft: 8,
-  minWidth: 0, // fixes flexbox shrinking
+  minWidth: 0,
 },
   prefButtonSelected: {
     borderColor: '#7c5cff',
     backgroundColor: '#f3f0ff',
   },
-  prefText: {
-    fontSize: 18,
-    color: '#222',
-    fontFamily: 'SourceSans3-Regular',
-    fontWeight: '600',
-  },
+prefText: {
+  fontSize: 16,            // Decreased from 18
+  color: '#222',
+  fontFamily: 'SourceSans3-Regular',
+  fontWeight: '600',
+  flexDirection: 'row',    // Add this
+  alignItems: 'center',    // Add this
+  flexWrap: 'nowrap',      // Add this
+},
   prefTextSelected: {
     color: '#7c5cff',
     fontWeight: '700',
   },
-  prefEmoji: {
-    fontSize: 18,
-  },
+prefEmoji: {
+  fontSize: 16,            // Decreased from 18
+  marginLeft: 4,           // Add a little space
+},
   bottomBar: {
     position: 'absolute',
     bottom: 0,
