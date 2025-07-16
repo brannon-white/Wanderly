@@ -16,6 +16,7 @@
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-firebase/app": "^22.4.0",
     "@react-native-firebase/auth": "^22.4.0",
+    "@react-native-firebase/firestore": "^22.4.0",
     "@react-native-google-signin/google-signin": "^15.0.0",
     "@react-navigation/bottom-tabs": "^7.3.10",
     "@react-navigation/elements": "^2.3.8",
@@ -52,6 +53,7 @@
     "@types/react-native-google-signin": "latest",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~9.2.0",
+    "metro-react-native-babel-preset": "^0.77.0",
     "typescript": "~5.8.3"
   },
   "private": true

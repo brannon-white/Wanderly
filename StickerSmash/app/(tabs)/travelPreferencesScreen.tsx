@@ -1,35 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState,useEffect } from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity,SafeAreaView } from 'react-native';
 import { styles } from '@/styles/travelPreferencesStyles';
+import firestore from '@react-native-firebase/firestore';
 
-const preferences = [
-  { label: 'Adventure Travel', emoji: '🏞️' },
-  { label: 'City Breaks', emoji: '🏙️' },
-  { label: 'Cultural Exploration', emoji: '🏛️' },
-  { label: 'Glamping', emoji: '⛺' },
-  { label: 'Beach Vacations', emoji: '🏖️' },
-  { label: 'Nature Escapes', emoji: '🌿' },
-  { label: 'Relaxing Getaways', emoji: '🏨' },
-  { label: 'Road Trips', emoji: '🚗' },
-  { label: 'Food Tourism', emoji: '🍔' },
-  { label: 'Backpacking', emoji: '🎒' },
-  { label: 'Cruise Vacations', emoji: '🛳️' },
-  { label: 'Staycations', emoji: '🏡' },
-  { label: 'Skiing/Snowboarding', emoji: '🎿' },
-  { label: 'Wine Tours', emoji: '🍷' },
-  { label: 'Wildlife Safaris', emoji: '🦁' },
-  { label: 'Art Galleries', emoji: '🎨' },
-  { label: 'Historical Sites', emoji: '🏰' },
-  { label: 'Eco-Tourism', emoji: '🌱' },
-  { label: 'Music Festivals', emoji: '🎵' },
-  { label: 'Culinary Tours', emoji: '🍴' },
-];
 
 export default function TravelPreferencesScreen() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
+  const [activities, setActivities] = useState<{ label: string; emoji: string }[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = preferences.filter(p =>
+
+    useEffect(() => {
+    const fetchActivities = async () => {
+      try {
+        const doc = await firestore().collection('staticActivities').doc('all').get();
+        const data = doc.data();
+        if (data && Array.isArray(data.activities)) {
+          setActivities(data.activities);
+        } else {
+          setActivities([]);
+        }
+      } catch (error) {
+        console.error('Error fetching activities:', error);
+        setActivities([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchActivities();
+  }, []);
+
+  const filtered = activities.filter(p =>
     p.label.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -38,6 +40,7 @@ export default function TravelPreferencesScreen() {
       s.includes(label) ? s.filter(l => l !== label) : [...s, label]
     );
   }
+
 
   return (
     <View style={styles.container}>

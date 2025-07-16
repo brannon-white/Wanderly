@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, Activi
 import { styles } from '@/styles/signInScreenStyles';
 import auth from '@react-native-firebase/auth';
 import { GoogleSignin,statusCodes,GoogleSigninButton } from '@react-native-google-signin/google-signin';
-
+import { GOOGLE_WEB_CLIENT_ID, GOOGLE_IOS_CLIENT_ID } from '@env';
 
 GoogleSignin.configure({
   // This is your Web client ID, used for Firebase backend authentication
