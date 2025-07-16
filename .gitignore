@@ -1,1 +1,38 @@
-node_modules
+# Node modules
+node_modules/
+
+# Metro, Expo, and React Native cache
+.expo/
+.expo-shared/
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+*.log
+
+# Build output
+android/app/build/
+ios/build/
+ios/Pods/
+*.xcworkspace
+*.xcuserstate
+*.xcuserdata
+*.DS_Store
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Firebase/Google config (if you have these)
+google-services.json
+GoogleService-Info.plist
+
+# VSCode settings
+.vscode/
+
+# Mac system files
+.DS_Store
+
+# Expo
+web-build/
+dist/
