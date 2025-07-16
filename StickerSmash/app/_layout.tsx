@@ -10,6 +10,8 @@ import SignInScreen from './(tabs)/signInScreen';
 import HomeScreen from './(tabs)/index';
 import auth from '@react-native-firebase/auth';
 import SignUpscreen from './(tabs)/signUpScreen';
+import TravelPreferencesScreen from './(tabs)/travelPreferencesScreen'; // Adjust path as needed
+
 
 
 
@@ -92,11 +94,15 @@ export default function RootLayout() {
   children={({ navigation }) => (
     <SignUpscreen
       onSignUp={async () => {
-        // Optionally set a flag or just navigate to Index or Auth
-        navigation.replace('Index');
+        navigation.replace('TravelPreferences');
       }}
     />
   )}
+  options={{ headerShown: false }}
+/>
+<Stack.Screen
+  name="TravelPreferences"
+  component={TravelPreferencesScreen}
   options={{ headerShown: false }}
 />
 </Stack.Navigator>
