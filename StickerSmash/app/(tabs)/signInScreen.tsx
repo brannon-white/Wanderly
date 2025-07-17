@@ -3,8 +3,12 @@ import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, Activi
 import { styles } from '@/styles/signInScreenStyles';
 import auth from '@react-native-firebase/auth';
 import Constants from 'expo-constants';
-
+import { userExists } from '@/hooks/useSaveUserProfile';
+import { getOnboardingStepData } from '@/utils/onboardingStorage';
 import { GoogleSignin,statusCodes,GoogleSigninButton } from '@react-native-google-signin/google-signin';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '@/app/_layout'; // adjust path 
 // @ts-ignore
 const { GOOGLE_WEB_CLIENT_ID, GOOGLE_IOS_CLIENT_ID } = Constants.expoConfig.extra;
 GoogleSignin.configure({
@@ -22,7 +26,8 @@ export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
   const [user, setUser] = useState<any>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();  
+  
   useEffect(() => {
     const subscriber = auth().onAuthStateChanged(firebaseUser => {
       setUser(firebaseUser);
@@ -47,7 +52,6 @@ async function signInWithGoogle() {
   try {
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
     const googleUser = await GoogleSignin.signIn();
-    console.log('Google user object:', googleUser);
     // @ts-ignore
     if (!googleUser.data.idToken) {
       throw new Error('No idToken returned from Google Sign-In. Check scopes or user consent.');
@@ -55,8 +59,24 @@ async function signInWithGoogle() {
     // @ts-ignore
     const idTokenString: string = googleUser.data.idToken;
     const googleCredential = auth.GoogleAuthProvider.credential(idTokenString);
-    await auth().signInWithCredential(googleCredential);
-    onSignIn?.(); // <-- Add this line to navigate after successful sign-in
+    const result = await auth().signInWithCredential(googleCredential);
+
+    const uid = result.user.uid;
+    const exists = await userExists(uid);
+
+    const travel = await getOnboardingStepData('travel');
+    const food = await getOnboardingStepData('food');
+
+    if (exists) {
+      navigation.navigate('Index');
+    } else if (food) {
+      navigation.navigate('UserInfoSignUp');
+    } else if (travel) {
+      navigation.navigate('FoodPreferences');
+    } else {
+      navigation.navigate('TravelPreferences');
+    }
+    onSignIn?.();
   } catch (error: any) {
     Alert.alert('Error', error.message);
   } finally {

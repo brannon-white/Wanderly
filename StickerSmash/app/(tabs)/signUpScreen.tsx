@@ -3,12 +3,18 @@ import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, Activi
 import { GoogleSignin, GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import auth from '@react-native-firebase/auth';
 import { styles } from '@/styles/signUpStyles';
-
+import { userExists } from '@/hooks/useSaveUserProfile';
+import { getOnboardingStepData } from '@/utils/onboardingStorage';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '@/app/_layout'; // adjust path if nee
+import { useOnboarding } from '@/context/OnboardingContext';
 export default function SignUpScreen({ onSignUp }: { onSignUp?: () => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();  
 
   async function signUpWithEmail() {
     if (password !== confirmPassword) {
@@ -26,25 +32,41 @@ export default function SignUpScreen({ onSignUp }: { onSignUp?: () => void }) {
     }
   }
 
-  async function signUpWithGoogle() {
-    setLoading(true);
-    try {
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const googleUser = await GoogleSignin.signIn();
-      // @ts-ignore
-      if (!googleUser.data.idToken) {
-        throw new Error('No idToken returned from Google Sign-In.');
-      }
-      // @ts-ignore
-      const googleCredential = auth.GoogleAuthProvider.credential(googleUser.data.idToken);
-      await auth().signInWithCredential(googleCredential);
-      onSignUp?.();
-    } catch (error: any) {
-      Alert.alert('Error', error.message);
-    } finally {
-      setLoading(false);
+async function signUpWithGoogle() {
+  setLoading(true);
+  try {
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    const googleUser = await GoogleSignin.signIn();
+    // @ts-ignore
+    if (!googleUser.data.idToken) {
+      throw new Error('No idToken returned from Google Sign-In.');
     }
+    // @ts-ignore
+    const googleCredential = auth.GoogleAuthProvider.credential(googleUser.data.idToken);
+    const result = await auth().signInWithCredential(googleCredential);
+
+    const uid = result.user.uid;
+    const exists = await userExists(uid);
+
+const travel = await getOnboardingStepData('travel');
+const food = await getOnboardingStepData('food');
+
+if (exists) {
+  navigation.navigate('Index');
+} else if (food) {
+  navigation.navigate('UserInfoSignUp');
+} else if (travel) {
+  navigation.navigate('FoodPreferences');
+} else {
+  navigation.navigate('TravelPreferences');
+}
+    onSignUp?.();
+  } catch (error: any) {
+    Alert.alert('Error', error.message);
+  } finally {
+    setLoading(false);
   }
+}
 
   return (
     <ImageBackground

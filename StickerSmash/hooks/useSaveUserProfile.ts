@@ -49,3 +49,7 @@ export async function saveUserProfile({
     console.error('Error saving user:', err);
   }
 }
+export async function userExists(uid: string): Promise<boolean> {
+  const doc = await firestore().collection('users').doc(uid).get();
+  return doc.exists();
+}
