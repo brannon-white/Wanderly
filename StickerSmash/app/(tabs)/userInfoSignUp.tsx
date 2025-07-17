@@ -158,7 +158,7 @@ const pickImage = async () => {
       await clearOnboardingProgress();
 
       // Navigate to main app
-      navigation.navigate('Index');
+      navigation.navigate('OnboardingComplete');
     }}
   >
     <Text style={styles.continueButtonText}>Continue</Text>

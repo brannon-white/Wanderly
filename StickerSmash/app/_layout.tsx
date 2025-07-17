@@ -17,7 +17,7 @@ import { OnboardingProvider } from '@/context/OnboardingContext';
 import { useFonts } from 'expo-font';
 import { getOnboardingProgress } from '@/utils/onboardingStorage'; // Import your utility
 import { userExists } from '@/hooks/useSaveUserProfile';
-
+import OnboardingCompleteScreen from './(tabs)/onboardingCompleteScreen';
 export type RootStackParamList = {
   OnboardingFirst: undefined;
   OnboardingSecond: undefined;
@@ -29,6 +29,7 @@ export type RootStackParamList = {
   TravelPreferences: undefined;
   FoodPreferences: undefined;
   UserInfoSignUp: undefined;
+  OnboardingComplete: undefined; // Add this line
   // Add other screens as needed
 };
 
@@ -161,6 +162,11 @@ useEffect(() => {
 <Stack.Screen
   name="UserInfoSignUp"
   component={UserInfoSignUp}
+  options={{ headerShown: false }}
+/>
+<Stack.Screen
+  name="OnboardingComplete"
+  component={OnboardingCompleteScreen}
   options={{ headerShown: false }}
 />
 </Stack.Navigator>
