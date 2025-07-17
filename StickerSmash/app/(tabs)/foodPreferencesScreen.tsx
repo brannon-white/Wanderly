@@ -1,18 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
-import { styles } from '@/styles/travelPreferencesStyles'; // reuse styles
+import { styles } from '@/styles/travelPreferencesStyles';
 import firestore from '@react-native-firebase/firestore';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
-import type { RootStackParamList } from '@/app/_layout'; // Adjust path if needed
+import type { RootStackParamList } from '@/app/_layout';
+import { saveOnboardingStep, getOnboardingStepData } from '@/utils/onboardingStorage';
+import { Ionicons } from '@expo/vector-icons';
+
 export default function FoodPreferencesScreen() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [foods, setFoods] = useState<{ label: string; emoji: string }[]>([]);
   const [loading, setLoading] = useState(true);
-  const { setFoodPreferences } = useOnboarding(); 
-const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+  const { setFoodPreferences } = useOnboarding();
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
 
   useEffect(() => {
     const fetchFoods = async () => {
@@ -32,6 +35,12 @@ const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
       }
     };
     fetchFoods();
+
+    async function loadSaved() {
+      const saved = await getOnboardingStepData('food');
+      if (saved && Array.isArray(saved)) setSelected(saved);
+    }
+    loadSaved();
   }, []);
 
   const filtered = foods.filter(p =>
@@ -45,13 +54,31 @@ const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { position: 'relative' }]}>
       <SafeAreaView>
-        <View style={styles.progressBarWrapper}>
-          <View style={styles.progressBarBg} />
-          <View style={styles.progressBarFill} />
-        </View>
-      </SafeAreaView>
+  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, paddingHorizontal: 16 }}>
+    {/* Back Arrow */}
+    <TouchableOpacity
+      style={{
+        padding: 8,
+        marginRight: 8,
+        backgroundColor: 'rgba(255,255,255,0.7)',
+        borderRadius: 20,
+      }}
+      onPress={() => navigation.navigate('TravelPreferences')}
+      hitSlop={{ top: 10, left: 10, bottom: 10, right: 10 }}
+    >
+      <Ionicons name="chevron-back" size={28} color="#222" />
+    </TouchableOpacity>
+    {/* Progress Bar */}
+    <View style={{ flex: 1 }}>
+      <View style={styles.progressBarWrapper}>
+        <View style={styles.progressBarBg} />
+        <View style={styles.progressBarFill} />
+      </View>
+    </View>
+  </View>
+</SafeAreaView>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -101,23 +128,24 @@ const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
           </View>
         )}
       </ScrollView>
-<View style={styles.bottomBar}>
-  <TouchableOpacity
-    style={[
-      styles.continueButton,
-      selected.length < 1 && { opacity: 0.5 }
-    ]}
-onPress={() => {
-  setFoodPreferences(selected);
-  navigation.navigate('UserInfoSignUp');
-}}
-    disabled={false} // Button is always enabled for skip/continue
-  >
-    <Text style={styles.continueButtonText}>
-      {selected.length < 1 ? 'Skip' : 'Continue'}
-    </Text>
-  </TouchableOpacity>
-</View>
+      <View style={styles.bottomBar}>
+        <TouchableOpacity
+          style={[
+            styles.continueButton,
+            selected.length < 1 && { opacity: 0.5 }
+          ]}
+          onPress={async () => {
+            setFoodPreferences(selected);
+            await saveOnboardingStep('food', selected);
+            navigation.navigate('UserInfoSignUp');
+          }}
+          disabled={false}
+        >
+          <Text style={styles.continueButtonText}>
+            {selected.length < 1 ? 'Skip' : 'Continue'}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }

@@ -24,7 +24,7 @@ export const styles = StyleSheet.create({
     width: '40%',
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#7c5cff',
+    backgroundColor: '#6A62B7',
     position: 'absolute',
     top: 0,
     left: '20%',
@@ -37,7 +37,7 @@ export const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: 'bold',
     color: '#222',
-    fontFamily: 'Merriweather_26pt-Bold',
+    fontFamily: 'Merriweather_36pt-Bold',
     marginBottom: 12,
     marginTop: 15,
     alignSelf: 'stretch',
@@ -104,7 +104,7 @@ prefButton: {
   minWidth: 0,
 },
   prefButtonSelected: {
-    borderColor: '#7c5cff',
+    borderColor: '#6A62B7',
     backgroundColor: '#f3f0ff',
   },
 prefText: {
@@ -140,7 +140,7 @@ prefEmoji: {
     elevation: 8,
   },
   continueButton: {
-    backgroundColor: '#7c5cff',
+    backgroundColor: '#6A62B7',
     borderRadius: 32,
     paddingVertical: 18,
     alignItems: 'center',

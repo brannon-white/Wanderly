@@ -4,14 +4,16 @@ import { styles } from '@/styles/travelPreferencesStyles';
 import firestore from '@react-native-firebase/firestore';
 import { useNavigation } from '@react-navigation/native';
 import { useOnboarding } from '@/context/OnboardingContext';
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { saveOnboardingStep, getOnboardingStepData } from '@/utils/onboardingStorage';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '@/app/_layout'; // adjust path if needed
 export default function TravelPreferencesScreen() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [activities, setActivities] = useState<{ label: string; emoji: string }[]>([]);
   const [loading, setLoading] = useState(true);
-  const navigation = useNavigation();
-  const { setActivityPreferences } = useOnboarding();
+const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();  const { setActivityPreferences } = useOnboarding();
 
     useEffect(() => {
     const fetchActivities = async () => {
@@ -31,6 +33,11 @@ export default function TravelPreferencesScreen() {
       }
     };
     fetchActivities();
+      async function loadSaved() {
+    const saved = await getOnboardingStepData('travel');
+    if (saved && Array.isArray(saved)) setSelected(saved);
+  }
+  loadSaved();
   }, []);
 
   const filtered = activities.filter(p =>
@@ -113,17 +120,18 @@ export default function TravelPreferencesScreen() {
     selected.length < 2 && { opacity: 0.5 }
   ]}
   disabled={selected.length < 2}
-  onPress={() => {
+  onPress={async () => {
     if (selected.length >= 2) {
       setActivityPreferences(selected);
-      (navigation as any).navigate('FoodPreferences', {});
+      await saveOnboardingStep('travel', selected); // <-- Save locally
+      navigation.navigate('FoodPreferences');
     }
   }}
 >
-    <Text style={styles.continueButtonText}>
-      Continue
-    </Text>
-  </TouchableOpacity>
+  <Text style={styles.continueButtonText}>
+    Continue
+  </Text>
+</TouchableOpacity>
 </View>
     </View>
   );

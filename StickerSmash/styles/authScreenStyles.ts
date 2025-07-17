@@ -34,6 +34,7 @@ export const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 22,
     fontWeight: 'bold',
+    fontFamily: 'Merriweather_36pt-Bold',
   },
   signInButton: {
     width: 240,
@@ -47,5 +48,6 @@ export const styles = StyleSheet.create({
     color: '#6A62B7',
     fontSize: 22,
     fontWeight: 'bold',
+    fontFamily: 'Merriweather_36pt-Bold',
   },
 });

@@ -14,6 +14,8 @@ import TravelPreferencesScreen from './(tabs)/travelPreferencesScreen'; // Adjus
 import FoodPreferencesScreen from './(tabs)/foodPreferencesScreen'; // Add this import
 import UserInfoSignUp from './(tabs)/userInfoSignUp'; // Adjust path as needed
 import { OnboardingProvider } from '@/context/OnboardingContext';
+import { useFonts } from 'expo-font';
+import { getOnboardingProgress } from '@/utils/onboardingStorage'; // Import your utility
 
 export type RootStackParamList = {
   OnboardingFirst: undefined;
@@ -34,20 +36,45 @@ const Stack = createStackNavigator<RootStackParamList>();
 
 export default function RootLayout() {
 const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
-  useEffect(() => {
-    async function checkFlags() {
-      const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
-      const firebaseUser = auth().currentUser;
-      if (hasSeenOnboarding !== 'true') {
-        setInitialRoute('OnboardingFirst');
-      } else if (!firebaseUser) {
-        setInitialRoute('Auth');
-      } else {
-        setInitialRoute('Index');
-      }
+  const [fontsLoaded] = useFonts({
+    'SourceSans3-Regular': require('@/assets/fonts/Source_Sans_3/static/SourceSans3-Regular.ttf'),
+    'Merriweather_36pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_36pt-Bold.ttf'),
+    'Merriweather_24pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_24pt-Bold.ttf'),
+  });
+useEffect(() => {
+  async function checkFlags() {
+    const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
+    const firebaseUser = auth().currentUser;
+
+    if (hasSeenOnboarding !== 'true') {
+      setInitialRoute('OnboardingFirst');
+      return;
     }
-    checkFlags();
-  }, []);
+
+    if (!firebaseUser) {
+      setInitialRoute('Auth');
+      return;
+    }
+
+    // Only check onboarding progress if user is logged in
+    const progress = await getOnboardingProgress();
+    if (!progress.travel) {
+      setInitialRoute('TravelPreferences');
+      return;
+    }
+    if (!progress.food) {
+      setInitialRoute('FoodPreferences');
+      return;
+    }
+    if (!progress.userinfo) {
+      setInitialRoute('UserInfoSignUp');
+      return;
+    }
+
+    setInitialRoute('Index');
+  }
+  checkFlags();
+}, []);
 
   if (!initialRoute) return null;
 

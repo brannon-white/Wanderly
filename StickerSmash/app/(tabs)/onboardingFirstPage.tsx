@@ -13,14 +13,15 @@ type OnboardingFirstPageProps = {
 export default function OnboardingFirstPage({ onNext }: OnboardingFirstPageProps) {
     const navigation = useNavigation();
 
-  const [fontsLoaded] = useFonts({
+/*   const [fontsLoaded] = useFonts({
     'SourceSans3-Regular': require('@/assets/fonts/Source_Sans_3/static/SourceSans3-Regular.ttf'),
     'Merriweather_36pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_36pt-Bold.ttf'),
+    'Merriweather_24pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_24pt-Bold.ttf'),
   });
 
   if (!fontsLoaded) {
     return null; // Or a loading spinner
-  }
+  } */
 
   return (
     <ThemedView style={styles.container}>

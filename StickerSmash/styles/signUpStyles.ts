@@ -115,7 +115,7 @@ card: {
     fontFamily: 'SourceSans3-Regular', // Use your loaded body font
   },
   signUpButton: {
-    backgroundColor: '#7c5cff',
+    backgroundColor: '#6A62B7',
     borderRadius: 24,
     paddingVertical: 14,
     width: '100%',
