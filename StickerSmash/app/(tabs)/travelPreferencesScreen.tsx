@@ -87,24 +87,26 @@ const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();  co
   {Array.from({ length: Math.ceil(filtered.length / 2) }).map((_, rowIdx) => (
     <View style={styles.prefsRow} key={rowIdx}>
       {filtered.slice(rowIdx * 2, rowIdx * 2 + 2).map((p, colIdx) => (
-        <TouchableOpacity
-          key={p.label}
-          style={[
-            styles.prefButton,
-            selected.includes(p.label) && styles.prefButtonSelected,
-            // Add playful stagger
-            colIdx === 1 ? { marginTop: rowIdx % 2 === 0 ? 8 : 0 } : {},
-          ]}
-          onPress={() => togglePref(p.label)}
-          activeOpacity={0.8}
-        >
-          <Text style={[
-            styles.prefText,
-            selected.includes(p.label) && styles.prefTextSelected,
-          ]}>
-            {p.label} <Text style={styles.prefEmoji}>{p.emoji}</Text>
-          </Text>
-        </TouchableOpacity>
+<TouchableOpacity
+  key={p.label}
+  style={[
+    styles.prefButton,
+    selected.includes(p.label) && styles.prefButtonSelected,
+    colIdx === 1 ? { marginTop: rowIdx % 2 === 0 ? 8 : 0 } : {},
+  ]}
+  onPress={() => togglePref(p.label)}
+  activeOpacity={0.8}
+>
+  <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+    <Text style={[
+      styles.prefText,
+      selected.includes(p.label) && styles.prefTextSelected,
+    ]}>
+      {p.label}
+    </Text>
+    <Text style={styles.prefEmoji}>{p.emoji}</Text>
+  </View>
+</TouchableOpacity>
       ))}
     </View>
   ))}

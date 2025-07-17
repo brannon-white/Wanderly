@@ -109,47 +109,50 @@ progressBarFill: {
   },
 prefsGrid: {
   width: '100%',
+  alignItems: 'center', // <-- Add this line!
 },
 prefsRow: {
   flexDirection: 'row',
-  justifyContent: 'flex-start',
+  justifyContent: 'center', // <-- Change from 'flex-start' to 'center'
   marginBottom: 0,
 },
 prefButton: {
-  flex: 1,
   borderWidth: 2,
   borderColor: '#eaeaea',
   borderRadius: 32,
-  paddingVertical: 2,      // Decreased from 6
-  paddingHorizontal: 10,   // Slightly decreased
-  marginBottom: 10,        // Slightly decreased
+  paddingVertical: 2,
+  paddingHorizontal: 10,
+  marginBottom: 10,
   backgroundColor: '#fff',
   alignItems: 'center',
   justifyContent: 'center',
   marginRight: 8,
   marginLeft: 8,
-  minWidth: 0,
+  minWidth: 150,
+  maxWidth: '100%',
+  flexDirection: 'row',
+  flexShrink: 1,
+  flexWrap: 'nowrap',      // <-- Prevent wrapping
+  overflow: 'hidden',      // <-- Prevent overflow
 },
   prefButtonSelected: {
     borderColor: '#6A62B7',
     backgroundColor: '#f3f0ff',
   },
 prefText: {
-  fontSize: 16,            // Decreased from 18
+  fontSize: 16,
   color: '#222',
   fontFamily: 'SourceSans3-Regular',
   fontWeight: '600',
-  flexDirection: 'row',    // Add this
-  alignItems: 'center',    // Add this
-  flexWrap: 'nowrap',      // Add this
+  flexShrink: 1, // Allow text to shrink within pill
 },
   prefTextSelected: {
     color: '#7c5cff',
     fontWeight: '700',
   },
 prefEmoji: {
-  fontSize: 16,            // Decreased from 18
-  marginLeft: 4,           // Add a little space
+  fontSize: 16,
+  marginLeft: 4,
 },
   bottomBar: {
     position: 'absolute',
