@@ -2,9 +2,57 @@ import { StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', padding: 16 }, // was 24
-  progressBarWrapper: { alignItems: 'center', marginTop: 8, marginBottom: 12 }, // was 24, 16
-  progressBarBg: { width: '60%', height: 12, borderRadius: 6, backgroundColor: '#eaeaea' },
-  progressBarFill: { width: '40%', height: 12, borderRadius: 6, backgroundColor: '#7c5cff', position: 'absolute', top: 0, left: '20%' },
+  topBar: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'flex-start',
+  marginTop: 16,
+  marginBottom: 8,
+  paddingHorizontal: 16,
+  position: 'relative', // Needed for absolute centering
+},
+backArrow: {
+  padding: 8,
+  marginRight: 8,
+  backgroundColor: 'rgba(255,255,255,0.7)',
+  borderRadius: 20,
+  zIndex: 2,
+},
+progressBarAbsoluteContainer: {
+  position: 'absolute',
+  left: 0,
+  right: 0,
+  top: 0,
+  bottom: 0,
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 1,
+},
+progressBarWrapper: {
+  alignItems: 'center',
+  justifyContent: 'center',
+  height: 12,
+  width: 180,
+  position: 'relative',
+},
+progressBarBg: {
+  width: '100%',
+  height: 12,
+  borderRadius: 6,
+  backgroundColor: '#eaeaea',
+  position: 'absolute',
+  top: 0,
+  left: 0,
+},
+progressBarFill: {
+  width: '40%',
+  height: 12,
+  borderRadius: 6,
+  backgroundColor: '#6A62B7',
+  position: 'absolute',
+  top: 0,
+  left: 0,
+},
   heading: { fontSize: 30, fontWeight: 'bold', color: '#222', marginBottom: 8, marginTop: 10 }, // was 12, 15
   headingEmoji: { fontSize: 32 },
   subheading: { fontSize: 18, color: '#888', marginBottom: 24, lineHeight: 28 }, // was 32

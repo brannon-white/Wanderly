@@ -8,14 +8,19 @@ import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import storage from '@react-native-firebase/storage';
 import * as FileSystem from 'expo-file-system';
-
+import { getOnboardingStepData, clearOnboardingProgress } from '@/utils/onboardingStorage';
 import { saveUserProfile } from '@/hooks/useSaveUserProfile';
+import { useNavigation } from '@react-navigation/native';
+import type { RootStackParamList } from '@/app/_layout';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function UserInfoSignUp() {
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
-
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+  
   const {
     fullName, setFullName,
     country, setCountry,
@@ -39,110 +44,125 @@ const pickImage = async () => {
 };
   
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
-      {/* Progress Bar at the very top */}
+<SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+  {/* Top Bar with Back Arrow and Progress Bar */}
+  <View style={styles.topBar}>
+    <TouchableOpacity
+      style={styles.backArrow}
+      onPress={() => navigation.navigate('FoodPreferences')}
+      hitSlop={{ top: 10, left: 10, bottom: 10, right: 10 }}
+    >
+      <Ionicons name="chevron-back" size={28} color="#222" />
+    </TouchableOpacity>
+    <View style={styles.progressBarAbsoluteContainer}>
       <View style={styles.progressBarWrapper}>
         <View style={styles.progressBarBg} />
         <View style={styles.progressBarFill} />
       </View>
+    </View>
+  </View>
 
-      <View style={[styles.container, { flex: 1 }]}>
-        {/* ...all your content except the continue button... */}
+  <View style={[styles.container, { flex: 1 }]}>
+    <Text style={styles.heading}>
+      Add a personal touch <Text style={styles.headingEmoji}>🧑‍💼</Text>
+    </Text>
+    <Text style={styles.subheading}>
+      To enhance your travel journey, we'd love to know more about you.
+    </Text>
 
-        <Text style={styles.heading}>
-          Add a personal touch <Text style={styles.headingEmoji}>🧑‍💼</Text>
+    {/* Avatar */}
+    <View style={styles.avatarWrapper}>
+      <Image
+        source={
+          avatarUri
+            ? { uri: avatarUri }
+            : require('@/assets/images/OnboardingPurpleBinoculars.png')
+        }
+        style={styles.avatar}
+      />
+      <TouchableOpacity style={styles.editIcon} onPress={pickImage}>
+        <Text style={{ color: '#fff', fontSize: 16 }}>✏️</Text>
+      </TouchableOpacity>
+    </View>
+
+    {/* Full Name */}
+    <Text style={styles.label}>Full Name</Text>
+    <TextInput
+      style={styles.input}
+      placeholder="Full Name"
+      placeholderTextColor="#aaa"
+      value={fullName}
+      onChangeText={setFullName}
+    />
+
+    {/* Country */}
+    <Text style={styles.label}>Country</Text>
+    <TouchableOpacity
+      style={styles.input}
+      onPress={() => setShowCountryPicker(true)}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={{ color: country ? '#222' : '#aaa', fontSize: 18 }}>
+          {typeof country?.name === 'string' ? country.name : 'Country'}
         </Text>
-        <Text style={styles.subheading}>
-          To enhance your travel journey, we'd love to know more about you.
-        </Text>
-
-        {/* Avatar */}
-        <View style={styles.avatarWrapper}>
-          <Image
-            source={
-              avatarUri
-                ? { uri: avatarUri }
-                : require('@/assets/images/OnboardingPurpleBinoculars.png')
-            }
-            style={styles.avatar}
-          />
-          <TouchableOpacity style={styles.editIcon} onPress={pickImage}>
-            <Text style={{ color: '#fff', fontSize: 16 }}>✏️</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Full Name */}
-        <Text style={styles.label}>Full Name</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Full Name"
-          placeholderTextColor="#aaa"
-          value={fullName}
-          onChangeText={setFullName}
-        />
-
-        {/* Country */}
-        <Text style={styles.label}>Country</Text>
-        <TouchableOpacity
-          style={styles.input}
-          onPress={() => setShowCountryPicker(true)}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ color: country ? '#222' : '#aaa', fontSize: 18 }}>
-              {typeof country?.name === 'string' ? country.name : 'Country'}
-            </Text>
-{/*             <Text style={styles.flag}>
-              {country && typeof country.flag === 'string'
-                ? country.flag
-                : '🇺🇸'}
-            </Text> */}
-          </View>
-        </TouchableOpacity>
-        {showCountryPicker && (
-          <CountryPicker
-            countryCode={country?.cca2 || 'US'}
-            visible={showCountryPicker}
-            onSelect={c => {
-              setCountry(c);
-              setShowCountryPicker(false);
-            }}
-            onClose={() => setShowCountryPicker(false)}
-            withFlag
-            withFilter
-            withCountryNameButton={false}
-          />
-        )}
-
-        {/* Phone Number */}
-        <Text style={styles.label}>Phone Number</Text>
-        <View style={styles.phoneRow}>
-          <TextInput
-            style={[styles.input, { flex: 1, marginLeft: 8 }]}
-            placeholder="+1 000 000 000"
-            placeholderTextColor="#aaa"
-            keyboardType="phone-pad"
-            value={phone}
-            onChangeText={setPhone}
-          />
-        </View>
       </View>
+    </TouchableOpacity>
+    {showCountryPicker && (
+      <CountryPicker
+        countryCode={country?.cca2 || 'US'}
+        visible={showCountryPicker}
+        onSelect={c => {
+          setCountry(c);
+          setShowCountryPicker(false);
+        }}
+        onClose={() => setShowCountryPicker(false)}
+        withFlag
+        withFilter
+        withCountryNameButton={false}
+      />
+    )}
 
-      {/* Continue Button at the bottom, inside SafeAreaView */}
-<TouchableOpacity
-  style={styles.continueButton}
-  onPress={() =>
-    saveUserProfile({
-      avatarBase64,
-      fullName,
-      country,
-      phone,
-      activityPreferences,
-      foodPreferences,
-    })
-  }
->
-  <Text style={styles.continueButtonText}>Continue</Text>
-</TouchableOpacity>
-    </SafeAreaView>
+    {/* Phone Number */}
+    <Text style={styles.label}>Phone Number</Text>
+    <View style={styles.phoneRow}>
+      <TextInput
+        style={[styles.input, { flex: 1, marginLeft: 8 }]}
+        placeholder="+1 000 000 000"
+        placeholderTextColor="#aaa"
+        keyboardType="phone-pad"
+        value={phone}
+        onChangeText={setPhone}
+      />
+    </View>
+  </View>
+
+  {/* Continue Button at the bottom */}
+  <TouchableOpacity
+    style={styles.continueButton}
+    onPress={async () => {
+      // Get cached onboarding data
+      const activityPreferences = await getOnboardingStepData('travel');
+      const foodPreferences = await getOnboardingStepData('food');
+
+      // Save everything to the DB
+      await saveUserProfile({
+        avatarBase64,
+        fullName,
+        country,
+        phone,
+        activityPreferences: activityPreferences || [],
+        foodPreferences: foodPreferences || [],
+      });
+
+      // Clear local onboarding cache
+      await clearOnboardingProgress();
+
+      // Navigate to main app
+      navigation.navigate('Index');
+    }}
+  >
+    <Text style={styles.continueButtonText}>Continue</Text>
+  </TouchableOpacity>
+</SafeAreaView>
   );
 }
