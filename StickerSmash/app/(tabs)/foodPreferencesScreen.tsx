@@ -132,7 +132,7 @@ export default function FoodPreferencesScreen() {
         <TouchableOpacity
           style={[
             styles.continueButton,
-            selected.length < 1 && { opacity: 0.5 }
+            
           ]}
           onPress={async () => {
             setFoodPreferences(selected);
