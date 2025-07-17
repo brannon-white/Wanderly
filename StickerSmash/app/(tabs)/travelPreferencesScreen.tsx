@@ -54,12 +54,14 @@ const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();  co
   return (
     <View style={styles.container}>
       {/* Progress bar */}
-      <SafeAreaView>
-        <View style={styles.progressBarWrapper}>
-          <View style={styles.progressBarBg} />
-          <View style={styles.progressBarFill} />
-        </View>
-      </SafeAreaView>
+<SafeAreaView>
+  <View style={{ width: '100%', alignItems: 'center', marginTop: 16, marginBottom: 8 }}>
+    <View style={styles.progressBarWrapper}>
+      <View style={styles.progressBarBg} />
+      <View style={styles.progressBarFill} />
+    </View>
+  </View>
+</SafeAreaView>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"

@@ -55,23 +55,18 @@ export default function FoodPreferencesScreen() {
 
   return (
     <View style={[styles.container, { position: 'relative' }]}>
-      <SafeAreaView>
-  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, paddingHorizontal: 16 }}>
+<SafeAreaView>
+  <View style={styles.topBar}>
     {/* Back Arrow */}
     <TouchableOpacity
-      style={{
-        padding: 8,
-        marginRight: 8,
-        backgroundColor: 'rgba(255,255,255,0.7)',
-        borderRadius: 20,
-      }}
+      style={styles.backArrow}
       onPress={() => navigation.navigate('TravelPreferences')}
       hitSlop={{ top: 10, left: 10, bottom: 10, right: 10 }}
     >
       <Ionicons name="chevron-back" size={28} color="#222" />
     </TouchableOpacity>
     {/* Progress Bar */}
-    <View style={{ flex: 1 }}>
+    <View style={styles.progressBarAbsoluteContainer}>
       <View style={styles.progressBarWrapper}>
         <View style={styles.progressBarBg} />
         <View style={styles.progressBarFill} />
