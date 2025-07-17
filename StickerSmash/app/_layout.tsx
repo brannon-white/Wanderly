@@ -16,6 +16,7 @@ import UserInfoSignUp from './(tabs)/userInfoSignUp'; // Adjust path as needed
 import { OnboardingProvider } from '@/context/OnboardingContext';
 import { useFonts } from 'expo-font';
 import { getOnboardingProgress } from '@/utils/onboardingStorage'; // Import your utility
+import { userExists } from '@/hooks/useSaveUserProfile';
 
 export type RootStackParamList = {
   OnboardingFirst: undefined;
@@ -41,6 +42,7 @@ const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null
     'Merriweather_36pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_36pt-Bold.ttf'),
     'Merriweather_24pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_24pt-Bold.ttf'),
   });
+
 useEffect(() => {
   async function checkFlags() {
     const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
@@ -56,7 +58,14 @@ useEffect(() => {
       return;
     }
 
-    // Only check onboarding progress if user is logged in
+    // Check Firestore for user existence
+    const exists = firebaseUser ? await userExists(firebaseUser.uid) : false;
+    if (exists) {
+      setInitialRoute('Index');
+      return;
+    }
+
+    // Only check onboarding progress if user is logged in and not in Firestore
     const progress = await getOnboardingProgress();
     if (!progress.travel) {
       setInitialRoute('TravelPreferences');
@@ -118,8 +127,6 @@ useEffect(() => {
   children={({ navigation }) => (
     <SignInScreen
       onSignIn={async () => {
-        await AsyncStorage.setItem('isSignedIn', 'true');
-        navigation.replace('Index');
       }}
     />
   )}
@@ -134,8 +141,8 @@ useEffect(() => {
   name="SignUp"
   children={({ navigation }) => (
     <SignUpscreen
-      onSignUp={async () => {
-        navigation.replace('TravelPreferences');
+      onSignUp={() => {
+        // Do nothing here, let SignUpScreen handle navigation!
       }}
     />
   )}

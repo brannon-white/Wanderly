@@ -39,10 +39,24 @@ export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
 async function signInWithEmail() {
   setLoading(true);
   try {
-    await auth().signInWithEmailAndPassword(email, password);
-    onSignIn?.(); // Only after successful sign-in
+    const result = await auth().signInWithEmailAndPassword(email, password);
+    const uid = result.user.uid;
+    const exists = await userExists(uid);
+
+    const travel = await getOnboardingStepData('travel');
+    const food = await getOnboardingStepData('food');
+
+    if (exists) {
+      navigation.navigate('Index');
+    } else if (food) {
+      navigation.navigate('UserInfoSignUp');
+    } else if (travel) {
+      navigation.navigate('FoodPreferences');
+    } else {
+      navigation.navigate('TravelPreferences');
+    }
   } catch (error: any) {
-    Alert.alert('Error', error.message); // This will show error if sign-in fails
+    Alert.alert('Error', error.message);
   } finally {
     setLoading(false);
   }
@@ -76,7 +90,6 @@ async function signInWithGoogle() {
     } else {
       navigation.navigate('TravelPreferences');
     }
-    onSignIn?.();
   } catch (error: any) {
     Alert.alert('Error', error.message);
   } finally {

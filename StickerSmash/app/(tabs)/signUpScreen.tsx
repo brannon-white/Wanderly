@@ -16,21 +16,36 @@ export default function SignUpScreen({ onSignUp }: { onSignUp?: () => void }) {
   const [loading, setLoading] = useState(false);
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();  
 
-  async function signUpWithEmail() {
-    if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match.');
-      return;
-    }
-    setLoading(true);
-    try {
-      await auth().createUserWithEmailAndPassword(email, password);
-      onSignUp?.();
-    } catch (error: any) {
-      Alert.alert('Error', error.message);
-    } finally {
-      setLoading(false);
-    }
+async function signUpWithEmail() {
+  if (password !== confirmPassword) {
+    Alert.alert('Error', 'Passwords do not match.');
+    return;
   }
+  setLoading(true);
+  try {
+    const result = await auth().createUserWithEmailAndPassword(email, password);
+    const uid = result.user.uid;
+    const exists = await userExists(uid);
+
+    const travel = await getOnboardingStepData('travel');
+    const food = await getOnboardingStepData('food');
+
+    if (exists) {
+      navigation.navigate('Index');
+    } else if (food) {
+      navigation.navigate('UserInfoSignUp');
+    } else if (travel) {
+      navigation.navigate('FoodPreferences');
+    } else {
+      navigation.navigate('TravelPreferences');
+    }
+    // Remove: onSignUp?.();
+  } catch (error: any) {
+    Alert.alert('Error', error.message);
+  } finally {
+    setLoading(false);
+  }
+}
 
 async function signUpWithGoogle() {
   setLoading(true);
@@ -47,12 +62,16 @@ async function signUpWithGoogle() {
 
     const uid = result.user.uid;
     const exists = await userExists(uid);
-
+    console.log('User exists:', exists);
+    console.log('User ID:', uid);
 const travel = await getOnboardingStepData('travel');
 const food = await getOnboardingStepData('food');
 
 if (exists) {
+    console.log('Navigating to Index');
+
   navigation.navigate('Index');
+
 } else if (food) {
   navigation.navigate('UserInfoSignUp');
 } else if (travel) {
