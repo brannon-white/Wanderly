@@ -89,7 +89,7 @@ if (exists) {
 
   return (
     <ImageBackground
-      source={require('@/assets/images/OnboardingPurpleBinoculars.png')}
+      source={require('@/assets/images/OnboardingSloth.png')}
       style={styles.background}
       imageStyle={styles.backgroundImage}
     >

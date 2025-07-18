@@ -26,7 +26,7 @@ export default function OnboardingSecondPage({ onNext }: OnboardingSecondPagePro
     <ThemedView style={styles.container}>
       <View style={styles.imageWrapper}>
         <Image
-          source={require('@/assets/images/OnboardingPurpleBinoculars.png')}
+          source={require('@/assets/images/OnboardingMarshmallowcopy.png')}
           style={styles.image}
           contentFit="cover"
         />

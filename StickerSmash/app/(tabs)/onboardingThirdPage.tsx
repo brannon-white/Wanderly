@@ -22,7 +22,7 @@ export default function OnboardingThirdPage({ onFinish }: OnboardingThirdPagePro
     <ThemedView style={styles.container}>
       <View style={styles.imageWrapper}>
         <Image
-          source={require('@/assets/images/OnboardingPurpleBinoculars.png')}
+          source={require('@/assets/images/OnboardingParrot.png')}
           style={styles.image}
           contentFit="cover"
         />
