@@ -1,11 +1,11 @@
 import React from 'react';
-import { View, Text, TextInput, Image, TouchableOpacity, ScrollView } from 'react-native';
+import { SafeAreaView,View, Text, TextInput, Image, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { styles } from '@/styles/discoverScreenStyles';
 
 export default function DiscoverScreen() {
   return (
-    <View style={styles.safe}>
+    <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity>
@@ -14,7 +14,7 @@ export default function DiscoverScreen() {
         <Text style={styles.title}>Discover</Text>
         <TouchableOpacity>
           <Image
-            source={require('@/assets/images/OnboardingPurpleBinoculars.png')}
+            source={require('@/assets/images/OnboardingParrot.png')}
             style={styles.avatar}
           />
         </TouchableOpacity>
@@ -25,12 +25,34 @@ export default function DiscoverScreen() {
         <Ionicons name="search" size={22} color="#bdbdbd" style={{ marginRight: 8 }} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search Destinations"
+          placeholder="Where do you want to go?"
           placeholderTextColor="#bdbdbd"
         />
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+        {/* Featured Trip */}
+        <Text style={styles.sectionTitleFeatured}>Featured Trip</Text>
+
+        <View style={styles.featuredTripCard}>
+          <Image
+            source={require('@/assets/images/OnboardingParrot.png')}
+            style={styles.featuredTripImage}
+            resizeMode="cover"
+          />
+          <View style={styles.featuredTripContent}>
+            <Text style={styles.featuredTripTitle}>Alpine Adventure</Text>
+            <Text style={styles.featuredTripSubtitle}>
+              • 7 days in the Swiss Alps{'\n'}
+              • Guided hikes & local cuisine{'\n'}
+              • Scenic train rides
+            </Text>
+            <TouchableOpacity style={styles.featuredTripButton}>
+              <Text style={styles.featuredTripButtonText}>Start with this trip</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Recommended Trips */}
         <Text style={styles.sectionTitle}>Recommended Trips</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
@@ -93,22 +115,6 @@ export default function DiscoverScreen() {
           <View style={styles.articleCard} />
         </View>
       </ScrollView>
-
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItemActive}>
-          <Ionicons name="home" size={28} color="#6A62B7" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="bookmark-outline" size={28} color="#bdbdbd" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="location-outline" size={28} color="#bdbdbd" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="person-outline" size={28} color="#bdbdbd" />
-        </TouchableOpacity>
-      </View>
-    </View>
+    </SafeAreaView>
   );
 }

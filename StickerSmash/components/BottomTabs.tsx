@@ -1,9 +1,9 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import DiscoverScreen from '../app/(tabs)/index';
-//import BookmarksScreen from './(tabs)/bookmarksScreen'; // Create this file
-//import MapScreen from '.app/(tabs)/mapScreen';             // Create this file
-//import ProfileScreen from './(tabs)/profileScreen';     // Create this file
+import BookmarksScreen from '../app/(tabs)/bookmarksScreen'; // Create this file
+import MapScreen from '../app/(tabs)/mapScreen';             // Create this file
+import ProfileScreen from '../app/(tabs)/profileScreen';     // Create this file
 import { Ionicons } from '@expo/vector-icons';
 
 const Tab = createBottomTabNavigator();
@@ -27,6 +27,7 @@ export default function BottomTabs() {
           shadowColor: '#000',
           shadowOpacity: 0.06,
           shadowRadius: 8,
+          boxShadow: '0px -2px 20px 0px rgba(0, 0, 0, 0.20)',
         },
         tabBarIcon: ({ color, size }) => {
           if (route.name === 'Discover') return <Ionicons name="home" size={size} color={color} />;
@@ -39,9 +40,9 @@ export default function BottomTabs() {
       })}
     >
       <Tab.Screen name="Discover" component={DiscoverScreen} />
-{/*       <Tab.Screen name="Bookmarks" component={BookmarksScreen} />
+      <Tab.Screen name="Bookmarks" component={BookmarksScreen} />
       <Tab.Screen name="Map" component={MapScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} /> */}
+      <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 }
