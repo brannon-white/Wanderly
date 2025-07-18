@@ -26,7 +26,8 @@ ios/Pods/
 # Firebase/Google config (if you have these)
 google-services.json
 GoogleService-Info.plist
-
+serviceAccountKey.json
+seedFirestore.js
 # VSCode settings
 .vscode/
 

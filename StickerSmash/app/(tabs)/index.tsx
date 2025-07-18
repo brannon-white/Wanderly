@@ -2,8 +2,9 @@ import React from 'react';
 import { SafeAreaView,View, Text, TextInput, Image, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { styles } from '@/styles/discoverScreenStyles';
-
+import { useFeaturedItinerary } from '@/hooks/userFeaturedItinerary';
 export default function DiscoverScreen() {
+  const { featuredTrip, itinerary, loading, error } = useFeaturedItinerary();
   return (
     <SafeAreaView style={styles.safe}>
       {/* Header */}
@@ -34,24 +35,35 @@ export default function DiscoverScreen() {
         {/* Featured Trip */}
         <Text style={styles.sectionTitleFeatured}>Featured Trip</Text>
 
-        <View style={styles.featuredTripCard}>
-          <Image
-            source={require('@/assets/images/OnboardingParrot.png')}
-            style={styles.featuredTripImage}
-            resizeMode="cover"
-          />
-          <View style={styles.featuredTripContent}>
-            <Text style={styles.featuredTripTitle}>Alpine Adventure</Text>
-            <Text style={styles.featuredTripSubtitle}>
-              • 7 days in the Swiss Alps{'\n'}
-              • Guided hikes & local cuisine{'\n'}
-              • Scenic train rides
-            </Text>
-            <TouchableOpacity style={styles.featuredTripButton}>
-              <Text style={styles.featuredTripButtonText}>Start with this trip</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+       {loading ? (
+  <Text style={{ margin: 20 }}>Loading featured trip...</Text>
+) : error ? (
+  <Text style={{ margin: 20, color: 'red' }}>{error}</Text>
+) : featuredTrip && itinerary ? (
+  <View style={styles.featuredTripCard}>
+    <Image
+      source={{ uri: itinerary.heroImage || 'https://via.placeholder.com/400x200?text=No+Image' }}
+      style={styles.featuredTripImage}
+      resizeMode="cover"
+    />
+    <View style={styles.featuredTripContent}>
+      <Text style={styles.featuredTripTitle}>{itinerary.title}</Text>
+      <Text style={styles.featuredTripSubtitle}>
+        {Array.isArray(itinerary.summary)
+          ? itinerary.summary.map((item: string) => `• ${item}`).join('\n')
+          : ''}
+      </Text>
+      <TouchableOpacity style={styles.featuredTripButton}>
+        <Text style={styles.featuredTripButtonText}>Start with this trip</Text>
+      </TouchableOpacity>
+      {featuredTrip.badge && (
+        <Text style={{ marginTop: 8, color: '#6A62B7', fontWeight: 'bold' }}>
+          {featuredTrip.badge}
+        </Text>
+      )}
+    </View>
+  </View>
+) : null}
 
         {/* Recommended Trips */}
         <Text style={styles.sectionTitle}>Recommended Trips</Text>
