@@ -18,6 +18,8 @@ import { useFonts } from 'expo-font';
 import { getOnboardingProgress } from '@/utils/onboardingStorage'; // Import your utility
 import { userExists } from '@/hooks/useSaveUserProfile';
 import OnboardingCompleteScreen from './(tabs)/onboardingCompleteScreen';
+import BottomTabs from '../components/BottomTabs';
+
 export type RootStackParamList = {
   OnboardingFirst: undefined;
   OnboardingSecond: undefined;
@@ -135,7 +137,7 @@ useEffect(() => {
 />
 <Stack.Screen
   name="Index"
-  component={HomeScreen}
+  component={BottomTabs}
   options={{ headerShown: false }}
 />
 <Stack.Screen
