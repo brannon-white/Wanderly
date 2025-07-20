@@ -5,7 +5,9 @@ import { styles } from '@/styles/discoverScreenStyles';
 import { useFeaturedItinerary } from '@/hooks/userFeaturedItinerary';
 import { useMatchingItineraries } from '@/hooks/useMatchingItineraries';
 import auth from '@react-native-firebase/auth'; // Add this import
-
+import FeaturedTripCard from '@/components/FeaturedTripCard';
+import RecommendedTripCard from '@/components/RecommendedTripCard';
+import DestinationCard from '@/components/DestinationCard';
 export default function DiscoverScreen() {
   const { featuredTrip, itinerary, loading, error } = useFeaturedItinerary();
 
@@ -38,68 +40,33 @@ export default function DiscoverScreen() {
         />
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
         {/* Featured Trip */}
         <Text style={styles.sectionTitleFeatured}>Featured Trip</Text>
-
-       {loading ? (
-  <Text style={{ margin: 20 }}>Loading featured trip...</Text>
-) : error ? (
-  <Text style={{ margin: 20, color: 'red' }}>{error}</Text>
-) : featuredTrip && itinerary ? (
-  <View style={styles.featuredTripCard}>
-    <Image
-      source={{ uri: itinerary.heroImage || 'https://via.placeholder.com/400x200?text=No+Image' }}
-      style={styles.featuredTripImage}
-      resizeMode="cover"
-    />
-    <View style={styles.featuredTripContent}>
-      <Text style={styles.featuredTripTitle}>{itinerary.title}</Text>
-      <Text style={styles.featuredTripSubtitle}>
-        {Array.isArray(itinerary.summary)
-          ? itinerary.summary.map((item: string) => `• ${item}`).join('\n')
-          : ''}
-      </Text>
-      <TouchableOpacity style={styles.featuredTripButton}>
-        <Text style={styles.featuredTripButtonText}>Start with this trip</Text>
-      </TouchableOpacity>
-      {featuredTrip.badge && (
-        <Text style={{ marginTop: 8, color: '#6A62B7', fontWeight: 'bold' }}>
-          {featuredTrip.badge}
-        </Text>
-      )}
-    </View>
-  </View>
-) : null}
+        {loading ? (
+          <Text style={{ margin: 20 }}>Loading featured trip...</Text>
+        ) : error ? (
+          <Text style={{ margin: 20, color: 'red' }}>{error}</Text>
+        ) : featuredTrip && itinerary ? (
+          <FeaturedTripCard itinerary={itinerary} featuredTrip={featuredTrip} />
+        ) : null}
 
         {/* Recommended Trips */}
-<Text style={styles.sectionTitle}>Recommended Trips</Text>
-<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-  {loadingItins ? (
-    <Text style={{ margin: 20 }}>Loading recommended trips...</Text>
-  ) : errorItins ? (
-    <Text style={{ margin: 20, color: 'red' }}>{errorItins}</Text>
-  ) : prebuiltItineraries && prebuiltItineraries.length > 0 ? (
-    prebuiltItineraries.map((itin: any) => (
-      <View key={itin.id} style={styles.recommendedCard}>
-        <View style={styles.recommendedCardContent}>
-          <Text style={styles.recommendedCardTitle}>{itin.title}</Text>
-          <View style={styles.ratingRow}>
-            <Ionicons name="star" size={14} color="#FFD700" />
-            <Text style={styles.ratingText}>
-              {itin.rating ? itin.rating : '4.5'}
-            </Text>
-          </View>
-        </View>
-        <TouchableOpacity style={styles.heartIcon}>
-          <Ionicons name="heart" size={20} color="#fff" />
-        </TouchableOpacity>
-      </View>
-    ))
-  ) : (
-    <Text style={{ margin: 20 }}>No recommended trips found.</Text>
-  )}
-</ScrollView>
+        <Text style={styles.sectionTitle}>Recommended Trips</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+          {loadingItins ? (
+            <Text style={{ margin: 20 }}>Loading recommended trips...</Text>
+          ) : errorItins ? (
+            <Text style={{ margin: 20, color: 'red' }}>{errorItins}</Text>
+          ) : prebuiltItineraries && prebuiltItineraries.length > 0 ? (
+            prebuiltItineraries.map((itin: any) => (
+              <RecommendedTripCard key={itin.id} itin={itin} />
+            ))
+          ) : (
+            <Text style={{ margin: 20 }}>No recommended trips found.</Text>
+          )}
+        </ScrollView>
+
         {/* Pagination dots */}
         <View style={styles.pagination}>
           <View style={styles.dotActive} />
@@ -116,26 +83,8 @@ export default function DiscoverScreen() {
           </TouchableOpacity>
         </View>
         <View style={styles.popularRow}>
-          <View style={styles.popularCard}>
-            <Text style={styles.popularCardTitle}>Greenough, Montana</Text>
-            <View style={styles.ratingRow}>
-              <Ionicons name="star" size={14} color="#FFD700" />
-              <Text style={styles.ratingText}>4.5</Text>
-            </View>
-            <TouchableOpacity style={styles.heartIconSmall}>
-              <Ionicons name="heart" size={16} color="#fff" />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.popularCard}>
-            <Text style={styles.popularCardTitle}>North Mountain</Text>
-            <View style={styles.ratingRow}>
-              <Ionicons name="star" size={14} color="#FFD700" />
-              <Text style={styles.ratingText}>4.5</Text>
-            </View>
-            <TouchableOpacity style={styles.heartIconSmall}>
-              <Ionicons name="heart" size={16} color="#fff" />
-            </TouchableOpacity>
-          </View>
+          <DestinationCard title="Greenough, Montana" />
+          <DestinationCard title="North Mountain" />
         </View>
 
         {/* Popular Articles */}

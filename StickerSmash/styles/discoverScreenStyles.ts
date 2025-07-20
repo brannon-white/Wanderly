@@ -58,8 +58,8 @@ export const styles = StyleSheet.create({
     fontFamily: 'Merriweather_36pt-Bold',
   },
   recommendedCard: {
-    width: 220,
-    height: 160,
+    width: 335,
+    height: 253,
     backgroundColor: '#b7aee2',
     borderRadius: 22,
     marginLeft: 20,
@@ -222,6 +222,10 @@ export const styles = StyleSheet.create({
   featuredTripImage: {
     width: '100%',
     height: 160,
+  },
+  recommendedTripImage: {
+    width: '100%',
+    height: '100%',
   },
   featuredTripContent: {
     padding: 18,
