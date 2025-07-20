@@ -9,6 +9,7 @@ import { saveOnboardingStep, getOnboardingStepData } from '@/utils/onboardingSto
 import { isOnboardingComplete } from '@/utils/isOnboardingComplete'; // import your function
 import { updateTravelPreferences } from '@/utils/updateTravelPreferences';
 import auth from '@react-native-firebase/auth';
+import { getStaticActivities } from '@/utils/getStaticActivities';
 
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '@/app/_layout'; // adjust path if needed
@@ -21,14 +22,10 @@ const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();  co
 
 useEffect(() => {
   const fetchActivities = async () => {
+    setLoading(true);
     try {
-      const doc = await firestore().collection('staticActivities').doc('all').get();
-      const data = doc.data();
-      if (data && Array.isArray(data.activities)) {
-        setActivities(data.activities);
-      } else {
-        setActivities([]);
-      }
+      const activities = await getStaticActivities();
+      setActivities(activities);
     } catch (error) {
       console.error('Error fetching activities:', error);
       setActivities([]);
