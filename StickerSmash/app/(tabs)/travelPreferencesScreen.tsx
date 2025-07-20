@@ -6,6 +6,10 @@ import { useNavigation } from '@react-navigation/native';
 import { useOnboarding } from '@/context/OnboardingContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { saveOnboardingStep, getOnboardingStepData } from '@/utils/onboardingStorage';
+import { isOnboardingComplete } from '@/utils/isOnboardingComplete'; // import your function
+import { updateTravelPreferences } from '@/utils/updateTravelPreferences';
+import auth from '@react-native-firebase/auth';
+
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '@/app/_layout'; // adjust path if needed
 export default function TravelPreferencesScreen() {
@@ -15,30 +19,53 @@ export default function TravelPreferencesScreen() {
   const [loading, setLoading] = useState(true);
 const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();  const { setActivityPreferences } = useOnboarding();
 
-    useEffect(() => {
-    const fetchActivities = async () => {
-      try {
-        const doc = await firestore().collection('staticActivities').doc('all').get();
-        const data = doc.data();
-        if (data && Array.isArray(data.activities)) {
-          setActivities(data.activities);
-        } else {
-          setActivities([]);
-        }
-      } catch (error) {
-        console.error('Error fetching activities:', error);
+useEffect(() => {
+  const fetchActivities = async () => {
+    try {
+      const doc = await firestore().collection('staticActivities').doc('all').get();
+      const data = doc.data();
+      if (data && Array.isArray(data.activities)) {
+        setActivities(data.activities);
+      } else {
         setActivities([]);
-      } finally {
-        setLoading(false);
       }
-    };
-    fetchActivities();
-      async function loadSaved() {
-    const saved = await getOnboardingStepData('travel');
-    if (saved && Array.isArray(saved)) setSelected(saved);
-  }
+    } catch (error) {
+      console.error('Error fetching activities:', error);
+      setActivities([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadSaved = async () => {
+    const uid = auth().currentUser?.uid;
+    let saved: string[] | null = null;
+
+    // Try to load from cached user profile first
+    if (uid) {
+      const cachedProfile = await AsyncStorage.getItem(`userProfile_${uid}`);
+      if (cachedProfile) {
+        const profile = JSON.parse(cachedProfile);
+        if (profile.activityPreferences && Array.isArray(profile.activityPreferences)) {
+          saved = profile.activityPreferences;
+        }
+      }
+    }
+
+    // Fallback to onboarding step data
+    if (!saved) {
+      const onboardingSaved = await getOnboardingStepData('travel');
+      if (onboardingSaved && Array.isArray(onboardingSaved)) {
+        saved = onboardingSaved;
+      }
+    }
+
+    if (saved) setSelected(saved);
+  };
+
+  fetchActivities();
   loadSaved();
-  }, []);
+}, []);
 
   const filtered = activities.filter(p =>
     p.label.toLowerCase().includes(search.toLowerCase())
@@ -124,13 +151,22 @@ const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();  co
     selected.length < 2 && { opacity: 0.5 }
   ]}
   disabled={selected.length < 2}
-  onPress={async () => {
-    if (selected.length >= 2) {
-      setActivityPreferences(selected);
-      await saveOnboardingStep('travel', selected); // <-- Save locally
-      navigation.navigate('FoodPreferences');
+onPress={async () => {
+  if (selected.length >= 2) {
+    setActivityPreferences(selected);
+    await saveOnboardingStep('travel', selected); // Save locally
+
+    const uid = auth().currentUser?.uid;
+    const onboardingComplete = uid ? await isOnboardingComplete(uid) : false;
+
+    if (onboardingComplete) {
+      await updateTravelPreferences(selected); // Update DB/cache
+      navigation.navigate('Index'); // Go to home screen
+    } else {
+      navigation.navigate('FoodPreferences'); // Continue onboarding
     }
-  }}
+  }
+}}
 >
   <Text style={styles.continueButtonText}>
     Continue

@@ -19,6 +19,7 @@ import { getOnboardingProgress } from '@/utils/onboardingStorage'; // Import you
 import { userExists } from '@/hooks/useSaveUserProfile';
 import OnboardingCompleteScreen from './(tabs)/onboardingCompleteScreen';
 import BottomTabs from '../components/BottomTabs';
+import { getUserProfile } from '@/utils/getUserProfile'; // import at the top
 
 export type RootStackParamList = {
   OnboardingFirst: undefined;
@@ -64,6 +65,10 @@ useEffect(() => {
     // Check Firestore for user existence
     const exists = firebaseUser ? await userExists(firebaseUser.uid) : false;
     if (exists) {
+        const uid = auth().currentUser?.uid;
+      if (uid) {
+        getUserProfile(uid);
+      }
       setInitialRoute('Index');
       return;
     }

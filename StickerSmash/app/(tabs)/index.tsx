@@ -1,10 +1,17 @@
 import React from 'react';
-import { SafeAreaView,View, Text, TextInput, Image, TouchableOpacity, ScrollView } from 'react-native';
+import { SafeAreaView, View, Text, TextInput, Image, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { styles } from '@/styles/discoverScreenStyles';
 import { useFeaturedItinerary } from '@/hooks/userFeaturedItinerary';
+import { useMatchingItineraries } from '@/hooks/useMatchingItineraries';
+import auth from '@react-native-firebase/auth'; // Add this import
+
 export default function DiscoverScreen() {
   const { featuredTrip, itinerary, loading, error } = useFeaturedItinerary();
+
+  // Get the current user's uid
+  const uid = auth().currentUser?.uid ?? '';
+  const { prebuiltItineraries, loading: loadingItins, error: errorItins } = useMatchingItineraries(uid);
   return (
     <SafeAreaView style={styles.safe}>
       {/* Header */}
@@ -66,22 +73,33 @@ export default function DiscoverScreen() {
 ) : null}
 
         {/* Recommended Trips */}
-        <Text style={styles.sectionTitle}>Recommended Trips</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-          <View style={styles.recommendedCard}>
-            <View style={styles.recommendedCardContent}>
-              <Text style={styles.recommendedCardTitle}>Northern Mountain</Text>
-              <View style={styles.ratingRow}>
-                <Ionicons name="star" size={14} color="#FFD700" />
-                <Text style={styles.ratingText}>4.5</Text>
-              </View>
-            </View>
-            <TouchableOpacity style={styles.heartIcon}>
-              <Ionicons name="heart" size={20} color="#fff" />
-            </TouchableOpacity>
+<Text style={styles.sectionTitle}>Recommended Trips</Text>
+<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+  {loadingItins ? (
+    <Text style={{ margin: 20 }}>Loading recommended trips...</Text>
+  ) : errorItins ? (
+    <Text style={{ margin: 20, color: 'red' }}>{errorItins}</Text>
+  ) : prebuiltItineraries && prebuiltItineraries.length > 0 ? (
+    prebuiltItineraries.map((itin: any) => (
+      <View key={itin.id} style={styles.recommendedCard}>
+        <View style={styles.recommendedCardContent}>
+          <Text style={styles.recommendedCardTitle}>{itin.title}</Text>
+          <View style={styles.ratingRow}>
+            <Ionicons name="star" size={14} color="#FFD700" />
+            <Text style={styles.ratingText}>
+              {itin.rating ? itin.rating : '4.5'}
+            </Text>
           </View>
-          {/* Add more cards as needed */}
-        </ScrollView>
+        </View>
+        <TouchableOpacity style={styles.heartIcon}>
+          <Ionicons name="heart" size={20} color="#fff" />
+        </TouchableOpacity>
+      </View>
+    ))
+  ) : (
+    <Text style={{ margin: 20 }}>No recommended trips found.</Text>
+  )}
+</ScrollView>
         {/* Pagination dots */}
         <View style={styles.pagination}>
           <View style={styles.dotActive} />

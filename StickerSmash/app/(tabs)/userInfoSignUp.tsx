@@ -14,6 +14,8 @@ import { useNavigation } from '@react-navigation/native';
 import type { RootStackParamList } from '@/app/_layout';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 
 export default function UserInfoSignUp() {
   const [showCountryPicker, setShowCountryPicker] = useState(false);
@@ -139,27 +141,36 @@ const pickImage = async () => {
   {/* Continue Button at the bottom */}
   <TouchableOpacity
     style={styles.continueButton}
-    onPress={async () => {
-      // Get cached onboarding data
-      const activityPreferences = await getOnboardingStepData('travel');
-      const foodPreferences = await getOnboardingStepData('food');
+onPress={async () => {
+  // Get cached onboarding data
+  const activityPreferences = await getOnboardingStepData('travel');
+  const foodPreferences = await getOnboardingStepData('food');
 
-      // Save everything to the DB
-      await saveUserProfile({
-        avatarBase64,
-        fullName,
-        country,
-        phone,
-        activityPreferences: activityPreferences || [],
-        foodPreferences: foodPreferences || [],
-      });
+  // Build the profile object
+  const profile = {
+    avatarBase64,
+    fullName,
+    country,
+    phone,
+    activityPreferences: activityPreferences || [],
+    foodPreferences: foodPreferences || [],
+  };
 
-      // Clear local onboarding cache
-      await clearOnboardingProgress();
+  // Save everything to the DB
+  await saveUserProfile(profile);
 
-      // Navigate to main app
-      navigation.navigate('OnboardingComplete');
-    }}
+  // Cache the profile locally
+  const uid = auth().currentUser?.uid;
+  if (uid) {
+    await AsyncStorage.setItem(`userProfile_${uid}`, JSON.stringify(profile));
+  }
+
+  // Clear local onboarding cache
+  await clearOnboardingProgress();
+
+  // Navigate to main app
+  navigation.navigate('OnboardingComplete');
+}}
   >
     <Text style={styles.continueButtonText}>Continue</Text>
   </TouchableOpacity>

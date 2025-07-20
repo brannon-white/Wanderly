@@ -8,6 +8,7 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
 import { saveOnboardingStep, getOnboardingStepData } from '@/utils/onboardingStorage';
 import { Ionicons } from '@expo/vector-icons';
+import { getStaticFoodPreferences } from '@/utils/getStaticFoodPreferences';
 
 export default function FoodPreferencesScreen() {
   const [search, setSearch] = useState('');
@@ -18,23 +19,19 @@ export default function FoodPreferencesScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
 
   useEffect(() => {
-    const fetchFoods = async () => {
-      try {
-        const doc = await firestore().collection('staticFoodPreferences').doc('all').get();
-        const data = doc.data();
-        if (data && Array.isArray(data.foods)) {
-          setFoods(data.foods);
-        } else {
-          setFoods([]);
-        }
-      } catch (error) {
-        console.error('Error fetching foods:', error);
-        setFoods([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchFoods();
+const fetchFoods = async () => {
+  setLoading(true);
+  try {
+    const foods = await getStaticFoodPreferences();
+    setFoods(foods);
+  } catch (error) {
+    console.error('Error fetching foods:', error);
+    setFoods([]);
+  } finally {
+    setLoading(false);
+  }
+};
+fetchFoods();
 
     async function loadSaved() {
       const saved = await getOnboardingStepData('food');

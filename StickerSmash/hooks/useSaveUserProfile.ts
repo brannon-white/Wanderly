@@ -1,6 +1,7 @@
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import storage from '@react-native-firebase/storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export async function saveUserProfile({
   avatarBase64,
@@ -50,6 +51,12 @@ export async function saveUserProfile({
   }
 }
 export async function userExists(uid: string): Promise<boolean> {
+  // Check cache first
+  const cachedProfile = await AsyncStorage.getItem(`userProfile_${uid}`);
+  if (cachedProfile) {
+    return true;
+  }
+  // Fallback to Firestore
   const doc = await firestore().collection('users').doc(uid).get();
   return doc.exists();
 }
