@@ -8,8 +8,11 @@ import auth from '@react-native-firebase/auth'; // Add this import
 import FeaturedTripCard from '@/components/FeaturedTripCard';
 import RecommendedTripCard from '@/components/RecommendedTripCard';
 import DestinationCard from '@/components/DestinationCard';
+import { useDestinations } from '@/hooks/useDestinations'; // <-- import the hook
+
 export default function DiscoverScreen() {
   const { featuredTrip, itinerary, loading, error } = useFeaturedItinerary();
+  const { destinations, loading: loadingDest, error: errorDest } = useDestinations(); // <-- use the hook
 
   // Get the current user's uid
   const uid = auth().currentUser?.uid ?? '';
@@ -76,16 +79,34 @@ export default function DiscoverScreen() {
         </View>
 
         {/* Popular Destinations */}
-        <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>Popular Destinations</Text>
-          <TouchableOpacity>
-            <Text style={styles.viewAll}>View All</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.popularRow}>
-          <DestinationCard title="Greenough, Montana" />
-          <DestinationCard title="North Mountain" />
-        </View>
+<View style={styles.rowBetween}>
+  <Text style={styles.sectionTitle}>Popular Destinations</Text>
+  <TouchableOpacity>
+    <Text style={styles.viewAll}>View All</Text>
+  </TouchableOpacity>
+</View>
+<ScrollView
+  horizontal
+  showsHorizontalScrollIndicator={false}
+  contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
+  style={{ marginBottom: 16 }}
+>
+  {loadingDest ? (
+    <Text style={{ margin: 20 }}>Loading destinations...</Text>
+  ) : errorDest ? (
+    <Text style={{ margin: 20, color: 'red' }}>{errorDest}</Text>
+  ) : destinations && destinations.length > 0 ? (
+    destinations.map((dest: any) => (
+      <DestinationCard
+        key={dest.id}
+        title={dest.name}
+        imageUrl={dest.imageUrl}
+      />
+    ))
+  ) : (
+    <Text style={{ margin: 20 }}>No destinations found.</Text>
+  )}
+</ScrollView>
 
         {/* Popular Articles */}
         <Text style={styles.sectionTitle}>Popular Articles</Text>

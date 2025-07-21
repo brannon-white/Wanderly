@@ -54,9 +54,12 @@ export async function userExists(uid: string): Promise<boolean> {
   // Check cache first
   const cachedProfile = await AsyncStorage.getItem(`userProfile_${uid}`);
   if (cachedProfile) {
+    console.log('User profile exists in cache');
     return true;
   }
   // Fallback to Firestore
   const doc = await firestore().collection('users').doc(uid).get();
+      console.log('User profile pulled from Firestore');
+
   return doc.exists();
 }

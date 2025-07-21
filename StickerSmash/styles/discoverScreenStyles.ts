@@ -1,3 +1,4 @@
+import DestinationCard from '@/components/DestinationCard';
 import { StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
@@ -72,7 +73,20 @@ export const styles = StyleSheet.create({
     backgroundColor: '#6A62B7',
     borderBottomLeftRadius: 22,
     borderBottomRightRadius: 22,
+    borderTopRightRadius: 22,
+    borderTopLeftRadius: 22,
     padding: 14,
+    marginTop: -20,
+
+  },
+    destinationCardContent: {
+    backgroundColor: '#D0CBFF',
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
+    borderTopRightRadius: 22,
+    borderTopLeftRadius: 22,
+    padding: 14,
+    marginTop: -20,
   },
   recommendedCardTitle: {
     color: '#fff',
@@ -138,23 +152,27 @@ export const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginBottom: 18,
   },
-  popularCard: {
-    flex: 1,
-    height: 120,
-    backgroundColor: '#b7aee2',
-    borderRadius: 18,
-    marginRight: 12,
-    marginLeft: 0,
-    marginBottom: 8,
-    justifyContent: 'flex-end',
-    overflow: 'hidden',
-    position: 'relative',
-    padding: 10,
-  },
+
+popularCard: {
+  width: 180,
+  marginRight: 16,
+  backgroundColor: '#6A62B7',
+  borderRadius: 16,
+  overflow: 'hidden',
+  elevation: 2,
+  padding: 8,
+  alignItems: 'center',
+},
+popularCardImage: {
+  width: 164,
+  height: 110,
+  borderRadius: 12,
+  marginBottom: 8,
+},
   popularCardTitle: {
-    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+    color: '#222',
     marginBottom: 6,
     fontFamily: 'Merriweather_36pt-Bold',
   },
@@ -257,4 +275,26 @@ export const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontFamily: 'Merriweather_36pt-Bold',
   },
+  // Add to your discoverScreenStyles.js or .ts
+destinationCardImage: {
+  width: '100%',
+  height: 180,
+  borderRadius: 24,
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+},
+  destinationCard: {
+    width: 180,
+    height: 180,
+    borderRadius: 22,
+    marginLeft: 20,
+    marginRight: 10,
+    marginBottom: 8,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+  },
+
 });
