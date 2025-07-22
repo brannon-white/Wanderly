@@ -20,7 +20,7 @@ import { userExists } from '@/hooks/useSaveUserProfile';
 import OnboardingCompleteScreen from './(tabs)/onboardingCompleteScreen';
 import BottomTabs from '../components/BottomTabs';
 import { getUserProfile } from '@/utils/getUserProfile'; // import at the top
-
+import ItineraryScreen from '@/components/ItineraryScreen';
 export type RootStackParamList = {
   OnboardingFirst: undefined;
   OnboardingSecond: undefined;
@@ -33,6 +33,8 @@ export type RootStackParamList = {
   FoodPreferences: undefined;
   UserInfoSignUp: undefined;
   OnboardingComplete: undefined; // Add this line
+  ItineraryScreen: { id: string };
+
   // Add other screens as needed
 };
 
@@ -174,6 +176,11 @@ useEffect(() => {
 <Stack.Screen
   name="OnboardingComplete"
   component={OnboardingCompleteScreen}
+  options={{ headerShown: false }}
+/>
+<Stack.Screen
+  name="ItineraryScreen"
+  component={ItineraryScreen}
   options={{ headerShown: false }}
 />
 </Stack.Navigator>

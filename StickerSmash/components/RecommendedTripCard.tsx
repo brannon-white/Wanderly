@@ -2,9 +2,17 @@ import React from 'react';
 import { View, Text, Image, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from '@/styles/discoverScreenStyles';
-
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import type { RootStackParamList } from '@/app/_layout'; // adjust
 export default function RecommendedTripCard({ itin }: { itin: any }) {
+const navigation = useNavigation<StackNavigationProp<RootStackParamList, 'ItineraryScreen'>>();      
+const handlePress = () => {
+    navigation.navigate('ItineraryScreen', { id: itin.id });
+  };
   return (
+        <TouchableOpacity onPress={handlePress} activeOpacity={0.85}>
+
     <View key={itin.id} style={styles.recommendedCard}>
       <Image
         source={{ uri: itin.heroImage || 'https://via.placeholder.com/400x200?text=No+Image' }}
@@ -24,5 +32,6 @@ export default function RecommendedTripCard({ itin }: { itin: any }) {
         <Ionicons name="heart" size={20} color="#fff" />
       </TouchableOpacity>
     </View>
+        </TouchableOpacity>
   );
 }

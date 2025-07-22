@@ -70,7 +70,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   recommendedCardContent: {
-    backgroundColor: '#6A62B7',
+    backgroundColor: '#D0CBFF',
     borderBottomLeftRadius: 22,
     borderBottomRightRadius: 22,
     borderTopRightRadius: 22,
@@ -89,9 +89,9 @@ export const styles = StyleSheet.create({
     marginTop: -20,
   },
   recommendedCardTitle: {
-    color: '#fff',
+    color: '#222',
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: 'regular',
     marginBottom: 6,
     fontFamily: 'Merriweather_36pt-Bold',
   },
@@ -156,7 +156,7 @@ export const styles = StyleSheet.create({
 popularCard: {
   width: 180,
   marginRight: 16,
-  backgroundColor: '#6A62B7',
+  backgroundColor: '#ede7fa',
   borderRadius: 16,
   overflow: 'hidden',
   elevation: 2,
@@ -230,7 +230,7 @@ popularCardImage: {
     marginHorizontal: 20,
     marginBottom: 24,
     borderRadius: 24,
-    backgroundColor: '#ede7fa',
+    backgroundColor: '#D0CBFF',
     overflow: 'hidden',
     elevation: 2,
     shadowColor: '#000',
