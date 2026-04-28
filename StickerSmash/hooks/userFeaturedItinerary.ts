@@ -1,21 +1,24 @@
 import { useEffect, useState } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useDemo } from '@/context/DemoContext';
+import { DEMO_FEATURED_TRIP, DEMO_FEATURED_ITINERARY } from '@/data/demoData';
 
 export function useFeaturedItinerary() {
+  const { isDemoMode } = useDemo();
   const [featuredTrip, setFeaturedTrip] = useState<any>(null);
   const [itinerary, setItinerary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-async function logAllAsyncStorage() {
-  const keys = await AsyncStorage.getAllKeys();
-  const stores = await AsyncStorage.multiGet(keys);
-  stores.forEach(([key, value]) => {
-    console.log(`Key: ${key}`, 'Value:', value);
-  });
-}
 
   useEffect(() => {
+    if (isDemoMode) {
+      setFeaturedTrip(DEMO_FEATURED_TRIP);
+      setItinerary(DEMO_FEATURED_ITINERARY);
+      setLoading(false);
+      return;
+    }
+
     async function fetchData() {
       try {
         setLoading(true);
@@ -40,7 +43,6 @@ async function logAllAsyncStorage() {
         console.log('Loaded featured trip from cache');
         return;
       }
-        //logAllAsyncStorage();
         // Query for the first featured trip
         const featuredSnap = await firestore().collection('featuredTrips').limit(1).get();
         if (featuredSnap.empty) throw new Error('No featured trip found');
@@ -67,7 +69,7 @@ async function logAllAsyncStorage() {
       }
     }
     fetchData();
-  }, []);
+  }, [isDemoMode]);
 
   return { featuredTrip, itinerary, loading, error };
 }

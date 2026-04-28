@@ -1,19 +1,21 @@
 import React, { useState,useEffect } from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity,SafeAreaView } from 'react-native';
 import { styles } from '@/styles/travelPreferencesStyles';
-import firestore from '@react-native-firebase/firestore';
 import { useNavigation } from '@react-navigation/native';
 import { useOnboarding } from '@/context/OnboardingContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { saveOnboardingStep, getOnboardingStepData } from '@/utils/onboardingStorage';
-import { isOnboardingComplete } from '@/utils/isOnboardingComplete'; // import your function
+import { isOnboardingComplete } from '@/utils/isOnboardingComplete';
 import { updateTravelPreferences } from '@/utils/updateTravelPreferences';
 import auth from '@react-native-firebase/auth';
 import { getStaticActivities } from '@/utils/getStaticActivities';
+import { useDemo } from '@/context/DemoContext';
+import { DEMO_ACTIVITIES } from '@/data/demoData';
 
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '@/app/_layout'; // adjust path if needed
+import { RootStackParamList } from '@/app/_layout';
 export default function TravelPreferencesScreen() {
+  const { isDemoMode } = useDemo();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [activities, setActivities] = useState<{ label: string; emoji: string }[]>([]);
@@ -21,6 +23,12 @@ export default function TravelPreferencesScreen() {
 const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();  const { setActivityPreferences } = useOnboarding();
 
 useEffect(() => {
+  if (isDemoMode) {
+    setActivities(DEMO_ACTIVITIES);
+    setLoading(false);
+    return;
+  }
+
   const fetchActivities = async () => {
     setLoading(true);
     try {
@@ -38,7 +46,6 @@ useEffect(() => {
     const uid = auth().currentUser?.uid;
     let saved: string[] | null = null;
 
-    // Try to load from cached user profile first
     if (uid) {
       const cachedProfile = await AsyncStorage.getItem(`userProfile_${uid}`);
       if (cachedProfile) {
@@ -49,7 +56,6 @@ useEffect(() => {
       }
     }
 
-    // Fallback to onboarding step data
     if (!saved) {
       const onboardingSaved = await getOnboardingStepData('travel');
       if (onboardingSaved && Array.isArray(onboardingSaved)) {
@@ -61,8 +67,8 @@ useEffect(() => {
   };
 
   fetchActivities();
-  loadSaved();
-}, []);
+  if (!isDemoMode) loadSaved();
+}, [isDemoMode]);
 
   const filtered = activities.filter(p =>
     p.label.toLowerCase().includes(search.toLowerCase())
@@ -151,16 +157,18 @@ useEffect(() => {
 onPress={async () => {
   if (selected.length >= 2) {
     setActivityPreferences(selected);
-    await saveOnboardingStep('travel', selected); // Save locally
-
+    if (isDemoMode) {
+      navigation.navigate('FoodPreferences');
+      return;
+    }
+    await saveOnboardingStep('travel', selected);
     const uid = auth().currentUser?.uid;
     const onboardingComplete = uid ? await isOnboardingComplete(uid) : false;
-
     if (onboardingComplete) {
-      await updateTravelPreferences(selected); // Update DB/cache
-      navigation.navigate('Index'); // Go to home screen
+      await updateTravelPreferences(selected);
+      navigation.navigate('Index');
     } else {
-      navigation.navigate('FoodPreferences'); // Continue onboarding
+      navigation.navigate('FoodPreferences');
     }
   }
 }}

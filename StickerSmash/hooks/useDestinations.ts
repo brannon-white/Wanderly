@@ -1,17 +1,26 @@
 import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
+import { useDemo } from '@/context/DemoContext';
+import { DEMO_DESTINATIONS } from '@/data/demoData';
 
 const CACHE_KEY = 'destinationsCache';
 const CACHE_TIMESTAMP_KEY = 'destinationsCacheTimestamp';
 const ONE_WEEK_MS = 1000 * 60 * 60 * 24 * 7;
 
 export function useDestinations() {
+  const { isDemoMode } = useDemo();
   const [destinations, setDestinations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (isDemoMode) {
+      setDestinations(DEMO_DESTINATIONS);
+      setLoading(false);
+      return;
+    }
+
     async function fetchDestinations() {
       try {
         setLoading(true);
@@ -46,7 +55,7 @@ export function useDestinations() {
       }
     }
     fetchDestinations();
-  }, []);
+  }, [isDemoMode]);
 
   return { destinations, loading, error };
 }

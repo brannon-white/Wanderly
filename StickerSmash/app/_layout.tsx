@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import OnboardingFirstPage from './(tabs)/onboardingFirstPage';
@@ -7,19 +6,19 @@ import OnboardingSecondPage from './(tabs)/onboardingSecondPage';
 import OnboardingThirdPage from './(tabs)/onboardingThirdPage';
 import AuthScreen from './(tabs)/authScreen';
 import SignInScreen from './(tabs)/signInScreen';
-import HomeScreen from './(tabs)/index';
 import auth from '@react-native-firebase/auth';
 import SignUpscreen from './(tabs)/signUpScreen';
-import TravelPreferencesScreen from './(tabs)/travelPreferencesScreen'; // Adjust path as needed
-import FoodPreferencesScreen from './(tabs)/foodPreferencesScreen'; // Add this import
-import UserInfoSignUp from './(tabs)/userInfoSignUp'; // Adjust path as needed
+import TravelPreferencesScreen from './(tabs)/travelPreferencesScreen';
+import FoodPreferencesScreen from './(tabs)/foodPreferencesScreen';
+import UserInfoSignUp from './(tabs)/userInfoSignUp';
 import { OnboardingProvider } from '@/context/OnboardingContext';
+import { DemoProvider, useDemo } from '@/context/DemoContext';
 import { useFonts } from 'expo-font';
-import { getOnboardingProgress } from '@/utils/onboardingStorage'; // Import your utility
+import { getOnboardingProgress } from '@/utils/onboardingStorage';
 import { userExists } from '@/hooks/useSaveUserProfile';
 import OnboardingCompleteScreen from './(tabs)/onboardingCompleteScreen';
 import BottomTabs from '../components/BottomTabs';
-import { getUserProfile } from '@/utils/getUserProfile'; // import at the top
+import { getUserProfile } from '@/utils/getUserProfile';
 import ItineraryScreen from '@/components/ItineraryScreen';
 export type RootStackParamList = {
   OnboardingFirst: undefined;
@@ -40,6 +39,20 @@ export type RootStackParamList = {
 
 
 const Stack = createStackNavigator<RootStackParamList>();
+
+function DemoAwareAuth({ navigation }: any) {
+  const { enableDemoMode } = useDemo();
+  return (
+    <AuthScreen
+      onSignIn={() => navigation.navigate('SignIn')}
+      onSignUp={() => navigation.navigate('SignUp')}
+      onDemo={() => {
+        enableDemoMode();
+        navigation.navigate('Index');
+      }}
+    />
+  );
+}
 
 export default function RootLayout() {
 const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
@@ -98,6 +111,7 @@ useEffect(() => {
   if (!initialRoute) return null;
 
   return (
+    <DemoProvider>
     <OnboardingProvider>
       <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
         <Stack.Screen
@@ -124,12 +138,7 @@ useEffect(() => {
         />
         <Stack.Screen
           name="Auth"
-          children={({ navigation }) => (
-            <AuthScreen
-              onSignIn={() => navigation.replace('SignIn')}
-              onSignUp={() => navigation.replace('SignUp')}
-            />
-          )}
+          component={DemoAwareAuth}
           options={{ headerShown: false }}
         />
 <Stack.Screen
@@ -185,5 +194,6 @@ useEffect(() => {
 />
 </Stack.Navigator>
     </OnboardingProvider>
+    </DemoProvider>
   );
 }

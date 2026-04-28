@@ -1,15 +1,20 @@
 import React from 'react';
+import { View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import DiscoverScreen from '../app/(tabs)/index';
-import BookmarksScreen from '../app/(tabs)/bookmarksScreen'; // Create this file
-import MapScreen from '../app/(tabs)/mapScreen';             // Create this file
-import ProfileScreen from '../app/(tabs)/profileScreen';     // Create this file
+import BookmarksScreen from '../app/(tabs)/bookmarksScreen';
+import MapScreen from '../app/(tabs)/mapScreen';
+import ProfileScreen from '../app/(tabs)/profileScreen';
 import { Ionicons } from '@expo/vector-icons';
+import { useDemo } from '@/context/DemoContext';
+import DemoNavigator from './DemoNavigator';
 
 const Tab = createBottomTabNavigator();
 
 export default function BottomTabs() {
+  const { isDemoMode } = useDemo();
   return (
+    <View style={{ flex: 1 }}>
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
@@ -44,5 +49,7 @@ export default function BottomTabs() {
       <Tab.Screen name="Map" component={MapScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
+    {isDemoMode && <DemoNavigator />}
+    </View>
   );
 }

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator, StyleSheet } from 'react-native';
 import { styles } from '@/styles/signInScreenStyles';
 import auth from '@react-native-firebase/auth';
+import { useDemo } from '@/context/DemoContext';
 import Constants from 'expo-constants';
 import { userExists } from '@/hooks/useSaveUserProfile';
 import { getOnboardingStepData } from '@/utils/onboardingStorage';
@@ -22,11 +23,12 @@ GoogleSignin.configure({
 });
 
 export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
+  const { isDemoMode } = useDemo();
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();  
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   
   useEffect(() => {
     const subscriber = auth().onAuthStateChanged(firebaseUser => {
@@ -113,6 +115,11 @@ async function signInWithGoogle() {
       style={styles.background}
       imageStyle={styles.backgroundImage}
     >
+      {isDemoMode && (
+        <TouchableOpacity style={demoStyles.banner} onPress={() => navigation.navigate('Index')} activeOpacity={0.85}>
+          <Text style={demoStyles.bannerText}>Demo Mode — tap to skip to main app</Text>
+        </TouchableOpacity>
+      )}
       <Text style={styles.heading}>
         Ready to{'\n'}Wander?
       </Text>
@@ -172,4 +179,25 @@ async function signInWithGoogle() {
         )}
       </View>
     </ImageBackground>
-  )};
+  );
+}
+
+const demoStyles = StyleSheet.create({
+  banner: {
+    position: 'absolute',
+    top: 56,
+    left: 16,
+    right: 16,
+    backgroundColor: '#6A62B7',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    zIndex: 10,
+    alignItems: 'center',
+  },
+  bannerText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+});

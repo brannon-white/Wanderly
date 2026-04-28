@@ -1,15 +1,24 @@
 import { useEffect, useState } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useDemo } from '@/context/DemoContext';
+import { DEMO_ITINERARIES } from '@/data/demoData';
 
 const CACHE_DURATION = 1000 * 60 * 60 * 24 * 5; // 5 days in ms
 
 export function useMatchingItineraries(uid: string) {
+  const { isDemoMode } = useDemo();
   const [itineraries, setItineraries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (isDemoMode) {
+      setItineraries(DEMO_ITINERARIES);
+      setLoading(false);
+      return;
+    }
+
     async function fetchItineraries() {
       try {
         setLoading(true);
@@ -64,7 +73,7 @@ export function useMatchingItineraries(uid: string) {
     }
 
     if (uid) fetchItineraries();
-  }, [uid]);
+  }, [uid, isDemoMode]);
 
   return { prebuiltItineraries: itineraries, loading, error };
 }

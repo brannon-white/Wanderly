@@ -4,18 +4,20 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import { styles } from '@/styles/discoverScreenStyles';
 import { useFeaturedItinerary } from '@/hooks/userFeaturedItinerary';
 import { useMatchingItineraries } from '@/hooks/useMatchingItineraries';
-import auth from '@react-native-firebase/auth'; // Add this import
+import auth from '@react-native-firebase/auth';
 import FeaturedTripCard from '@/components/FeaturedTripCard';
 import RecommendedTripCard from '@/components/RecommendedTripCard';
 import DestinationCard from '@/components/DestinationCard';
-import { useDestinations } from '@/hooks/useDestinations'; // <-- import the hook
+import { useDestinations } from '@/hooks/useDestinations';
+import { useDemo } from '@/context/DemoContext';
+import { DEMO_UID } from '@/data/demoData';
 
 export default function DiscoverScreen() {
+  const { isDemoMode } = useDemo();
   const { featuredTrip, itinerary, loading, error } = useFeaturedItinerary();
-  const { destinations, loading: loadingDest, error: errorDest } = useDestinations(); // <-- use the hook
+  const { destinations, loading: loadingDest, error: errorDest } = useDestinations();
 
-  // Get the current user's uid
-  const uid = auth().currentUser?.uid ?? '';
+  const uid = isDemoMode ? DEMO_UID : (auth().currentUser?.uid ?? '');
   const { prebuiltItineraries, loading: loadingItins, error: errorItins } = useMatchingItineraries(uid);
   return (
     <SafeAreaView style={styles.safe}>

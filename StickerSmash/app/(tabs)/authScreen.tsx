@@ -1,10 +1,18 @@
-import { View, Text, TouchableOpacity, ImageBackground } from 'react-native';
+import { View, Text, TouchableOpacity, ImageBackground, StyleSheet } from 'react-native';
 import { styles } from '@/styles/authScreenStyles';
 
-export default function AuthScreen({ onSignIn, onSignUp }: { onSignIn?: () => void; onSignUp?: () => void }) {
+export default function AuthScreen({
+  onSignIn,
+  onSignUp,
+  onDemo,
+}: {
+  onSignIn?: () => void;
+  onSignUp?: () => void;
+  onDemo?: () => void;
+}) {
   return (
     <ImageBackground
-      source={require('@/assets/images/OnboardingPurpleBinoculars.png')} // Replace with your background image path
+      source={require('@/assets/images/OnboardingPurpleBinoculars.png')}
       style={styles.background}
       imageStyle={styles.backgroundImage}
     >
@@ -17,6 +25,23 @@ export default function AuthScreen({ onSignIn, onSignUp }: { onSignIn?: () => vo
       <TouchableOpacity style={styles.signInButton} onPress={onSignIn} activeOpacity={0.85}>
         <Text style={styles.signInText}>Sign In</Text>
       </TouchableOpacity>
+      <TouchableOpacity style={demoStyles.demoButton} onPress={onDemo} activeOpacity={0.75}>
+        <Text style={demoStyles.demoText}>Try Demo</Text>
+      </TouchableOpacity>
     </ImageBackground>
   );
 }
+
+const demoStyles = StyleSheet.create({
+  demoButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 32,
+  },
+  demoText: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 15,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+});

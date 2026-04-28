@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator, StyleSheet } from 'react-native';
 import { GoogleSignin, GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import auth from '@react-native-firebase/auth';
 import { styles } from '@/styles/signUpStyles';
+import { useDemo } from '@/context/DemoContext';
 import { userExists } from '@/hooks/useSaveUserProfile';
 import { getOnboardingStepData } from '@/utils/onboardingStorage';
 import { useNavigation } from '@react-navigation/native';
@@ -10,11 +11,12 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '@/app/_layout'; // adjust path if nee
 import { useOnboarding } from '@/context/OnboardingContext';
 export default function SignUpScreen({ onSignUp }: { onSignUp?: () => void }) {
+  const { isDemoMode } = useDemo();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();  
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
 
 async function signUpWithEmail() {
   if (password !== confirmPassword) {
@@ -93,6 +95,11 @@ if (exists) {
       style={styles.background}
       imageStyle={styles.backgroundImage}
     >
+      {isDemoMode && (
+        <TouchableOpacity style={demoStyles.banner} onPress={() => navigation.navigate('Index')} activeOpacity={0.85}>
+          <Text style={demoStyles.bannerText}>Demo Mode — tap to skip to main app</Text>
+        </TouchableOpacity>
+      )}
       <View style={styles.topHeadingWrapper}>
         <Text style={styles.heading}>Ready to{'\n'}Wander?</Text>
       </View>
@@ -161,3 +168,23 @@ if (exists) {
     </ImageBackground>
   );
 }
+
+const demoStyles = StyleSheet.create({
+  banner: {
+    position: 'absolute',
+    top: 56,
+    left: 16,
+    right: 16,
+    backgroundColor: '#6A62B7',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    zIndex: 10,
+    alignItems: 'center',
+  },
+  bannerText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+});

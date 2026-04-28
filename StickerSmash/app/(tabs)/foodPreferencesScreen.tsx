@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
 import { styles } from '@/styles/travelPreferencesStyles';
-import firestore from '@react-native-firebase/firestore';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -9,8 +8,11 @@ import type { RootStackParamList } from '@/app/_layout';
 import { saveOnboardingStep, getOnboardingStepData } from '@/utils/onboardingStorage';
 import { Ionicons } from '@expo/vector-icons';
 import { getStaticFoodPreferences } from '@/utils/getStaticFoodPreferences';
+import { useDemo } from '@/context/DemoContext';
+import { DEMO_FOOD_PREFERENCES } from '@/data/demoData';
 
 export default function FoodPreferencesScreen() {
+  const { isDemoMode } = useDemo();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [foods, setFoods] = useState<{ label: string; emoji: string }[]>([]);
@@ -19,6 +21,12 @@ export default function FoodPreferencesScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
 
   useEffect(() => {
+    if (isDemoMode) {
+      setFoods(DEMO_FOOD_PREFERENCES);
+      setLoading(false);
+      return;
+    }
+
 const fetchFoods = async () => {
   setLoading(true);
   try {
@@ -38,7 +46,7 @@ fetchFoods();
       if (saved && Array.isArray(saved)) setSelected(saved);
     }
     loadSaved();
-  }, []);
+  }, [isDemoMode]);
 
   const filtered = foods.filter(p =>
     p.label.toLowerCase().includes(search.toLowerCase())

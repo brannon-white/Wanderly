@@ -4,10 +4,7 @@ import CountryPicker from 'react-native-country-picker-modal';
 import { styles } from '@/styles/userInfoSignUpStyles';
 import { useOnboarding } from '@/context/OnboardingContext';
 import * as ImagePicker from 'expo-image-picker';
-import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
-import storage from '@react-native-firebase/storage';
-import * as FileSystem from 'expo-file-system';
 import { getOnboardingStepData, clearOnboardingProgress } from '@/utils/onboardingStorage';
 import { saveUserProfile } from '@/hooks/useSaveUserProfile';
 import { useNavigation } from '@react-navigation/native';
@@ -15,9 +12,11 @@ import type { RootStackParamList } from '@/app/_layout';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useDemo } from '@/context/DemoContext';
 
 
 export default function UserInfoSignUp() {
+  const { isDemoMode } = useDemo();
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
@@ -142,11 +141,14 @@ const pickImage = async () => {
   <TouchableOpacity
     style={styles.continueButton}
 onPress={async () => {
-  // Get cached onboarding data
+  if (isDemoMode) {
+    navigation.navigate('OnboardingComplete');
+    return;
+  }
+
   const activityPreferences = await getOnboardingStepData('travel');
   const foodPreferences = await getOnboardingStepData('food');
 
-  // Build the profile object
   const profile = {
     avatarBase64,
     fullName,
@@ -156,19 +158,14 @@ onPress={async () => {
     foodPreferences: foodPreferences || [],
   };
 
-  // Save everything to the DB
   await saveUserProfile(profile);
 
-  // Cache the profile locally
   const uid = auth().currentUser?.uid;
   if (uid) {
     await AsyncStorage.setItem(`userProfile_${uid}`, JSON.stringify(profile));
   }
 
-  // Clear local onboarding cache
   await clearOnboardingProgress();
-
-  // Navigate to main app
   navigation.navigate('OnboardingComplete');
 }}
   >
