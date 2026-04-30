@@ -20,6 +20,7 @@ import OnboardingCompleteScreen from './(tabs)/onboardingCompleteScreen';
 import BottomTabs from '../components/BottomTabs';
 import { getUserProfile } from '@/utils/getUserProfile';
 import ItineraryScreen from '@/components/ItineraryScreen';
+import DestinationDetailScreen from '@/components/DestinationDetailScreen';
 export type RootStackParamList = {
   OnboardingFirst: undefined;
   OnboardingSecond: undefined;
@@ -33,6 +34,7 @@ export type RootStackParamList = {
   UserInfoSignUp: undefined;
   OnboardingComplete: undefined; // Add this line
   ItineraryScreen: { id: string };
+  DestinationDetail: { id: string };
 
   // Add other screens as needed
 };
@@ -190,6 +192,11 @@ useEffect(() => {
 <Stack.Screen
   name="ItineraryScreen"
   component={ItineraryScreen}
+  options={{ headerShown: false }}
+/>
+<Stack.Screen
+  name="DestinationDetail"
+  component={DestinationDetailScreen}
   options={{ headerShown: false }}
 />
 </Stack.Navigator>

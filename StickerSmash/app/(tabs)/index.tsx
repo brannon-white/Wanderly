@@ -101,6 +101,7 @@ export default function DiscoverScreen() {
     destinations.map((dest: any) => (
       <DestinationCard
         key={dest.id}
+        id={dest.id}
         title={dest.name}
         imageUrl={dest.imageUrl}
       />

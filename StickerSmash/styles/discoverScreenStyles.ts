@@ -1,4 +1,3 @@
-import DestinationCard from '@/components/DestinationCard';
 import { StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
