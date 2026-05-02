@@ -13,6 +13,7 @@ import FoodPreferencesScreen from './(tabs)/foodPreferencesScreen';
 import UserInfoSignUp from './(tabs)/userInfoSignUp';
 import { OnboardingProvider } from '@/context/OnboardingContext';
 import { DemoProvider, useDemo } from '@/context/DemoContext';
+import { SavedProvider } from '@/context/SavedContext';
 import { useFonts } from 'expo-font';
 import { getOnboardingProgress } from '@/utils/onboardingStorage';
 import { userExists } from '@/hooks/useSaveUserProfile';
@@ -58,7 +59,7 @@ function DemoAwareAuth({ navigation }: any) {
 
 export default function RootLayout() {
 const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
-  const [fontsLoaded] = useFonts({
+  useFonts({
     'SourceSans3-Regular': require('@/assets/fonts/Source_Sans_3/static/SourceSans3-Regular.ttf'),
     'Merriweather_36pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_36pt-Bold.ttf'),
     'Merriweather_24pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_24pt-Bold.ttf'),
@@ -66,13 +67,20 @@ const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null
 
 useEffect(() => {
   async function checkFlags() {
+    // In development, skip auth and onboarding entirely — always open in demo mode.
+    if (__DEV__) {
+      setInitialRoute('Index');
+      return;
+    }
+
     const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
-    const firebaseUser = auth().currentUser;
 
     if (hasSeenOnboarding !== 'true') {
       setInitialRoute('OnboardingFirst');
       return;
     }
+
+    const firebaseUser = auth().currentUser;
 
     if (!firebaseUser) {
       setInitialRoute('Auth');
@@ -114,6 +122,7 @@ useEffect(() => {
 
   return (
     <DemoProvider>
+    <SavedProvider>
     <OnboardingProvider>
       <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
         <Stack.Screen
@@ -145,7 +154,7 @@ useEffect(() => {
         />
 <Stack.Screen
   name="SignIn"
-  children={({ navigation }) => (
+  children={() => (
     <SignInScreen
       onSignIn={async () => {
       }}
@@ -160,11 +169,9 @@ useEffect(() => {
 />
 <Stack.Screen
   name="SignUp"
-  children={({ navigation }) => (
+  children={() => (
     <SignUpscreen
-      onSignUp={() => {
-        // Do nothing here, let SignUpScreen handle navigation!
-      }}
+      onSignUp={() => {}}
     />
   )}
   options={{ headerShown: false }}
@@ -201,6 +208,7 @@ useEffect(() => {
 />
 </Stack.Navigator>
     </OnboardingProvider>
+    </SavedProvider>
     </DemoProvider>
   );
 }

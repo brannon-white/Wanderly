@@ -13,7 +13,9 @@ const DemoContext = createContext<DemoContextType>({
 });
 
 export const DemoProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isDemoMode, setIsDemoMode] = useState(false);
+  // Always start in demo mode during development so reloads and fresh installs
+  // don't drop you back to the auth screen.
+  const [isDemoMode, setIsDemoMode] = useState(__DEV__);
 
   return (
     <DemoContext.Provider

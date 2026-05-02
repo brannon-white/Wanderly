@@ -1,6 +1,6 @@
 import React from 'react';
-import { SafeAreaView, View, Text, TextInput, Image, TouchableOpacity, ScrollView } from 'react-native';
-import { Ionicons, Feather } from '@expo/vector-icons';
+import { SafeAreaView, View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { styles } from '@/styles/discoverScreenStyles';
 import { useFeaturedItinerary } from '@/hooks/userFeaturedItinerary';
 import { useMatchingItineraries } from '@/hooks/useMatchingItineraries';
@@ -23,16 +23,7 @@ export default function DiscoverScreen() {
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity>
-          <Feather name="menu" size={28} color="#222" />
-        </TouchableOpacity>
         <Text style={styles.title}>Discover</Text>
-        <TouchableOpacity>
-          <Image
-            source={require('@/assets/images/OnboardingParrot.png')}
-            style={styles.avatar}
-          />
-        </TouchableOpacity>
       </View>
 
       {/* Search */}
@@ -104,6 +95,8 @@ export default function DiscoverScreen() {
         id={dest.id}
         title={dest.name}
         imageUrl={dest.imageUrl}
+        country={dest.country}
+        flag={dest.flag}
       />
     ))
   ) : (

@@ -1,19 +1,30 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image } from 'react-native';
+import { Image, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
+import { useSaved } from '@/context/SavedContext';
 import { styles } from '@/styles/discoverScreenStyles';
 
 type DestinationCardProps = {
   id: string;
   title: string;
   imageUrl: string;
+  country?: string;
+  flag?: string;
 };
 
-export default function DestinationCard({ id, title, imageUrl }: DestinationCardProps) {
+export default function DestinationCard({
+  id,
+  title,
+  imageUrl,
+  country,
+  flag,
+}: DestinationCardProps) {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+  const { isSaved, toggleSaved } = useSaved();
+  const saved = isSaved(id);
 
   return (
     <TouchableOpacity
@@ -33,8 +44,25 @@ export default function DestinationCard({ id, title, imageUrl }: DestinationCard
           <Text style={styles.ratingText}>4.5</Text>
         </View>
       </View>
-      <TouchableOpacity style={styles.heartIconSmall}>
-        <Ionicons name="heart" size={16} color="#fff" />
+      <TouchableOpacity
+        style={styles.heartIconSmall}
+        onPress={event => {
+          event.stopPropagation();
+          toggleSaved({
+            id,
+            type: 'destination',
+            title,
+            imageUrl,
+            country,
+            flag,
+          });
+        }}
+      >
+        <Ionicons
+          name={saved ? 'heart' : 'heart-outline'}
+          size={16}
+          color={saved ? '#FF4B6E' : '#fff'}
+        />
       </TouchableOpacity>
     </TouchableOpacity>
   );
