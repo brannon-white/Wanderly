@@ -1,188 +1,285 @@
 import { StyleSheet } from 'react-native';
 
+const PURPLE = '#6A62B7';
+
+export const ICON_COLOR = '#6A62B7';
+export const ICON_COLOR_DIMMED = '#ccc';
+
+export const makeScrollContentStyle = (bottomInset: number) => ({
+  paddingBottom: bottomInset + 24,
+});
+
 export const styles = StyleSheet.create({
-  itineraryContainer: {
-    maxWidth: 375,
-    backgroundColor: 'white',
-    fontFamily: 'System',
+  screen: {
+    flex: 1,
+    backgroundColor: '#fff',
   },
-  
+
+  itineraryContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+
+  // ── Hero ──────────────────────────────────────────────────────────────
   heroSection: {
+    height: 280,
     position: 'relative',
-    height: 300,
     overflow: 'hidden',
   },
-  
+
   heroImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
-  
-  heroOverlay: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    color: 'white',
+
+  heroGradient: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.38)',
   },
-  
+
+  headerRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+  },
+
+  headerIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  heroTextContainer: {
+    position: 'absolute',
+    bottom: 22,
+    left: 20,
+    right: 20,
+  },
+
   heroTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
-    marginBottom: 8,
-    color: 'white',
-    textShadowColor: 'rgba(0,0,0,0.5)',
+    color: '#fff',
+    fontFamily: 'Merriweather_36pt-Bold',
+    marginBottom: 6,
+    textShadowColor: 'rgba(0,0,0,0.55)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
-  
+
   heroSubtitle: {
-    fontSize: 14,
-    color: 'white',
-    opacity: 0.9,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.9)',
+    fontFamily: 'SourceSans3-Regular',
   },
-  
+
+  // ── Map ───────────────────────────────────────────────────────────────
   mapSection: {
-    padding: 20,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
-  
+
   mapContainer: {
     width: '100%',
-    height: 200,
-    borderRadius: 12,
+    height: 170,
+    borderRadius: 16,
     overflow: 'hidden',
+    backgroundColor: '#ede7fa',
   },
-  
+
   mapImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
-  
+
+  // ── Date tabs ─────────────────────────────────────────────────────────
   dateSelector: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingVertical: 10,
+  },
+
+  dateSelectorContent: {
+    paddingHorizontal: 16,
     gap: 8,
   },
-  
+
   dateBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
     borderRadius: 20,
     backgroundColor: '#f0f0f0',
-    alignItems: 'center',
   },
-  
+
   dateBtnActive: {
-    backgroundColor: '#00c896',
+    backgroundColor: PURPLE,
   },
-  
+
   dateBtnText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
-    color: '#333',
+    color: '#555',
+    fontFamily: 'SourceSans3-Regular',
   },
-  
+
   dateBtnTextActive: {
-    color: 'white',
+    color: '#fff',
+    fontWeight: '600',
   },
-  
+
+  // ── Activity cards ────────────────────────────────────────────────────
   itineraryItems: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingTop: 8,
   },
-  
+
   itineraryItem: {
-    marginBottom: 24,
-    borderRadius: 12,
+    marginBottom: 20,
+    borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: 'white',
+    backgroundColor: '#fff',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.09,
     shadowRadius: 8,
     elevation: 3,
   },
-  
+
   itemImage: {
     width: '100%',
-    height: 200,
+    height: 190,
     resizeMode: 'cover',
   },
-  
+
   itemDetails: {
-    padding: 16,
+    padding: 14,
   },
-  
+
   itemTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#222',
+    fontFamily: 'Merriweather_36pt-Bold',
     marginBottom: 8,
-    color: '#333',
   },
-  
+
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+
+  ratingText: {
+    fontSize: 13,
+    color: '#666',
+    fontFamily: 'SourceSans3-Regular',
+  },
+
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+
+  infoIconEl: {
+    marginRight: 8,
+  },
+
+  infoText: {
+    fontSize: 14,
+    color: '#333',
+    fontFamily: 'SourceSans3-Regular',
+  },
+
+  mapsLink: {
+    fontSize: 14,
+    color: PURPLE,
+    fontFamily: 'SourceSans3-Regular',
+  },
+
+  // ── Transport row ─────────────────────────────────────────────────────
+  transportOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+
+  transportOption: {
+    alignItems: 'center',
+    gap: 4,
+  },
+
+  transportTime: {
+    fontSize: 11,
+    color: '#555',
+    fontFamily: 'SourceSans3-Regular',
+  },
+
+  transportTimeDimmed: {
+    color: '#ccc',
+  },
+
+  starRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  starIcon: {
+    marginRight: 1,
+  },
+
+  headerRightIcons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+
+  fab: {
+    position: 'absolute',
+    right: 20,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#6A62B7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+
+  // ── Legacy keys kept so other files don't break ───────────────────────
+  heroOverlay: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+  },
+
   rating: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
   },
-  
+
   stars: {
     fontSize: 14,
-    marginRight: 8,
+    marginRight: 4,
   },
-  
-  ratingText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  
+
   infoIcon: {
     marginRight: 8,
     fontSize: 16,
-  },
-  
-  infoText: {
-    fontSize: 14,
-    color: '#333',
-  },
-  
-  mapsLink: {
-    fontSize: 14,
-    color: '#00c896',
-  },
-  
-  transportOptions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  
-  transportOption: {
-    alignItems: 'center',
-  },
-  
-  transportIcon: {
-    fontSize: 16,
-    marginBottom: 4,
-  },
-  
-  transportTime: {
-    fontSize: 12,
-    color: '#666',
   },
 });
