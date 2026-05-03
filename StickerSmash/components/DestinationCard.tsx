@@ -3,6 +3,11 @@ import { View, Text, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from '@/styles/discoverScreenStyles';
 import { useSaved } from '@/context/SavedContext';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import type { RootStackParamList } from '@/app/_layout';
+
+type NavProp = StackNavigationProp<RootStackParamList, 'DestinationScreen'>;
 
 interface Props {
   id: string;
@@ -14,10 +19,15 @@ interface Props {
 
 export default function DestinationCard({ id, title, imageUrl, country, flag }: Props) {
   const { isSaved, toggleSaved } = useSaved();
+  const navigation = useNavigation<NavProp>();
   const saved = isSaved(id);
 
   return (
-    <View style={styles.destinationCard}>
+    <TouchableOpacity
+      style={styles.destinationCard}
+      onPress={() => navigation.navigate('DestinationScreen', { id })}
+      activeOpacity={0.9}
+    >
       <Image source={{ uri: imageUrl }} style={styles.recommendedTripImage} resizeMode="cover" />
       <View style={styles.destinationCardContent}>
         <Text style={styles.recommendedCardTitle}>{title}</Text>
@@ -39,6 +49,6 @@ export default function DestinationCard({ id, title, imageUrl, country, flag }: 
       >
         <Ionicons name={saved ? 'heart' : 'heart-outline'} size={16} color={saved ? '#FF4B6E' : '#fff'} />
       </TouchableOpacity>
-    </View>
+    </TouchableOpacity>
   );
 }

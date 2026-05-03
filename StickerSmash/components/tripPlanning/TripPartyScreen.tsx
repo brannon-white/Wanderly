@@ -1,0 +1,79 @@
+import React from 'react';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import type { RootStackParamList } from '@/app/_layout';
+import { shared, PRIMARY } from '@/styles/tripPlanningStyles';
+import { useTripPlanning } from '@/context/TripPlanningContext';
+
+type NavProp = StackNavigationProp<RootStackParamList>;
+
+const PARTY_OPTIONS = [
+  { id: 'Only Me', emoji: '🚶', description: 'Traveling solo, just you.' },
+  { id: 'A Couple', emoji: '❤️', description: 'A romantic getaway for two.' },
+  { id: 'Family', emoji: '👨‍👩‍👧‍👦', description: 'Quality time with your loved ones.' },
+  { id: 'Friends', emoji: '⭐', description: 'Adventure with your closest pals.' },
+  { id: 'Work', emoji: '💼', description: 'Business or corporate travel.' },
+];
+
+export default function TripPartyScreen() {
+  const navigation = useNavigation<NavProp>();
+  const insets = useSafeAreaInsets();
+  const { party, setParty } = useTripPlanning();
+
+  return (
+    <View style={shared.container}>
+      {/* Top bar */}
+      <View style={[shared.topBar, { paddingTop: insets.top + 12 }]}>
+        <TouchableOpacity style={shared.backBtn} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={20} color="#222" />
+        </TouchableOpacity>
+        <View style={shared.progressBarTrack}>
+          <View style={[shared.progressBarFill, { width: '20%' }]} />
+        </View>
+      </View>
+
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={shared.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={shared.heading}>Who is going? 🧳</Text>
+        <Text style={shared.subheading}>
+          Let's get started by selecting who you're traveling with.
+        </Text>
+
+        {PARTY_OPTIONS.map((option) => {
+          const selected = party === option.id;
+          return (
+            <TouchableOpacity
+              key={option.id}
+              style={[shared.optionCard, selected && shared.optionCardSelected]}
+              onPress={() => setParty(option.id)}
+              activeOpacity={0.7}
+            >
+              <Text style={[shared.optionTitle, selected && shared.optionTitleSelected]}>
+                {option.id} {option.emoji}
+              </Text>
+              <Text style={shared.optionSubtitle}>{option.description}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      {/* Bottom CTA */}
+      <View style={[shared.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
+        <TouchableOpacity
+          style={[shared.continueBtn, !party && shared.continueBtnDisabled]}
+          disabled={!party}
+          onPress={() => navigation.navigate('TripDates')}
+          activeOpacity={0.85}
+        >
+          <Text style={shared.continueBtnText}>Continue</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}

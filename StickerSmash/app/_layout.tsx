@@ -14,6 +14,7 @@ import UserInfoSignUp from './(tabs)/userInfoSignUp';
 import { OnboardingProvider } from '@/context/OnboardingContext';
 import { DemoProvider, useDemo } from '@/context/DemoContext';
 import { SavedProvider } from '@/context/SavedContext';
+import { TripPlanningProvider } from '@/context/TripPlanningContext';
 import { useFonts } from 'expo-font';
 import { getOnboardingProgress } from '@/utils/onboardingStorage';
 import { userExists } from '@/hooks/useSaveUserProfile';
@@ -21,6 +22,13 @@ import OnboardingCompleteScreen from './(tabs)/onboardingCompleteScreen';
 import BottomTabs from '../components/BottomTabs';
 import { getUserProfile } from '@/utils/getUserProfile';
 import ItineraryScreen from '@/components/ItineraryScreen';
+import DestinationScreen from '@/components/DestinationScreen';
+import TripPartyScreen from '@/components/tripPlanning/TripPartyScreen';
+import TripDatesScreen from '@/components/tripPlanning/TripDatesScreen';
+import TripInterestsScreen from '@/components/tripPlanning/TripInterestsScreen';
+import TripBudgetScreen from '@/components/tripPlanning/TripBudgetScreen';
+import TripReviewScreen from '@/components/tripPlanning/TripReviewScreen';
+
 export type RootStackParamList = {
   OnboardingFirst: undefined;
   OnboardingSecond: undefined;
@@ -32,10 +40,14 @@ export type RootStackParamList = {
   TravelPreferences: undefined;
   FoodPreferences: undefined;
   UserInfoSignUp: undefined;
-  OnboardingComplete: undefined; // Add this line
+  OnboardingComplete: undefined;
   ItineraryScreen: { id: string };
-
-  // Add other screens as needed
+  DestinationScreen: { id: string };
+  TripParty: undefined;
+  TripDates: undefined;
+  TripInterests: undefined;
+  TripBudget: undefined;
+  TripReview: undefined;
 };
 
 
@@ -121,6 +133,7 @@ useEffect(() => {
   return (
     <DemoProvider>
     <SavedProvider>
+    <TripPlanningProvider>
     <OnboardingProvider>
       <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
         <Stack.Screen
@@ -199,8 +212,39 @@ useEffect(() => {
   component={ItineraryScreen}
   options={{ headerShown: false }}
 />
+<Stack.Screen
+  name="DestinationScreen"
+  component={DestinationScreen}
+  options={{ headerShown: false }}
+/>
+<Stack.Screen
+  name="TripParty"
+  component={TripPartyScreen}
+  options={{ headerShown: false }}
+/>
+<Stack.Screen
+  name="TripDates"
+  component={TripDatesScreen}
+  options={{ headerShown: false }}
+/>
+<Stack.Screen
+  name="TripInterests"
+  component={TripInterestsScreen}
+  options={{ headerShown: false }}
+/>
+<Stack.Screen
+  name="TripBudget"
+  component={TripBudgetScreen}
+  options={{ headerShown: false }}
+/>
+<Stack.Screen
+  name="TripReview"
+  component={TripReviewScreen}
+  options={{ headerShown: false }}
+/>
 </Stack.Navigator>
     </OnboardingProvider>
+    </TripPlanningProvider>
     </SavedProvider>
     </DemoProvider>
   );
