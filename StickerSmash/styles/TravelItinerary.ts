@@ -5,8 +5,8 @@ const PURPLE = '#6A62B7';
 export const ICON_COLOR = '#6A62B7';
 export const ICON_COLOR_DIMMED = '#ccc';
 
-export const makeScrollContentStyle = (bottomInset: number) => ({
-  paddingBottom: bottomInset + 24,
+export const makeScrollContentStyle = (bottomInset: number, hasCta = false) => ({
+  paddingBottom: bottomInset + (hasCta ? 110 : 24),
 });
 
 export const styles = StyleSheet.create({
@@ -258,6 +258,30 @@ export const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 6,
+  },
+
+  // ── Plan This Trip CTA bar ────────────────────────────────────────────
+  ctaBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  ctaBtn: {
+    backgroundColor: PURPLE,
+    borderRadius: 32,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  ctaBtnText: {
+    color: '#fff',
+    fontSize: 17,
+    fontFamily: 'Merriweather_24pt-Bold',
   },
 
   // ── Legacy keys kept so other files don't break ───────────────────────
