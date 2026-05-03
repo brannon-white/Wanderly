@@ -17,6 +17,7 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
 import { PRIMARY, PRIMARY_LIGHT, BORDER_COLOR, TEXT_DARK, TEXT_GRAY } from '@/styles/tripPlanningStyles';
 import { useTripPlanning } from '@/context/TripPlanningContext';
+import { useMyTrips } from '@/context/MyTripsContext';
 import { DEMO_DESTINATIONS } from '@/data/demoData';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
@@ -52,6 +53,7 @@ export default function TripReviewScreen() {
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const spinAnim = useRef(new Animated.Value(0)).current;
+  const { addTrip } = useMyTrips();
 
   const destination = DEMO_DESTINATIONS.find(d => d.id === destinationId) ?? DEMO_DESTINATIONS[0];
 
@@ -70,8 +72,18 @@ export default function TripReviewScreen() {
         clearInterval(interval);
         setTimeout(() => {
           setGenerating(false);
+          addTrip({
+            id: `committed-${Date.now()}`,
+            templateId: 'demo-itin-1',
+            title: destination.name + ', ' + destination.country,
+            heroImage: destination.imageUrl,
+            party,
+            startDate: startDate!.toISOString(),
+            endDate: endDate!.toISOString(),
+            origin: 'generated',
+          });
           reset();
-          navigation.navigate('ItineraryScreen', { id: 'demo-itin-1' });
+          navigation.navigate('ItineraryScreen', { id: 'demo-itin-1', source: 'mytrips' });
         }, 400);
       }
       setProgress(Math.floor(pct));

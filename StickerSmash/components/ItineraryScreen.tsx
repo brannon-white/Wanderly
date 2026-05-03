@@ -17,8 +17,9 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
 import { styles, ICON_COLOR, ICON_COLOR_DIMMED, makeScrollContentStyle } from '../styles/TravelItinerary';
 import { DEMO_FULL_ITINERARIES, DemoActivity } from '@/data/demoData';
+import { useTripPlanning } from '@/context/TripPlanningContext';
 
-type NavProp = StackNavigationProp<RootStackParamList, 'ItineraryScreen'>;
+type NavProp = StackNavigationProp<RootStackParamList>;
 type RoutePropType = RouteProp<RootStackParamList, 'ItineraryScreen'>;
 
 const TRANSPORT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -101,13 +102,24 @@ export default function ItineraryScreen() {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RoutePropType>();
   const insets = useSafeAreaInsets();
+  const { reset, setFlow, setTemplateId, setTemplateTitle, setTemplateHeroImage } = useTripPlanning();
 
-  const { id } = route.params;
+  const { id, source } = route.params;
+  const isBrowsing = source !== 'mytrips';
   const itinerary =
     DEMO_FULL_ITINERARIES.find((it) => it.id === id) ?? DEMO_FULL_ITINERARIES[0];
 
   const [selectedDay, setSelectedDay] = useState(0);
   const activities = itinerary.days[selectedDay]?.activities ?? [];
+
+  const handlePlanThisTrip = () => {
+    reset();
+    setFlow('prebuilt');
+    setTemplateId(itinerary.id);
+    setTemplateTitle(itinerary.title);
+    setTemplateHeroImage(itinerary.heroImage);
+    navigation.navigate('TripDates');
+  };
 
   const mapRegion = useMemo(() => {
     const coords = activities.map((a) => a.coordinates);
@@ -133,7 +145,7 @@ export default function ItineraryScreen() {
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
       <ScrollView
         style={styles.itineraryContainer}
-        contentContainerStyle={makeScrollContentStyle(insets.bottom)}
+        contentContainerStyle={makeScrollContentStyle(insets.bottom, isBrowsing)}
         showsVerticalScrollIndicator={false}
       >
         {/* Hero */}
@@ -210,10 +222,21 @@ export default function ItineraryScreen() {
         </View>
       </ScrollView>
 
-      {/* Edit FAB */}
-      <TouchableOpacity style={[styles.fab, { bottom: insets.bottom + 24 }]}>
-        <Ionicons name="pencil" size={22} color="#fff" />
-      </TouchableOpacity>
+      {/* Edit FAB — only when viewing a committed trip */}
+      {!isBrowsing && (
+        <TouchableOpacity style={[styles.fab, { bottom: insets.bottom + 24 }]}>
+          <Ionicons name="pencil" size={22} color="#fff" />
+        </TouchableOpacity>
+      )}
+
+      {/* Plan This Trip CTA — only when browsing */}
+      {isBrowsing && (
+        <View style={[styles.ctaBar, { paddingBottom: insets.bottom + 16 }]}>
+          <TouchableOpacity style={styles.ctaBtn} onPress={handlePlanThisTrip} activeOpacity={0.85}>
+            <Text style={styles.ctaBtnText}>Plan This Trip</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }

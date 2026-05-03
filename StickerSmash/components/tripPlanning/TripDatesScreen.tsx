@@ -13,6 +13,7 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
 import { shared, PRIMARY, PRIMARY_LIGHT, BORDER_COLOR, TEXT_DARK, TEXT_GRAY } from '@/styles/tripPlanningStyles';
 import { useTripPlanning } from '@/context/TripPlanningContext';
+import { useMyTrips } from '@/context/MyTripsContext';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 
@@ -123,7 +124,8 @@ function MonthGrid({ year, month, startDate, endDate, onSelect }: MonthGridProps
 export default function TripDatesScreen() {
   const navigation = useNavigation<NavProp>();
   const insets = useSafeAreaInsets();
-  const { startDate, endDate, setStartDate, setEndDate } = useTripPlanning();
+  const { flow, startDate, endDate, setStartDate, setEndDate } = useTripPlanning();
+  const progressWidth = flow === 'prebuilt' ? '50%' : '40%';
 
   const months = useMemo(() => {
     const now = new Date();
@@ -159,7 +161,7 @@ export default function TripDatesScreen() {
           <Ionicons name="arrow-back" size={20} color="#222" />
         </TouchableOpacity>
         <View style={shared.progressBarTrack}>
-          <View style={[shared.progressBarFill, { width: '40%' }]} />
+          <View style={[shared.progressBarFill, { width: progressWidth }]} />
         </View>
       </View>
 
@@ -211,7 +213,7 @@ export default function TripDatesScreen() {
         <TouchableOpacity
           style={[shared.continueBtn, !canContinue && shared.continueBtnDisabled]}
           disabled={!canContinue}
-          onPress={() => navigation.navigate('TripInterests')}
+          onPress={() => navigation.navigate(flow === 'prebuilt' ? 'TripParty' : 'TripInterests')}
           activeOpacity={0.85}
         >
           <Text style={shared.continueBtnText}>Continue</Text>

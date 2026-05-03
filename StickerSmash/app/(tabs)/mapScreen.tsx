@@ -8,38 +8,44 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import type { RootStackParamList } from '@/app/_layout';
 import { styles } from '@/styles/myTripsStyles';
-import { DEMO_FULL_ITINERARIES, DemoFullItinerary } from '@/data/demoData';
-import { useDemo } from '@/context/DemoContext';
+import { useMyTrips, CommittedTrip, isTripActive, formatTripSubtitle } from '@/context/MyTripsContext';
 
+type NavProp = StackNavigationProp<RootStackParamList>;
 type Tab = 'Active' | 'Passed';
 
-function TripCard({ trip }: { trip: DemoFullItinerary }) {
+function TripCard({ trip }: { trip: CommittedTrip }) {
+  const navigation = useNavigation<NavProp>();
   return (
-    <View style={styles.card}>
+    <TouchableOpacity
+      style={styles.card}
+      activeOpacity={0.85}
+      onPress={() => navigation.navigate('ItineraryScreen', { id: trip.templateId, source: 'mytrips' })}
+    >
       <Image source={{ uri: trip.heroImage }} style={styles.cardImage} />
       <View style={styles.cardContent}>
         <View style={styles.cardMeta}>
-          <Text style={styles.cardTitle} numberOfLines={1}>
-            {trip.title}
-          </Text>
+          <Text style={styles.cardTitle} numberOfLines={1}>{trip.title}</Text>
           <TouchableOpacity style={styles.menuBtn}>
             <Ionicons name="ellipsis-vertical" size={20} color="#555" />
           </TouchableOpacity>
         </View>
-        <Text style={styles.cardSubtitle}>{trip.subtitle}</Text>
+        <Text style={styles.cardSubtitle}>{formatTripSubtitle(trip)}</Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
 export default function MyTripsScreen() {
   const [activeTab, setActiveTab] = useState<Tab>('Active');
-  const { isDemoMode } = useDemo();
+  const { trips } = useMyTrips();
 
-  const trips = isDemoMode
-    ? DEMO_FULL_ITINERARIES.filter((t) => (activeTab === 'Active' ? t.isActive !== false : t.isActive === false))
-    : [];
+  const filtered = trips.filter(t =>
+    activeTab === 'Active' ? isTripActive(t) : !isTripActive(t)
+  );
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -51,18 +57,15 @@ export default function MyTripsScreen() {
         </TouchableOpacity>
       </View>
 
-      {trips.length === 0 && !isDemoMode ? (
+      {trips.length === 0 ? (
         <View style={styles.emptyState}>
           <View style={styles.emptyIconCircle}>
             <Ionicons name="location-outline" size={40} color="#bdbdbd" />
           </View>
-          <Text style={styles.emptyTitle}>Empty</Text>
+          <Text style={styles.emptyTitle}>No trips yet</Text>
           <Text style={styles.emptySubtext}>
-            Let our AI create personalized trip plans just for you. Start planning now!
+            Browse destinations or pre-built itineraries and commit to a trip to see it here.
           </Text>
-          <TouchableOpacity style={styles.emptyBtn}>
-            <Text style={styles.emptyBtnText}>Search Trip</Text>
-          </TouchableOpacity>
         </View>
       ) : (
         <>
@@ -73,16 +76,14 @@ export default function MyTripsScreen() {
                 style={[styles.toggleBtn, activeTab === tab && styles.toggleBtnActive]}
                 onPress={() => setActiveTab(tab)}
               >
-                <Text
-                  style={[styles.toggleText, activeTab === tab && styles.toggleTextActive]}
-                >
+                <Text style={[styles.toggleText, activeTab === tab && styles.toggleTextActive]}>
                   {tab}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          {trips.length === 0 ? (
+          {filtered.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconCircle}>
                 <Ionicons name="location-outline" size={40} color="#bdbdbd" />
@@ -90,21 +91,13 @@ export default function MyTripsScreen() {
               <Text style={styles.emptyTitle}>Empty</Text>
               <Text style={styles.emptySubtext}>
                 {activeTab === 'Active'
-                  ? 'No upcoming trips yet. Let our AI create personalized trip plans just for you!'
+                  ? 'No upcoming trips yet.'
                   : 'No past trips to show yet.'}
               </Text>
-              {activeTab === 'Active' && (
-                <TouchableOpacity style={styles.emptyBtn}>
-                  <Text style={styles.emptyBtnText}>Search Trip</Text>
-                </TouchableOpacity>
-              )}
             </View>
           ) : (
-            <ScrollView
-              contentContainerStyle={styles.list}
-              showsVerticalScrollIndicator={false}
-            >
-              {trips.map((trip) => (
+            <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+              {filtered.map((trip) => (
                 <TripCard key={trip.id} trip={trip} />
               ))}
             </ScrollView>

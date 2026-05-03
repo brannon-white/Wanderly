@@ -5,8 +5,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
-import { shared, PRIMARY } from '@/styles/tripPlanningStyles';
+import { shared } from '@/styles/tripPlanningStyles';
 import { useTripPlanning } from '@/context/TripPlanningContext';
+import { useMyTrips } from '@/context/MyTripsContext';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 
@@ -21,17 +22,39 @@ const PARTY_OPTIONS = [
 export default function TripPartyScreen() {
   const navigation = useNavigation<NavProp>();
   const insets = useSafeAreaInsets();
-  const { party, setParty } = useTripPlanning();
+  const { flow, party, setParty, templateId, templateTitle, templateHeroImage, startDate, endDate, reset } = useTripPlanning();
+  const { addTrip } = useMyTrips();
+
+  const isPrebuilt = flow === 'prebuilt';
+  const progressWidth = isPrebuilt ? '100%' : '20%';
+
+  const handleContinue = () => {
+    if (isPrebuilt) {
+      addTrip({
+        id: `committed-${Date.now()}`,
+        templateId,
+        title: templateTitle,
+        heroImage: templateHeroImage,
+        party,
+        startDate: startDate!.toISOString(),
+        endDate: endDate!.toISOString(),
+        origin: 'prebuilt',
+      });
+      reset();
+      navigation.navigate('Index' as any, { screen: 'MyTrips' } as any);
+    } else {
+      navigation.navigate('TripDates');
+    }
+  };
 
   return (
     <View style={shared.container}>
-      {/* Top bar */}
       <View style={[shared.topBar, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity style={shared.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={20} color="#222" />
         </TouchableOpacity>
         <View style={shared.progressBarTrack}>
-          <View style={[shared.progressBarFill, { width: '20%' }]} />
+          <View style={[shared.progressBarFill, { width: progressWidth }]} />
         </View>
       </View>
 
@@ -40,9 +63,13 @@ export default function TripPartyScreen() {
         contentContainerStyle={shared.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={shared.heading}>Who is going? 🧳</Text>
+        <Text style={shared.heading}>
+          {isPrebuilt ? "Who's coming along? 🧳" : 'Who is going? 🧳'}
+        </Text>
         <Text style={shared.subheading}>
-          Let's get started by selecting who you're traveling with.
+          {isPrebuilt
+            ? 'Last step — let us know who you\'re traveling with.'
+            : "Let's get started by selecting who you're traveling with."}
         </Text>
 
         {PARTY_OPTIONS.map((option) => {
@@ -63,15 +90,16 @@ export default function TripPartyScreen() {
         })}
       </ScrollView>
 
-      {/* Bottom CTA */}
       <View style={[shared.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
         <TouchableOpacity
           style={[shared.continueBtn, !party && shared.continueBtnDisabled]}
           disabled={!party}
-          onPress={() => navigation.navigate('TripDates')}
+          onPress={handleContinue}
           activeOpacity={0.85}
         >
-          <Text style={shared.continueBtnText}>Continue</Text>
+          <Text style={shared.continueBtnText}>
+            {isPrebuilt ? 'Add to My Trips' : 'Continue'}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>

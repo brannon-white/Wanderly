@@ -15,6 +15,7 @@ import { OnboardingProvider } from '@/context/OnboardingContext';
 import { DemoProvider, useDemo } from '@/context/DemoContext';
 import { SavedProvider } from '@/context/SavedContext';
 import { TripPlanningProvider } from '@/context/TripPlanningContext';
+import { MyTripsProvider } from '@/context/MyTripsContext';
 import { useFonts } from 'expo-font';
 import { getOnboardingProgress } from '@/utils/onboardingStorage';
 import { userExists } from '@/hooks/useSaveUserProfile';
@@ -41,7 +42,7 @@ export type RootStackParamList = {
   FoodPreferences: undefined;
   UserInfoSignUp: undefined;
   OnboardingComplete: undefined;
-  ItineraryScreen: { id: string };
+  ItineraryScreen: { id: string; source?: 'browse' | 'mytrips' };
   DestinationScreen: { id: string };
   TripParty: undefined;
   TripDates: undefined;
@@ -133,6 +134,7 @@ useEffect(() => {
   return (
     <DemoProvider>
     <SavedProvider>
+    <MyTripsProvider>
     <TripPlanningProvider>
     <OnboardingProvider>
       <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
@@ -245,6 +247,7 @@ useEffect(() => {
 </Stack.Navigator>
     </OnboardingProvider>
     </TripPlanningProvider>
+    </MyTripsProvider>
     </SavedProvider>
     </DemoProvider>
   );
