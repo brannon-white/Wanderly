@@ -80,6 +80,8 @@ export const styles = StyleSheet.create({
     borderRadius: 22,
     overflow: 'hidden',
     backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -94,7 +96,7 @@ export const styles = StyleSheet.create({
   },
 
   cardContent: {
-    backgroundColor: '#D0CBFF',
+    backgroundColor: '#fff',
     borderRadius: 22,
     padding: 14,
     marginTop: -20,
@@ -109,7 +111,7 @@ export const styles = StyleSheet.create({
 
   cardTitle: {
     fontSize: 18,
-    color: '#222',
+    color: '#6A62B7',
     fontFamily: 'Merriweather_36pt-Bold',
     flexShrink: 1,
     marginRight: 8,

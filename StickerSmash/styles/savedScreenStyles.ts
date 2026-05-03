@@ -43,13 +43,15 @@ export const styles = StyleSheet.create({
   card: {
     marginBottom: 20,
     borderRadius: 22,
-    backgroundColor: '#b7aee2',
+    backgroundColor: '#fff',
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
   },
 
   imageWrapper: {
@@ -66,14 +68,13 @@ export const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     right: 14,
-    backgroundColor: '#b7aee2',
+    backgroundColor: 'rgba(0,0,0,0.28)',
     borderRadius: 16,
     padding: 4,
   },
 
-  // Lavender content footer — overlaps the image slightly like home cards
   cardContent: {
-    backgroundColor: '#D0CBFF',
+    backgroundColor: '#fff',
     borderRadius: 22,
     padding: 14,
     marginTop: -20,
@@ -88,7 +89,7 @@ export const styles = StyleSheet.create({
 
   cityName: {
     fontSize: 18,
-    color: '#222',
+    color: '#6A62B7',
     fontFamily: 'Merriweather_36pt-Bold',
   },
 
