@@ -111,6 +111,7 @@ export interface DemoFullItinerary {
   mapImage: string;
   subtitle: string;
   days: DemoItineraryDay[];
+  isActive?: boolean;
 }
 
 export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
@@ -120,6 +121,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
     heroImage: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800',
     mapImage: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=800',
     subtitle: 'Dec 12 - Dec 14, 2023  •  A Couple  •  Luxury',
+    isActive: true,
     days: [
       {
         label: 'December 12th',
@@ -366,6 +368,15 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
         ],
       },
     ],
+  },
+  {
+    id: 'demo-itin-paris',
+    title: 'Paris, France 🇫🇷',
+    heroImage: 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=800',
+    mapImage: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=800',
+    subtitle: 'Mar 5 - Mar 10, 2024  •  Solo  •  Budget',
+    isActive: false,
+    days: [],
   },
 ];
 
