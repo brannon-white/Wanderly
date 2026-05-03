@@ -7,6 +7,8 @@ import type { RootStackParamList } from '@/app/_layout';
 import { useSaved } from '@/context/SavedContext';
 import { styles } from '@/styles/discoverScreenStyles';
 
+type NavProp = StackNavigationProp<RootStackParamList, 'DestinationScreen'>;
+
 type DestinationCardProps = {
   id: string;
   title: string;
@@ -22,14 +24,14 @@ export default function DestinationCard({
   country,
   flag,
 }: DestinationCardProps) {
-  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+  const navigation = useNavigation<NavProp>();
   const { isSaved, toggleSaved } = useSaved();
   const saved = isSaved(id);
 
   return (
     <TouchableOpacity
       style={styles.destinationCard}
-      onPress={() => navigation.navigate('DestinationDetail', { id })}
+      onPress={() => navigation.navigate('DestinationScreen', { id })}
       activeOpacity={0.9}
     >
       <Image

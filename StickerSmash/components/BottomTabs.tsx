@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import DiscoverScreen from '../app/(tabs)/index';
 import BookmarksScreen from '../app/(tabs)/bookmarksScreen';
-import MapScreen from '../app/(tabs)/mapScreen';
+import MyTripsScreen from '../app/(tabs)/mapScreen';
 import ProfileScreen from '../app/(tabs)/profileScreen';
 import { Ionicons } from '@expo/vector-icons';
 import { useDemo } from '@/context/DemoContext';
@@ -37,7 +37,7 @@ export default function BottomTabs() {
         tabBarIcon: ({ color, size }) => {
           if (route.name === 'Discover') return <Ionicons name="home" size={size} color={color} />;
           if (route.name === 'Bookmarks') return <Ionicons name="bookmark-outline" size={size} color={color} />;
-          if (route.name === 'Map') return <Ionicons name="location-outline" size={size} color={color} />;
+          if (route.name === 'MyTrips') return <Ionicons name="location-outline" size={size} color={color} />;
           if (route.name === 'Profile') return <Ionicons name="person-outline" size={size} color={color} />;
         },
         tabBarActiveTintColor: '#6A62B7',
@@ -46,7 +46,7 @@ export default function BottomTabs() {
     >
       <Tab.Screen name="Discover" component={DiscoverScreen} />
       <Tab.Screen name="Bookmarks" component={BookmarksScreen} />
-      <Tab.Screen name="Map" component={MapScreen} />
+      <Tab.Screen name="MyTrips" component={MyTripsScreen} options={{ tabBarLabel: 'My Trips' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
     {isDemoMode && <DemoNavigator />}

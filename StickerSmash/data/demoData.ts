@@ -1,5 +1,54 @@
 export const DEMO_UID = 'demo-user';
 
+export interface DemoDestinationDetail {
+  id: string;
+  description: string;
+  gallery: string[];
+}
+
+export const DEMO_DESTINATION_DETAILS: Record<string, DemoDestinationDetail> = {
+  'demo-dest-1': {
+    id: 'demo-dest-1',
+    description:
+      'Discover the vibrant metropolis of Tokyo, where modernity meets tradition in perfect harmony. From futuristic skyscrapers to serene temples and lush parks, Tokyo offers an eclectic blend of experiences.',
+    gallery: [
+      'https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?w=400',
+      'https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=400',
+      'https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=400',
+    ],
+  },
+  'demo-dest-2': {
+    id: 'demo-dest-2',
+    description:
+      'Paris, the City of Light, dazzles visitors with its timeless elegance. Stroll along the Seine, marvel at the Eiffel Tower, and lose yourself in world-class museums and charming street cafés.',
+    gallery: [
+      'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400',
+      'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=400',
+      'https://images.unsplash.com/photo-1533106418989-88406c7cc8ca?w=400',
+    ],
+  },
+  'demo-dest-3': {
+    id: 'demo-dest-3',
+    description:
+      'Bali is a living postcard of tropical beauty, spiritual culture, and warm hospitality. Explore emerald rice terraces, ancient temples, and pristine beaches all on one enchanting island.',
+    gallery: [
+      'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400',
+      'https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?w=400',
+      'https://images.unsplash.com/photo-1559628233-100c798642d0?w=400',
+    ],
+  },
+  'demo-dest-4': {
+    id: 'demo-dest-4',
+    description:
+      "New York City pulses with an energy unlike anywhere else on Earth. From the bright lights of Times Square to the calm of Central Park, the city that never sleeps offers something for every traveler.",
+    gallery: [
+      'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400',
+      'https://images.unsplash.com/photo-1534430480872-3498386e7856?w=400',
+      'https://images.unsplash.com/photo-1485871981521-5b1fd3805eee?w=400',
+    ],
+  },
+};
+
 export interface SavedItem {
   id: string;
   type: 'itinerary' | 'destination';
@@ -340,6 +389,7 @@ export interface DemoFullItinerary {
   mapImage: string;
   subtitle: string;
   days: DemoItineraryDay[];
+  isActive?: boolean;
 }
 
 export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
@@ -349,6 +399,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
     heroImage: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800',
     mapImage: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=800',
     subtitle: 'Dec 12 - Dec 14, 2023  •  A Couple  •  Luxury',
+    isActive: true,
     days: [
       {
         label: 'December 12th',
@@ -595,6 +646,15 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
         ],
       },
     ],
+  },
+  {
+    id: 'demo-itin-paris',
+    title: 'Paris, France 🇫🇷',
+    heroImage: 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=800',
+    mapImage: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=800',
+    subtitle: 'Mar 5 - Mar 10, 2024  •  Solo  •  Budget',
+    isActive: false,
+    days: [],
   },
 ];
 

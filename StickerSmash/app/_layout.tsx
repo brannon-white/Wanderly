@@ -14,6 +14,7 @@ import UserInfoSignUp from './(tabs)/userInfoSignUp';
 import { OnboardingProvider } from '@/context/OnboardingContext';
 import { DemoProvider, useDemo } from '@/context/DemoContext';
 import { SavedProvider } from '@/context/SavedContext';
+import { TripPlanningProvider } from '@/context/TripPlanningContext';
 import { useFonts } from 'expo-font';
 import { getOnboardingProgress } from '@/utils/onboardingStorage';
 import { userExists } from '@/hooks/useSaveUserProfile';
@@ -22,6 +23,13 @@ import BottomTabs from '../components/BottomTabs';
 import { getUserProfile } from '@/utils/getUserProfile';
 import ItineraryScreen from '@/components/ItineraryScreen';
 import DestinationDetailScreen from '@/components/DestinationDetailScreen';
+import DestinationScreen from '@/components/DestinationScreen';
+import TripPartyScreen from '@/components/tripPlanning/TripPartyScreen';
+import TripDatesScreen from '@/components/tripPlanning/TripDatesScreen';
+import TripInterestsScreen from '@/components/tripPlanning/TripInterestsScreen';
+import TripBudgetScreen from '@/components/tripPlanning/TripBudgetScreen';
+import TripReviewScreen from '@/components/tripPlanning/TripReviewScreen';
+
 export type RootStackParamList = {
   OnboardingFirst: undefined;
   OnboardingSecond: undefined;
@@ -33,13 +41,16 @@ export type RootStackParamList = {
   TravelPreferences: undefined;
   FoodPreferences: undefined;
   UserInfoSignUp: undefined;
-  OnboardingComplete: undefined; // Add this line
+  OnboardingComplete: undefined;
   ItineraryScreen: { id: string };
   DestinationDetail: { id: string };
-
-  // Add other screens as needed
+  DestinationScreen: { id: string };
+  TripParty: undefined;
+  TripDates: undefined;
+  TripInterests: undefined;
+  TripBudget: undefined;
+  TripReview: undefined;
 };
-
 
 const Stack = createStackNavigator<RootStackParamList>();
 
@@ -58,157 +69,187 @@ function DemoAwareAuth({ navigation }: any) {
 }
 
 export default function RootLayout() {
-const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
+  const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
+
   useFonts({
     'SourceSans3-Regular': require('@/assets/fonts/Source_Sans_3/static/SourceSans3-Regular.ttf'),
     'Merriweather_36pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_36pt-Bold.ttf'),
     'Merriweather_24pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_24pt-Bold.ttf'),
   });
 
-useEffect(() => {
-  async function checkFlags() {
-    // In development, skip auth and onboarding entirely — always open in demo mode.
-    if (__DEV__) {
-      setInitialRoute('Index');
-      return;
-    }
-
-    const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
-
-    if (hasSeenOnboarding !== 'true') {
-      setInitialRoute('OnboardingFirst');
-      return;
-    }
-
-    const firebaseUser = auth().currentUser;
-
-    if (!firebaseUser) {
-      setInitialRoute('Auth');
-      return;
-    }
-
-    // Check Firestore for user existence
-    const exists = firebaseUser ? await userExists(firebaseUser.uid) : false;
-    if (exists) {
-        const uid = auth().currentUser?.uid;
-      if (uid) {
-        getUserProfile(uid);
+  useEffect(() => {
+    async function checkFlags() {
+      if (__DEV__) {
+        setInitialRoute('Index');
+        return;
       }
+
+      const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
+
+      if (hasSeenOnboarding !== 'true') {
+        setInitialRoute('OnboardingFirst');
+        return;
+      }
+
+      const firebaseUser = auth().currentUser;
+
+      if (!firebaseUser) {
+        setInitialRoute('Auth');
+        return;
+      }
+
+      const exists = await userExists(firebaseUser.uid);
+      if (exists) {
+        const uid = auth().currentUser?.uid;
+        if (uid) {
+          getUserProfile(uid);
+        }
+        setInitialRoute('Index');
+        return;
+      }
+
+      const progress = await getOnboardingProgress();
+      if (!progress.travel) {
+        setInitialRoute('TravelPreferences');
+        return;
+      }
+      if (!progress.food) {
+        setInitialRoute('FoodPreferences');
+        return;
+      }
+      if (!progress.userinfo) {
+        setInitialRoute('UserInfoSignUp');
+        return;
+      }
+
       setInitialRoute('Index');
-      return;
     }
 
-    // Only check onboarding progress if user is logged in and not in Firestore
-    const progress = await getOnboardingProgress();
-    if (!progress.travel) {
-      setInitialRoute('TravelPreferences');
-      return;
-    }
-    if (!progress.food) {
-      setInitialRoute('FoodPreferences');
-      return;
-    }
-    if (!progress.userinfo) {
-      setInitialRoute('UserInfoSignUp');
-      return;
-    }
-
-    setInitialRoute('Index');
-  }
-  checkFlags();
-}, []);
+    checkFlags();
+  }, []);
 
   if (!initialRoute) return null;
 
   return (
     <DemoProvider>
-    <SavedProvider>
-    <OnboardingProvider>
-      <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
-        <Stack.Screen
-          name="OnboardingFirst"
-          component={OnboardingFirstPage}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="OnboardingSecond"
-          component={OnboardingSecondPage}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="OnboardingThird"
-          children={({ navigation }) => (
-            <OnboardingThirdPage
-              onFinish={async () => {
-                await AsyncStorage.setItem('hasSeenOnboarding', 'true');
-                navigation.replace('Auth');
-              }}
-            />
-          )}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Auth"
-          component={DemoAwareAuth}
-          options={{ headerShown: false }}
-        />
-<Stack.Screen
-  name="SignIn"
-  children={() => (
-    <SignInScreen
-      onSignIn={async () => {
-      }}
-    />
-  )}
-  options={{ headerShown: false }}
-/>
-<Stack.Screen
-  name="Index"
-  component={BottomTabs}
-  options={{ headerShown: false }}
-/>
-<Stack.Screen
-  name="SignUp"
-  children={() => (
-    <SignUpscreen
-      onSignUp={() => {}}
-    />
-  )}
-  options={{ headerShown: false }}
-/>
-<Stack.Screen
-  name="TravelPreferences"
-  component={TravelPreferencesScreen}
-  options={{ headerShown: false }}
-/>
-<Stack.Screen
-  name="FoodPreferences"
-  component={FoodPreferencesScreen}
-  options={{ headerShown: false }}
-/>
-<Stack.Screen
-  name="UserInfoSignUp"
-  component={UserInfoSignUp}
-  options={{ headerShown: false }}
-/>
-<Stack.Screen
-  name="OnboardingComplete"
-  component={OnboardingCompleteScreen}
-  options={{ headerShown: false }}
-/>
-<Stack.Screen
-  name="ItineraryScreen"
-  component={ItineraryScreen}
-  options={{ headerShown: false }}
-/>
-<Stack.Screen
-  name="DestinationDetail"
-  component={DestinationDetailScreen}
-  options={{ headerShown: false }}
-/>
-</Stack.Navigator>
-    </OnboardingProvider>
-    </SavedProvider>
+      <SavedProvider>
+        <TripPlanningProvider>
+          <OnboardingProvider>
+            <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
+              <Stack.Screen
+                name="OnboardingFirst"
+                component={OnboardingFirstPage}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="OnboardingSecond"
+                component={OnboardingSecondPage}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="OnboardingThird"
+                children={({ navigation }) => (
+                  <OnboardingThirdPage
+                    onFinish={async () => {
+                      await AsyncStorage.setItem('hasSeenOnboarding', 'true');
+                      navigation.replace('Auth');
+                    }}
+                  />
+                )}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="Auth"
+                component={DemoAwareAuth}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="SignIn"
+                children={() => (
+                  <SignInScreen
+                    onSignIn={async () => {}}
+                  />
+                )}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="Index"
+                component={BottomTabs}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="SignUp"
+                children={() => (
+                  <SignUpscreen
+                    onSignUp={() => {}}
+                  />
+                )}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="TravelPreferences"
+                component={TravelPreferencesScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="FoodPreferences"
+                component={FoodPreferencesScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="UserInfoSignUp"
+                component={UserInfoSignUp}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="OnboardingComplete"
+                component={OnboardingCompleteScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="ItineraryScreen"
+                component={ItineraryScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="DestinationDetail"
+                component={DestinationDetailScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="DestinationScreen"
+                component={DestinationScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="TripParty"
+                component={TripPartyScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="TripDates"
+                component={TripDatesScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="TripInterests"
+                component={TripInterestsScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="TripBudget"
+                component={TripBudgetScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="TripReview"
+                component={TripReviewScreen}
+                options={{ headerShown: false }}
+              />
+            </Stack.Navigator>
+          </OnboardingProvider>
+        </TripPlanningProvider>
+      </SavedProvider>
     </DemoProvider>
   );
 }
