@@ -34,3 +34,12 @@ export async function cacheSet<T>(key: string, value: T, ttlDays: number): Promi
     // AsyncStorage failure is non-fatal — memory cache still works for the session
   }
 }
+
+export async function cacheDelete(key: string): Promise<void> {
+  memory.delete(key);
+  try {
+    await AsyncStorage.removeItem(STORAGE_PREFIX + key);
+  } catch {
+    // non-fatal
+  }
+}

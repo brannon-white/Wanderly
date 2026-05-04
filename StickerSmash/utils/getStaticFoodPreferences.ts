@@ -1,19 +1,17 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore from '@react-native-firebase/firestore';
-import { cacheStaticFoodPreferences } from '@/utils/cacheStaticFoodPreferences'; // import your cache function
+import { cacheGet, cacheSet } from '@/utils/cache';
 
-export async function getStaticFoodPreferences() {
-  // Try cache first
-  const cached = await AsyncStorage.getItem('staticFoodPreferences');
-  if (cached) {
-    return JSON.parse(cached);
-  }
+const CACHE_KEY = 'static:foods';
+const TTL_DAYS = 30;
 
-  // If not cached, fetch from Firestore
+export async function getStaticFoodPreferences(): Promise<{ label: string; emoji: string }[]> {
+  const cached = await cacheGet<{ label: string; emoji: string }[]>(CACHE_KEY);
+  if (cached) return cached;
+
   const doc = await firestore().collection('staticFoodPreferences').doc('all').get();
   const data = doc.data();
   if (data && Array.isArray(data.foods)) {
-    await cacheStaticFoodPreferences(data.foods); // Cache them
+    await cacheSet(CACHE_KEY, data.foods, TTL_DAYS);
     return data.foods;
   }
   return [];

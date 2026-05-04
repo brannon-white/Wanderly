@@ -1,20 +1,17 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore from '@react-native-firebase/firestore';
-import { cacheStaticActivities } from './cacheStaticActivities';
+import { cacheGet, cacheSet } from '@/utils/cache';
 
-export async function getStaticActivities() {
-  // Try cache first
-  const cached = await AsyncStorage.getItem('staticActivities');
-  if (cached) {
-    console.log('Loaded activities from cache');
-    return JSON.parse(cached);
-  }
+const CACHE_KEY = 'static:activities';
+const TTL_DAYS = 30;
 
-  // If not cached, fetch from Firestore and cache
+export async function getStaticActivities(): Promise<{ label: string; emoji: string }[]> {
+  const cached = await cacheGet<{ label: string; emoji: string }[]>(CACHE_KEY);
+  if (cached) return cached;
+
   const doc = await firestore().collection('staticActivities').doc('all').get();
   const data = doc.data();
   if (data && Array.isArray(data.activities)) {
-    await cacheStaticActivities(data.activities);
+    await cacheSet(CACHE_KEY, data.activities, TTL_DAYS);
     return data.activities;
   }
   return [];
