@@ -14,6 +14,7 @@ import DestinationCard from '@/components/DestinationCard';
 import { useDestinations } from '@/hooks/useDestinations';
 import { useDemo } from '@/context/DemoContext';
 import { DEMO_UID } from '@/data/demoData';
+import type { ItineraryCardSummary } from '@/types/itinerary';
 
 export default function DiscoverScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
@@ -73,7 +74,7 @@ export default function DiscoverScreen() {
           ) : errorItins ? (
             <Text style={{ margin: 20, color: 'red' }}>{errorItins}</Text>
           ) : prebuiltItineraries && prebuiltItineraries.length > 0 ? (
-            prebuiltItineraries.map((itin: any) => (
+            prebuiltItineraries.map((itin: ItineraryCardSummary) => (
               <RecommendedTripCard key={itin.id} itin={itin} />
             ))
           ) : (

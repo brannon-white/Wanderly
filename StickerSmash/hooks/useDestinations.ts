@@ -7,9 +7,87 @@ import { DEMO_DESTINATIONS } from '@/data/demoData';
 const CACHE_KEY = 'destinations';
 const TTL_DAYS = 7;
 
+export type DestinationRecord = {
+  id: string;
+  name: string;
+  imageUrl: string;
+  country?: string;
+  tagline?: string;
+  rating?: number | string;
+  idealLength?: string;
+  bestTimeToVisit?: string;
+  flightTime?: string;
+  overview?: string;
+  highlights?: string[];
+  signatureExperiences?: string[];
+  travelNotes?: string[];
+};
+
+export type DestinationDetail = {
+  id: string;
+  name: string;
+  imageUrl: string;
+  country: string;
+  tagline: string;
+  rating: string;
+  idealLength: string;
+  bestTimeToVisit: string;
+  flightTime: string;
+  overview: string;
+  highlights: string[];
+  signatureExperiences: string[];
+  travelNotes: string[];
+};
+
+function defaultHighlights(name: string) {
+  return [
+    `Best neighborhoods to base yourself in ${name}`,
+    `Food, design, and cultural moments worth prioritizing`,
+    `A flexible mix of iconic sights and slower local experiences`,
+  ];
+}
+
+export function normalizeDestinationDetail(
+  destination?: DestinationRecord | null
+): DestinationDetail | null {
+  if (!destination) {
+    return null;
+  }
+
+  return {
+    id: destination.id,
+    name: destination.name,
+    imageUrl: destination.imageUrl,
+    country: destination.country ?? 'Destination guide',
+    tagline:
+      destination.tagline ??
+      `A Wanderly-ready snapshot of ${destination.name} with enough context to plan the first version of a trip.`,
+    rating:
+      typeof destination.rating === 'number'
+        ? destination.rating.toFixed(1)
+        : destination.rating ?? '4.6',
+    idealLength: destination.idealLength ?? '4-6 days',
+    bestTimeToVisit: destination.bestTimeToVisit ?? 'Peak shoulder season',
+    flightTime: destination.flightTime ?? 'Flight time varies by departure city',
+    overview:
+      destination.overview ??
+      `${destination.name} is a strong fit for travelers who want a balanced trip with standout landmarks, local food, and room for unplanned discoveries.`,
+    highlights:
+      destination.highlights?.length ? destination.highlights : defaultHighlights(destination.name),
+    signatureExperiences:
+      destination.signatureExperiences?.length
+        ? destination.signatureExperiences
+        : ['Curated local neighborhoods', 'A signature food stop', 'One memorable golden-hour moment'],
+    travelNotes:
+      destination.travelNotes?.length
+        ? destination.travelNotes
+        : ['Book the first night near your main area', 'Keep one half-day open for spontaneous plans'],
+  };
+}
+
 export function useDestinations() {
   const { isDemoMode } = useDemo();
-  const [destinations, setDestinations] = useState<any[]>([]);
+  const [destinations, setDestinations] = useState<DestinationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,4 +123,16 @@ export function useDestinations() {
   }, [isDemoMode]);
 
   return { destinations, loading, error };
+}
+
+export function useDestinationById(id: string) {
+  const { destinations, loading, error } = useDestinations();
+  const destination = destinations.find(item => item.id === id) ?? null;
+
+  return {
+    destination,
+    detail: normalizeDestinationDetail(destination),
+    loading,
+    error,
+  };
 }
