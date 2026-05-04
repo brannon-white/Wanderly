@@ -1,6 +1,7 @@
 import auth from '@react-native-firebase/auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore from '@react-native-firebase/firestore';
+import { cacheGet, cacheSet, cacheDelete } from '@/utils/cache';
+import { profileCacheKey } from '@/utils/getUserProfile';
 import { isOnboardingComplete } from '@/utils/isOnboardingComplete';
 
 export async function updateTravelPreferences(selected: string[]) {
@@ -8,23 +9,17 @@ export async function updateTravelPreferences(selected: string[]) {
   if (!uid) return;
 
   if (await isOnboardingComplete(uid)) {
-    // Update Firestore
     await firestore().collection('users').doc(uid).update({
       activityPreferences: selected,
     });
 
-    // Update cached profile
-    const cachedProfile = await AsyncStorage.getItem(`userProfile_${uid}`);
-    if (cachedProfile) {
-      const profile = JSON.parse(cachedProfile);
-      profile.activityPreferences = selected;
-      await AsyncStorage.setItem(`userProfile_${uid}`, JSON.stringify(profile));
+    const key = profileCacheKey(uid);
+    const profile = await cacheGet<any>(key);
+    if (profile) {
+      await cacheSet(key, { ...profile, activityPreferences: selected }, 1);
     }
 
-    // Clear itineraries cache so recommendations update
-    const cacheKey = `itineraries_${uid}_${selected.join('_')}`;
-    const cacheTimeKey = `${cacheKey}_timestamp`;
-    await AsyncStorage.removeItem(cacheKey);
-    await AsyncStorage.removeItem(cacheTimeKey);
+    // Invalidate itinerary cache so recommendations refresh with new interests
+    await cacheDelete(`itineraries:${uid}`);
   }
 }

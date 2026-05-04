@@ -1,7 +1,8 @@
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import storage from '@react-native-firebase/storage';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { cacheGet, cacheSet } from '@/utils/cache';
+import { profileCacheKey } from '@/utils/getUserProfile';
 
 export async function saveUserProfile({
   avatarBase64,
@@ -34,7 +35,7 @@ export async function saveUserProfile({
       }
     }
 
-    await firestore().collection('users').doc(user.uid).set({
+    const profileData = {
       uid: user.uid,
       fullName,
       country: typeof country?.name === 'string' ? country.name : '',
@@ -44,22 +45,22 @@ export async function saveUserProfile({
       email: user.email,
       activityPreferences,
       foodPreferences,
+    };
+
+    await firestore().collection('users').doc(user.uid).set({
+      ...profileData,
       createdAt: firestore.FieldValue.serverTimestamp(),
     });
+
+    await cacheSet(profileCacheKey(user.uid), profileData, 1);
   } catch (err) {
     console.error('Error saving user:', err);
   }
 }
-export async function userExists(uid: string): Promise<boolean> {
-  // Check cache first
-  const cachedProfile = await AsyncStorage.getItem(`userProfile_${uid}`);
-  if (cachedProfile) {
-    console.log('User profile exists in cache');
-    return true;
-  }
-  // Fallback to Firestore
-  const doc = await firestore().collection('users').doc(uid).get();
-      console.log('User profile pulled from Firestore');
 
+export async function userExists(uid: string): Promise<boolean> {
+  const cached = await cacheGet(profileCacheKey(uid));
+  if (cached) return true;
+  const doc = await firestore().collection('users').doc(uid).get();
   return doc.exists();
 }

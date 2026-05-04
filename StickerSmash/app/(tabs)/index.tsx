@@ -1,6 +1,9 @@
-import React from 'react';
-import { SafeAreaView, View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { SafeAreaView, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import type { RootStackParamList } from '@/app/_layout';
 import { styles } from '@/styles/discoverScreenStyles';
 import { useFeaturedItinerary } from '@/hooks/userFeaturedItinerary';
 import { useMatchingItineraries } from '@/hooks/useMatchingItineraries';
@@ -13,12 +16,21 @@ import { useDemo } from '@/context/DemoContext';
 import { DEMO_UID } from '@/data/demoData';
 
 export default function DiscoverScreen() {
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const { isDemoMode } = useDemo();
   const { featuredTrip, itinerary, loading, error } = useFeaturedItinerary();
   const { destinations, loading: loadingDest, error: errorDest } = useDestinations();
 
   const uid = isDemoMode ? DEMO_UID : (auth().currentUser?.uid ?? '');
   const { prebuiltItineraries, loading: loadingItins, error: errorItins } = useMatchingItineraries(uid);
+
+  const [activeItinIndex, setActiveItinIndex] = useState(0);
+  const ITIN_PAGE_WIDTH = 365; // card width (335) + marginLeft (20) + marginRight (10)
+
+  const handleItinScroll = (e: any) => {
+    const index = Math.round(e.nativeEvent.contentOffset.x / ITIN_PAGE_WIDTH);
+    setActiveItinIndex(index);
+  };
   return (
     <SafeAreaView style={styles.safe}>
       {/* Header */}
@@ -27,14 +39,14 @@ export default function DiscoverScreen() {
       </View>
 
       {/* Search */}
-      <View style={styles.searchWrapper}>
+      <TouchableOpacity
+        style={styles.searchWrapper}
+        onPress={() => navigation.navigate('SearchScreen')}
+        activeOpacity={0.7}
+      >
         <Ionicons name="search" size={22} color="#bdbdbd" style={{ marginRight: 8 }} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Where do you want to go?"
-          placeholderTextColor="#bdbdbd"
-        />
-      </View>
+        <Text style={[styles.searchInput, { color: '#bdbdbd' }]}>Where do you want to go?</Text>
+      </TouchableOpacity>
 
        <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
         {/* Featured Trip */}
@@ -49,7 +61,13 @@ export default function DiscoverScreen() {
 
         {/* Recommended Trips */}
         <Text style={styles.sectionTitle}>Recommended Trips</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginBottom: 12 }}
+          onScroll={handleItinScroll}
+          scrollEventThrottle={16}
+        >
           {loadingItins ? (
             <Text style={{ margin: 20 }}>Loading recommended trips...</Text>
           ) : errorItins ? (
@@ -64,12 +82,13 @@ export default function DiscoverScreen() {
         </ScrollView>
 
         {/* Pagination dots */}
-        <View style={styles.pagination}>
-          <View style={styles.dotActive} />
-          <View style={styles.dot} />
-          <View style={styles.dot} />
-          <View style={styles.dot} />
-        </View>
+        {prebuiltItineraries.length > 0 && (
+          <View style={styles.pagination}>
+            {prebuiltItineraries.slice(0, 6).map((_: any, i: number) => (
+              <View key={i} style={i === activeItinIndex ? styles.dotActive : styles.dot} />
+            ))}
+          </View>
+        )}
 
         {/* Popular Destinations */}
 <View style={styles.rowBetween}>
@@ -81,7 +100,7 @@ export default function DiscoverScreen() {
 <ScrollView
   horizontal
   showsHorizontalScrollIndicator={false}
-  contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
+  contentContainerStyle={{ paddingRight: 8 }}
   style={{ marginBottom: 16 }}
 >
   {loadingDest ? (

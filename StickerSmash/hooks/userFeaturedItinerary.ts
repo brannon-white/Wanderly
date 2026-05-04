@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import firestore from '@react-native-firebase/firestore';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { cacheGet, cacheSet } from '@/utils/cache';
 import { useDemo } from '@/context/DemoContext';
 import { DEMO_FEATURED_TRIP, DEMO_FEATURED_ITINERARY } from '@/data/demoData';
+
+const CACHE_KEY = 'featured:itinerary';
 
 export function useFeaturedItinerary() {
   const { isDemoMode } = useDemo();
@@ -23,45 +25,34 @@ export function useFeaturedItinerary() {
       try {
         setLoading(true);
 
-        // Try to load cached data from AsyncStorage
-        const cachedStr = await AsyncStorage.getItem('featuredItineraryCache');
-        const cached = cachedStr ? JSON.parse(cachedStr) : null;
+        const cached = await cacheGet<{ featuredTrip: any; prebuiltItinerary: any }>(CACHE_KEY);
+        if (cached) {
+          setFeaturedTrip(cached.featuredTrip);
+          setItinerary(cached.prebuiltItinerary);
+          setLoading(false);
+          return;
+        }
 
-        const now = new Date();
-
-      if (
-        cached &&
-        cached.featuredTrip &&
-        cached.featuredTrip.to &&
-        cached.prebuiltItinerary &&
-        cached.prebuiltItinerary.id === cached.featuredTrip.tripId &&
-        new Date(cached.featuredTrip.to.seconds * 1000) > now
-      ) {
-        setFeaturedTrip(cached.featuredTrip);
-        setItinerary(cached.prebuiltItinerary);
-        setLoading(false);
-        console.log('Loaded featured trip from cache');
-        return;
-      }
-        // Query for the first featured trip
         const featuredSnap = await firestore().collection('featuredTrips').limit(1).get();
         if (featuredSnap.empty) throw new Error('No featured trip found');
-        const featuredDoc = featuredSnap.docs[0];
-        const featuredData = featuredDoc.data();
+        const featuredData = featuredSnap.docs[0].data();
         setFeaturedTrip(featuredData);
-        console.log('Fetched featured trip from db:', featuredData);
 
-        // Get the itinerary using tripId
-        const itinerarySnap = await firestore().collection('prebuiltItineraries').doc(featuredData.tripId).get();
+        const itinerarySnap = await firestore()
+          .collection('prebuiltItineraries')
+          .doc(featuredData.tripId)
+          .get();
         if (!itinerarySnap.exists) throw new Error('Itinerary not found');
         const itineraryData = itinerarySnap.data();
         setItinerary(itineraryData);
 
-        // Cache the result in AsyncStorage
-        await AsyncStorage.setItem(
-          'featuredItineraryCache',
-          JSON.stringify({ featuredTrip: featuredData, prebuiltItinerary: itineraryData })
-        );
+        // Cache until the trip ends; fall back to 1 day if no end date
+        const tripEndMs = featuredData.to?.seconds
+          ? featuredData.to.seconds * 1000
+          : Date.now() + 24 * 60 * 60 * 1000;
+        const ttlDays = Math.max(1, Math.ceil((tripEndMs - Date.now()) / (1000 * 60 * 60 * 24)));
+
+        await cacheSet(CACHE_KEY, { featuredTrip: featuredData, prebuiltItinerary: itineraryData }, ttlDays);
       } catch (err: any) {
         setError(err.message || 'Error fetching featured trip');
       } finally {
