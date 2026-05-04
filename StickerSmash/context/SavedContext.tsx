@@ -30,8 +30,9 @@ export const SavedProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       .doc(uid)
       .collection('savedItems')
       .onSnapshot((snapshot) => {
+        if (!snapshot) return;
         setSavedItems(snapshot.docs.map((doc) => doc.data() as SavedItem));
-      });
+      }, () => {});
 
     return unsubscribe;
   }, [isDemoMode]);

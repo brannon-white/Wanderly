@@ -31,7 +31,9 @@ export default function DestinationCard({
   return (
     <TouchableOpacity
       style={styles.destinationCard}
-      onPress={() => navigation.navigate('DestinationScreen', { id })}
+      onPress={() => navigation.navigate('DestinationScreen', {
+        searchedDestination: { id, name: title, country: country ?? '', flag: flag ?? '', imageUrl, gallery: [] },
+      })}
       activeOpacity={0.9}
     >
       <Image

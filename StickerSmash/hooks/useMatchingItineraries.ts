@@ -71,6 +71,7 @@ export function useMatchingItineraries(uid: string) {
           .where('interests', 'array-contains-any', userInterests.slice(0, 10))
           .get();
 
+        if (!snapshot) return;
         const results = snapshot.docs.map(doc =>
           normalizeItinerarySummary({ id: doc.id, ...(doc.data() as Partial<FirestoreItineraryDocument>) })
         );

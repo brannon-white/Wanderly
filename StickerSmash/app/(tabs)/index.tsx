@@ -94,7 +94,7 @@ export default function DiscoverScreen() {
         {/* Popular Destinations */}
 <View style={styles.rowBetween}>
   <Text style={styles.sectionTitle}>Popular Destinations</Text>
-  <TouchableOpacity>
+  <TouchableOpacity onPress={() => navigation.navigate('AllDestinations')}>
     <Text style={styles.viewAll}>View All</Text>
   </TouchableOpacity>
 </View>

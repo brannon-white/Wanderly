@@ -34,7 +34,7 @@ export function useFeaturedItinerary() {
         }
 
         const featuredSnap = await firestore().collection('featuredTrips').limit(1).get();
-        if (featuredSnap.empty) throw new Error('No featured trip found');
+        if (!featuredSnap || featuredSnap.empty) throw new Error('No featured trip found');
         const featuredData = featuredSnap.docs[0].data();
         setFeaturedTrip(featuredData);
 

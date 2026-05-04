@@ -24,6 +24,7 @@ import BottomTabs from '../components/BottomTabs';
 import { getUserProfile } from '@/utils/getUserProfile';
 import ItineraryScreen from '@/components/ItineraryScreen';
 import DestinationDetailScreen from '@/components/DestinationDetailScreen';
+import AllDestinationsScreen from '@/components/AllDestinationsScreen';
 import DestinationScreen from '@/components/DestinationScreen';
 import TripPartyScreen from '@/components/tripPlanning/TripPartyScreen';
 import TripDatesScreen from '@/components/tripPlanning/TripDatesScreen';
@@ -54,6 +55,7 @@ export type RootStackParamList = {
   TripInterests: undefined;
   TripBudget: undefined;
   TripReview: undefined;
+  AllDestinations: undefined;
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -83,11 +85,6 @@ export default function RootLayout() {
 
   useEffect(() => {
     async function checkFlags() {
-      if (__DEV__) {
-        setInitialRoute('Auth');
-        return;
-      }
-
       const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
 
       if (hasSeenOnboarding !== 'true') {
@@ -141,16 +138,8 @@ export default function RootLayout() {
           <TripPlanningProvider>
             <OnboardingProvider>
               <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
-                <Stack.Screen
-                  name="OnboardingFirst"
-                  component={OnboardingFirstPage}
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="OnboardingSecond"
-                  component={OnboardingSecondPage}
-                  options={{ headerShown: false }}
-                />
+                <Stack.Screen name="OnboardingFirst" component={OnboardingFirstPage} options={{ headerShown: false }} />
+                <Stack.Screen name="OnboardingSecond" component={OnboardingSecondPage} options={{ headerShown: false }} />
                 <Stack.Screen
                   name="OnboardingThird"
                   children={({ navigation }) => (
@@ -163,91 +152,32 @@ export default function RootLayout() {
                   )}
                   options={{ headerShown: false }}
                 />
-                <Stack.Screen
-                  name="Auth"
-                  component={DemoAwareAuth}
-                  options={{ headerShown: false }}
-                />
+                <Stack.Screen name="Auth" component={DemoAwareAuth} options={{ headerShown: false }} />
                 <Stack.Screen
                   name="SignIn"
                   children={() => <SignInScreen onSignIn={async () => {}} />}
                   options={{ headerShown: false }}
                 />
-                <Stack.Screen
-                  name="Index"
-                  component={BottomTabs}
-                  options={{ headerShown: false }}
-                />
+                <Stack.Screen name="Index" component={BottomTabs} options={{ headerShown: false }} />
                 <Stack.Screen
                   name="SignUp"
                   children={() => <SignUpscreen onSignUp={() => {}} />}
                   options={{ headerShown: false }}
                 />
-                <Stack.Screen
-                  name="TravelPreferences"
-                  component={TravelPreferencesScreen}
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="FoodPreferences"
-                  component={FoodPreferencesScreen}
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="UserInfoSignUp"
-                  component={UserInfoSignUp}
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="OnboardingComplete"
-                  component={OnboardingCompleteScreen}
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="SearchScreen"
-                  component={SearchScreen}
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="ItineraryScreen"
-                  component={ItineraryScreen}
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="DestinationDetail"
-                  component={DestinationDetailScreen}
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="DestinationScreen"
-                  component={DestinationScreen}
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="TripParty"
-                  component={TripPartyScreen}
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="TripDates"
-                  component={TripDatesScreen}
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="TripInterests"
-                  component={TripInterestsScreen}
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="TripBudget"
-                  component={TripBudgetScreen}
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="TripReview"
-                  component={TripReviewScreen}
-                  options={{ headerShown: false }}
-                />
+                <Stack.Screen name="TravelPreferences" component={TravelPreferencesScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="FoodPreferences" component={FoodPreferencesScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="UserInfoSignUp" component={UserInfoSignUp} options={{ headerShown: false }} />
+                <Stack.Screen name="OnboardingComplete" component={OnboardingCompleteScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="SearchScreen" component={SearchScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="ItineraryScreen" component={ItineraryScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="DestinationDetail" component={DestinationDetailScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="DestinationScreen" component={DestinationScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="AllDestinations" component={AllDestinationsScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="TripParty" component={TripPartyScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="TripDates" component={TripDatesScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="TripInterests" component={TripInterestsScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="TripBudget" component={TripBudgetScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="TripReview" component={TripReviewScreen} options={{ headerShown: false }} />
               </Stack.Navigator>
             </OnboardingProvider>
           </TripPlanningProvider>
