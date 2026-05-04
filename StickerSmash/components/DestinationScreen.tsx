@@ -19,6 +19,7 @@ import type { SearchedDestination } from '@/services/locationSearch';
 import { useSaved } from '@/context/SavedContext';
 import { useTripPlanning } from '@/context/TripPlanningContext';
 import { useDestinationContent } from '@/hooks/useDestinationContent';
+import type { DestinationSnapshot } from '@/context/TripPlanningContext';
 
 type NavProp = StackNavigationProp<RootStackParamList, 'DestinationScreen'>;
 type RoutePropType = RouteProp<RootStackParamList, 'DestinationScreen'>;
@@ -39,7 +40,7 @@ export default function DestinationScreen() {
   const { id, searchedDestination } = route.params;
 
   const { isSaved, toggleSaved } = useSaved();
-  const { setDestinationId, reset } = useTripPlanning();
+  const { setDestination, reset } = useTripPlanning();
   const [showSavedToast, setShowSavedToast] = useState(false);
 
   const destination = searchedDestination
@@ -178,7 +179,13 @@ export default function DestinationScreen() {
           style={styles.ctaBtn}
           onPress={() => {
             reset();
-            setDestinationId(destination.id);
+            setDestination({
+              id: destination.id,
+              name: destination.name,
+              country: destination.country ?? '',
+              flag: destination.flag ?? '',
+              imageUrl: destination.imageUrl ?? '',
+            });
             navigation.navigate('TripParty');
           }}
           activeOpacity={0.85}

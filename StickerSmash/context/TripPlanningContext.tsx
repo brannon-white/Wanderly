@@ -2,10 +2,19 @@ import React, { createContext, useContext, useState } from 'react';
 
 export type TripFlow = 'full' | 'prebuilt';
 
+export interface DestinationSnapshot {
+  id: string;
+  name: string;
+  country: string;
+  flag: string;
+  imageUrl: string;
+}
+
 interface TripPlanningState {
   flow: TripFlow;
   editingTripId: string; // non-empty when editing an existing committed trip
   destinationId: string;
+  destinationSnapshot: DestinationSnapshot | null;
   templateId: string;
   templateTitle: string;
   templateHeroImage: string;
@@ -20,6 +29,7 @@ interface TripPlanningContextType extends TripPlanningState {
   setFlow: (flow: TripFlow) => void;
   setEditingTripId: (id: string) => void;
   setDestinationId: (id: string) => void;
+  setDestination: (snapshot: DestinationSnapshot) => void;
   setTemplateId: (id: string) => void;
   setTemplateTitle: (title: string) => void;
   setTemplateHeroImage: (url: string) => void;
@@ -35,6 +45,7 @@ const defaultState: TripPlanningState = {
   flow: 'full',
   editingTripId: '',
   destinationId: '',
+  destinationSnapshot: null,
   templateId: '',
   templateTitle: '',
   templateHeroImage: '',
@@ -50,6 +61,7 @@ const TripPlanningContext = createContext<TripPlanningContextType>({
   setFlow: () => {},
   setEditingTripId: () => {},
   setDestinationId: () => {},
+  setDestination: () => {},
   setTemplateId: () => {},
   setTemplateTitle: () => {},
   setTemplateHeroImage: () => {},
@@ -67,6 +79,7 @@ export function TripPlanningProvider({ children }: { children: React.ReactNode }
   const setFlow = (flow: TripFlow) => setState(s => ({ ...s, flow }));
   const setEditingTripId = (editingTripId: string) => setState(s => ({ ...s, editingTripId }));
   const setDestinationId = (destinationId: string) => setState(s => ({ ...s, destinationId }));
+  const setDestination = (snapshot: DestinationSnapshot) => setState(s => ({ ...s, destinationId: snapshot.id, destinationSnapshot: snapshot }));
   const setTemplateId = (templateId: string) => setState(s => ({ ...s, templateId }));
   const setTemplateTitle = (templateTitle: string) => setState(s => ({ ...s, templateTitle }));
   const setTemplateHeroImage = (templateHeroImage: string) => setState(s => ({ ...s, templateHeroImage }));
@@ -81,7 +94,7 @@ export function TripPlanningProvider({ children }: { children: React.ReactNode }
     <TripPlanningContext.Provider
       value={{
         ...state,
-        setFlow, setEditingTripId, setDestinationId, setTemplateId, setTemplateTitle, setTemplateHeroImage,
+        setFlow, setEditingTripId, setDestinationId, setDestination, setTemplateId, setTemplateTitle, setTemplateHeroImage,
         setParty, setStartDate, setEndDate, setInterests, setBudget, reset,
       }}
     >
