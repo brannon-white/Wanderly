@@ -23,7 +23,7 @@ function TripCard({ trip }: { trip: CommittedTrip }) {
     <TouchableOpacity
       style={styles.card}
       activeOpacity={0.85}
-      onPress={() => navigation.navigate('ItineraryScreen', { id: trip.templateId, source: 'mytrips' })}
+      onPress={() => navigation.navigate('ItineraryScreen', { id: trip.templateId, source: 'mytrips', committedTripId: trip.id })}
     >
       <Image source={{ uri: trip.heroImage }} style={styles.cardImage} />
       <View style={styles.cardContent}>

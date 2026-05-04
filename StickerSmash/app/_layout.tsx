@@ -29,6 +29,8 @@ import TripDatesScreen from '@/components/tripPlanning/TripDatesScreen';
 import TripInterestsScreen from '@/components/tripPlanning/TripInterestsScreen';
 import TripBudgetScreen from '@/components/tripPlanning/TripBudgetScreen';
 import TripReviewScreen from '@/components/tripPlanning/TripReviewScreen';
+import SearchScreen from '@/app/SearchScreen';
+import type { SearchedDestination } from '@/services/locationSearch';
 
 export type RootStackParamList = {
   OnboardingFirst: undefined;
@@ -42,8 +44,9 @@ export type RootStackParamList = {
   FoodPreferences: undefined;
   UserInfoSignUp: undefined;
   OnboardingComplete: undefined;
-  ItineraryScreen: { id: string; source?: 'browse' | 'mytrips' };
-  DestinationScreen: { id: string };
+  ItineraryScreen: { id: string; source?: 'browse' | 'mytrips'; committedTripId?: string };
+  DestinationScreen: { id?: string; searchedDestination?: SearchedDestination };
+  SearchScreen: undefined;
   TripParty: undefined;
   TripDates: undefined;
   TripInterests: undefined;
@@ -207,6 +210,11 @@ useEffect(() => {
 <Stack.Screen
   name="OnboardingComplete"
   component={OnboardingCompleteScreen}
+  options={{ headerShown: false }}
+/>
+<Stack.Screen
+  name="SearchScreen"
+  component={SearchScreen}
   options={{ headerShown: false }}
 />
 <Stack.Screen

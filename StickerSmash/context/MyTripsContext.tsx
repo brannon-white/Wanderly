@@ -10,18 +10,22 @@ export interface CommittedTrip {
   startDate: string; // ISO string
   endDate: string;   // ISO string
   origin: 'prebuilt' | 'generated';
+  interests?: string[];
+  budget?: string;
 }
 
 interface MyTripsContextType {
   trips: CommittedTrip[];
   addTrip: (trip: CommittedTrip) => void;
   removeTrip: (id: string) => void;
+  updateTrip: (id: string, updates: Partial<CommittedTrip>) => void;
 }
 
 const MyTripsContext = createContext<MyTripsContextType>({
   trips: [],
   addTrip: () => {},
   removeTrip: () => {},
+  updateTrip: () => {},
 });
 
 // Future dates for the active demo trip
@@ -71,8 +75,12 @@ export function MyTripsProvider({ children }: { children: React.ReactNode }) {
     setTrips(prev => prev.filter(t => t.id !== id));
   };
 
+  const updateTrip = (id: string, updates: Partial<CommittedTrip>) => {
+    setTrips(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+  };
+
   return (
-    <MyTripsContext.Provider value={{ trips, addTrip, removeTrip }}>
+    <MyTripsContext.Provider value={{ trips, addTrip, removeTrip, updateTrip }}>
       {children}
     </MyTripsContext.Provider>
   );

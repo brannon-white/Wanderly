@@ -8,6 +8,8 @@ import {
   Linking,
   Platform,
   StatusBar,
+  Modal,
+  StyleSheet,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,9 +20,12 @@ import type { RootStackParamList } from '@/app/_layout';
 import { styles, ICON_COLOR, ICON_COLOR_DIMMED, makeScrollContentStyle } from '../styles/TravelItinerary';
 import { DEMO_FULL_ITINERARIES, DemoActivity } from '@/data/demoData';
 import { useTripPlanning } from '@/context/TripPlanningContext';
+import { useMyTrips, formatTripSubtitle } from '@/context/MyTripsContext';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 type RoutePropType = RouteProp<RootStackParamList, 'ItineraryScreen'>;
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 const TRANSPORT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   walk: 'walk-outline',
@@ -42,9 +47,7 @@ function StarRow(_: { rating: number }) {
 
 function ActivityCard({ activity }: { activity: DemoActivity }) {
   const openMaps = () => {
-    Linking.openURL(
-      `https://maps.google.com/?q=${encodeURIComponent(activity.name + ' Tokyo')}`
-    );
+    Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(activity.name + ' Tokyo')}`);
   };
 
   return (
@@ -52,33 +55,28 @@ function ActivityCard({ activity }: { activity: DemoActivity }) {
       <Image source={{ uri: activity.image }} style={styles.itemImage} />
       <View style={styles.itemDetails}>
         <Text style={styles.itemTitle}>{activity.name}</Text>
-
         <View style={styles.ratingRow}>
           <StarRow rating={activity.rating} />
           <Text style={styles.ratingText}>
             {'  '}({activity.rating.toFixed(1)}) {activity.reviewCount} reviews
           </Text>
         </View>
-
         <View style={styles.infoRow}>
           <Ionicons name="time-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
           <Text style={styles.infoText}>{activity.time}</Text>
         </View>
-
         {activity.cost ? (
           <View style={styles.infoRow}>
             <Ionicons name="cash-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
             <Text style={styles.infoText}>{activity.cost}</Text>
           </View>
         ) : null}
-
         <View style={styles.infoRow}>
           <Ionicons name="location-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
           <TouchableOpacity onPress={openMaps}>
             <Text style={styles.mapsLink}>View on Google Maps</Text>
           </TouchableOpacity>
         </View>
-
         <View style={styles.transportOptions}>
           {activity.transport.map((t) => (
             <View key={t.mode} style={styles.transportOption}>
@@ -102,15 +100,31 @@ export default function ItineraryScreen() {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RoutePropType>();
   const insets = useSafeAreaInsets();
-  const { reset, setFlow, setTemplateId, setTemplateTitle, setTemplateHeroImage } = useTripPlanning();
+  const { reset, setFlow, setEditingTripId, setTemplateId, setTemplateTitle, setTemplateHeroImage, setParty, setStartDate, setEndDate, setInterests, setBudget } = useTripPlanning();
+  const { trips, removeTrip } = useMyTrips();
 
-  const { id, source } = route.params;
+  const { id, source, committedTripId } = route.params;
   const isBrowsing = source !== 'mytrips';
-  const itinerary =
-    DEMO_FULL_ITINERARIES.find((it) => it.id === id) ?? DEMO_FULL_ITINERARIES[0];
+
+  const itinerary = DEMO_FULL_ITINERARIES.find((it) => it.id === id) ?? DEMO_FULL_ITINERARIES[0];
+  const committedTrip = committedTripId ? trips.find(t => t.id === committedTripId) : undefined;
 
   const [selectedDay, setSelectedDay] = useState(0);
+  const [menuVisible, setMenuVisible] = useState(false);
+
   const activities = itinerary.days[selectedDay]?.activities ?? [];
+
+  // When browsing show "Day 1", "Day 2" etc. When committed, show real dates.
+  const getDayLabel = (index: number): string => {
+    if (isBrowsing || !committedTrip) return `Day ${index + 1}`;
+    const d = new Date(committedTrip.startDate);
+    d.setDate(d.getDate() + index);
+    return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  };
+
+  const heroSubtitle = committedTrip
+    ? formatTripSubtitle(committedTrip)
+    : itinerary.subtitle;
 
   const handlePlanThisTrip = () => {
     reset();
@@ -119,6 +133,29 @@ export default function ItineraryScreen() {
     setTemplateTitle(itinerary.title);
     setTemplateHeroImage(itinerary.heroImage);
     navigation.navigate('TripDates');
+  };
+
+  const handleDeleteTrip = () => {
+    if (committedTripId) removeTrip(committedTripId);
+    setMenuVisible(false);
+    navigation.navigate('Index' as any, { screen: 'MyTrips' } as any);
+  };
+
+  const handleModifySettings = () => {
+    if (!committedTrip) return;
+    reset();
+    setFlow('full');
+    setEditingTripId(committedTrip.id);
+    setTemplateId(itinerary.id);
+    setTemplateTitle(itinerary.title);
+    setTemplateHeroImage(itinerary.heroImage);
+    setParty(committedTrip.party);
+    setStartDate(new Date(committedTrip.startDate));
+    setEndDate(new Date(committedTrip.endDate));
+    setInterests(committedTrip.interests ?? []);
+    setBudget(committedTrip.budget ?? '');
+    setMenuVisible(false);
+    navigation.navigate('TripParty');
   };
 
   const mapRegion = useMemo(() => {
@@ -143,6 +180,7 @@ export default function ItineraryScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+
       <ScrollView
         style={styles.itineraryContainer}
         contentContainerStyle={makeScrollContentStyle(insets.bottom, isBrowsing)}
@@ -162,16 +200,18 @@ export default function ItineraryScreen() {
               <TouchableOpacity style={styles.headerIconBtn}>
                 <Ionicons name="share-social-outline" size={20} color="#fff" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.headerIconBtn}>
-                <Ionicons name="ellipsis-vertical" size={20} color="#fff" />
-              </TouchableOpacity>
+              {!isBrowsing && (
+                <TouchableOpacity style={styles.headerIconBtn} onPress={() => setMenuVisible(true)}>
+                  <Ionicons name="ellipsis-vertical" size={20} color="#fff" />
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
           {/* Hero text */}
           <View style={styles.heroTextContainer}>
             <Text style={styles.heroTitle}>{itinerary.title}</Text>
-            <Text style={styles.heroSubtitle}>{itinerary.subtitle}</Text>
+            <Text style={styles.heroSubtitle}>{heroSubtitle}</Text>
           </View>
         </View>
 
@@ -179,36 +219,37 @@ export default function ItineraryScreen() {
         <View style={styles.mapSection}>
           <View style={styles.mapContainer}>
             {mapRegion && (
-              <MapView style={styles.mapImage} region={mapRegion} scrollEnabled={false} zoomEnabled={false} pitchEnabled={false} rotateEnabled={false}>
+              <MapView
+                style={styles.mapImage}
+                region={mapRegion}
+                scrollEnabled={false}
+                zoomEnabled={false}
+                pitchEnabled={false}
+                rotateEnabled={false}
+              >
                 {activities.map((activity) => (
-                  <Marker
-                    key={activity.id}
-                    coordinate={activity.coordinates}
-                    title={activity.name}
-                  />
+                  <Marker key={activity.id} coordinate={activity.coordinates} title={activity.name} />
                 ))}
               </MapView>
             )}
           </View>
         </View>
 
-        {/* Date tabs */}
+        {/* Day tabs */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.dateSelector}
           contentContainerStyle={styles.dateSelectorContent}
         >
-          {itinerary.days.map((day, index) => (
+          {itinerary.days.map((_, index) => (
             <TouchableOpacity
               key={index}
               style={[styles.dateBtn, selectedDay === index && styles.dateBtnActive]}
               onPress={() => setSelectedDay(index)}
             >
-              <Text
-                style={[styles.dateBtnText, selectedDay === index && styles.dateBtnTextActive]}
-              >
-                {day.label}
+              <Text style={[styles.dateBtnText, selectedDay === index && styles.dateBtnTextActive]}>
+                {getDayLabel(index)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -222,7 +263,7 @@ export default function ItineraryScreen() {
         </View>
       </ScrollView>
 
-      {/* Edit FAB — only when viewing a committed trip */}
+      {/* Edit FAB — only for committed trips */}
       {!isBrowsing && (
         <TouchableOpacity style={[styles.fab, { bottom: insets.bottom + 24 }]}>
           <Ionicons name="pencil" size={22} color="#fff" />
@@ -237,6 +278,65 @@ export default function ItineraryScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Ellipsis dropdown menu */}
+      <Modal visible={menuVisible} transparent animationType="fade">
+        <TouchableOpacity style={menuStyles.overlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
+          <View style={[menuStyles.card, { top: headerTop + 52, right: 16 }]}>
+            <TouchableOpacity style={menuStyles.item} onPress={() => setMenuVisible(false)}>
+              <Ionicons name="refresh-outline" size={20} color="#222" style={menuStyles.icon} />
+              <Text style={menuStyles.itemText}>Regenerate Trip</Text>
+            </TouchableOpacity>
+            <View style={menuStyles.divider} />
+            <TouchableOpacity style={menuStyles.item} onPress={handleModifySettings}>
+              <Ionicons name="settings-outline" size={20} color="#222" style={menuStyles.icon} />
+              <Text style={menuStyles.itemText}>Modify Trip Settings</Text>
+            </TouchableOpacity>
+            <View style={menuStyles.divider} />
+            <TouchableOpacity style={menuStyles.item} onPress={handleDeleteTrip}>
+              <Ionicons name="trash-outline" size={20} color="#E53935" style={menuStyles.icon} />
+              <Text style={[menuStyles.itemText, { color: '#E53935' }]}>Delete Trip</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
+
+const menuStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+  },
+  card: {
+    position: 'absolute',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    width: 240,
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 10,
+    overflow: 'hidden',
+  },
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  icon: {
+    marginRight: 14,
+  },
+  itemText: {
+    fontSize: 16,
+    color: '#222',
+    fontFamily: 'SourceSans3-Regular',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#F0F0F0',
+    marginHorizontal: 0,
+  },
+});

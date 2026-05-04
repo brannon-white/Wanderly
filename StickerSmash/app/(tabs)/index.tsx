@@ -1,6 +1,9 @@
 import React from 'react';
-import { SafeAreaView, View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { SafeAreaView, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import type { RootStackParamList } from '@/app/_layout';
 import { styles } from '@/styles/discoverScreenStyles';
 import { useFeaturedItinerary } from '@/hooks/userFeaturedItinerary';
 import { useMatchingItineraries } from '@/hooks/useMatchingItineraries';
@@ -13,6 +16,7 @@ import { useDemo } from '@/context/DemoContext';
 import { DEMO_UID } from '@/data/demoData';
 
 export default function DiscoverScreen() {
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const { isDemoMode } = useDemo();
   const { featuredTrip, itinerary, loading, error } = useFeaturedItinerary();
   const { destinations, loading: loadingDest, error: errorDest } = useDestinations();
@@ -27,14 +31,14 @@ export default function DiscoverScreen() {
       </View>
 
       {/* Search */}
-      <View style={styles.searchWrapper}>
+      <TouchableOpacity
+        style={styles.searchWrapper}
+        onPress={() => navigation.navigate('SearchScreen')}
+        activeOpacity={0.7}
+      >
         <Ionicons name="search" size={22} color="#bdbdbd" style={{ marginRight: 8 }} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Where do you want to go?"
-          placeholderTextColor="#bdbdbd"
-        />
-      </View>
+        <Text style={[styles.searchInput, { color: '#bdbdbd' }]}>Where do you want to go?</Text>
+      </TouchableOpacity>
 
        <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
         {/* Featured Trip */}
