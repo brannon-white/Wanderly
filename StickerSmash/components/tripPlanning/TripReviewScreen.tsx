@@ -19,7 +19,6 @@ import auth from '@react-native-firebase/auth';
 import { PRIMARY, BORDER_COLOR, TEXT_DARK, TEXT_GRAY } from '@/styles/tripPlanningStyles';
 import { useTripPlanning } from '@/context/TripPlanningContext';
 import { useMyTrips } from '@/context/MyTripsContext';
-import { DEMO_DESTINATIONS } from '@/data/demoData';
 import { generateItinerary } from '@/services/generateItinerary';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
@@ -53,6 +52,7 @@ export default function TripReviewScreen() {
   const {
     editingTripId,
     destinationId,
+    destinationSnapshot,
     party,
     startDate,
     endDate,
@@ -65,7 +65,7 @@ export default function TripReviewScreen() {
   const [generating, setGenerating] = useState(false);
   const { addTrip, updateTrip } = useMyTrips();
 
-  const destination = DEMO_DESTINATIONS.find(d => d.id === destinationId) ?? DEMO_DESTINATIONS[0];
+  const destination = destinationSnapshot ?? { id: destinationId, name: 'Unknown', country: '', flag: '', imageUrl: '' };
 
   const handleBuild = async () => {
     const currentUser = auth().currentUser;
@@ -170,7 +170,7 @@ export default function TripReviewScreen() {
             </View>
             <Text style={styles.sectionLabel}>Destination</Text>
             <View style={{ flex: 1 }} />
-            <EditIcon onPress={() => navigation.navigate('DestinationScreen', { id: destination.id })} />
+            <EditIcon onPress={() => navigation.navigate('DestinationScreen', { searchedDestination: { id: destination.id, name: destination.name, country: destination.country, flag: destination.flag, imageUrl: destination.imageUrl, gallery: [] } })} />
           </View>
           <View style={styles.destinationContent}>
             <Image source={{ uri: destination.imageUrl }} style={styles.destinationImage} />
