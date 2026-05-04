@@ -1,3 +1,11 @@
+import type {
+  GeneratedItinerary,
+  ItineraryActivity,
+  ItineraryCardSummary,
+  ItineraryDay,
+  ItineraryTransportOption,
+} from '@/types/itinerary';
+
 export const DEMO_UID = 'demo-user';
 
 export interface DemoDestinationDetail {
@@ -59,6 +67,13 @@ export interface SavedItem {
   rating?: string;
 }
 
+export type DemoItinerarySummary = ItineraryCardSummary & {
+  destination: string;
+  dateLabel?: string;
+  overview?: string;
+  days?: unknown[];
+};
+
 export const DEMO_DESTINATIONS = [
   {
     id: 'demo-dest-1',
@@ -66,6 +81,17 @@ export const DEMO_DESTINATIONS = [
     country: 'Japan',
     flag: '🇯🇵',
     imageUrl: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=400',
+    country: 'Japan',
+    tagline: 'Electric neighborhoods, quiet shrines, and late-night ramen counters.',
+    rating: 4.8,
+    idealLength: '5-7 days',
+    bestTimeToVisit: 'March to May',
+    flightTime: '13h from NYC',
+    overview:
+      'Tokyo blends meticulous design, hyperlocal food culture, and pockets of calm that make the city feel both cinematic and livable.',
+    highlights: ['Shibuya after dark', 'Tsukiji-side sushi mornings', 'Day trip access to Nikko or Hakone'],
+    signatureExperiences: ['TeamLab-style digital art', 'Izakaya hopping in Shinjuku', 'Sunrise at Senso-ji'],
+    travelNotes: ['Transit is extremely efficient', 'Neighborhood choice changes the pace of your stay'],
   },
   {
     id: 'demo-dest-2',
@@ -73,6 +99,17 @@ export const DEMO_DESTINATIONS = [
     country: 'France',
     flag: '🇫🇷',
     imageUrl: 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=400',
+    country: 'France',
+    tagline: 'Grand boulevards, corner bistros, and museum days that turn into river nights.',
+    rating: 4.7,
+    idealLength: '4-6 days',
+    bestTimeToVisit: 'April to June',
+    flightTime: '7h 30m from NYC',
+    overview:
+      'Paris rewards slow travel: long walks, neighborhood cafes, layered history, and enough iconic landmarks to anchor every day.',
+    highlights: ['Sunset along the Seine', 'Musee d Orsay afternoons', 'Cafe terraces in Le Marais'],
+    signatureExperiences: ['Picnic near the Eiffel Tower', 'Vintage shopping in Saint-Ouen', 'Pastry crawl across the Left Bank'],
+    travelNotes: ['Book major museums ahead', 'Most central neighborhoods are best explored on foot'],
   },
   {
     id: 'demo-dest-3',
@@ -80,6 +117,17 @@ export const DEMO_DESTINATIONS = [
     country: 'Indonesia',
     flag: '🇮🇩',
     imageUrl: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400',
+    country: 'Indonesia',
+    tagline: 'Jungle villas, temple cliffs, surf breaks, and deeply restorative mornings.',
+    rating: 4.9,
+    idealLength: '6-8 days',
+    bestTimeToVisit: 'May to September',
+    flightTime: '22h from NYC',
+    overview:
+      'Bali works best when split between distinct pockets such as Ubud, Canggu, and Uluwatu, each with its own rhythm.',
+    highlights: ['Clifftop sunsets in Uluwatu', 'Rice terraces outside Ubud', 'Beach clubs and cafes in Canggu'],
+    signatureExperiences: ['Balinese spa day', 'Sunrise waterfall visit', 'Scooter rides between hidden beaches'],
+    travelNotes: ['Traffic can stretch short distances', 'Choosing two bases often feels better than trying to cover the whole island'],
   },
   {
     id: 'demo-dest-4',
@@ -87,32 +135,75 @@ export const DEMO_DESTINATIONS = [
     country: 'United States',
     flag: '🇺🇸',
     imageUrl: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400',
+    country: 'United States',
+    tagline: 'Big-energy streets, neighborhood icons, and a constant feeling that something good is nearby.',
+    rating: 4.6,
+    idealLength: '3-5 days',
+    bestTimeToVisit: 'September to November',
+    flightTime: 'Domestic hub',
+    overview:
+      'New York is less about checking off landmarks and more about pairing museums, food, and neighborhoods into days that feel personal.',
+    highlights: ['West Village evenings', 'Central Park mornings', 'Brooklyn skyline views'],
+    signatureExperiences: ['Broadway night out', 'Bagels and gallery day in Chelsea', 'Rooftop dinner in Williamsburg'],
+    travelNotes: ['Subway access matters when picking a hotel', 'Reservations are worth it for popular restaurants'],
   },
 ];
 
-export const DEMO_ITINERARIES = [
+export const DEMO_ITINERARIES: DemoItinerarySummary[] = [
   {
     id: 'demo-itin-1',
     title: 'Weekend in Kyoto',
-    heroImage: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400',
+    destinationId: 'demo-dest-1',
+    destinationName: 'Kyoto',
+    destination: 'Kyoto',
+    country: 'Japan',
+    heroImage: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1200',
     rating: '4.8',
+    reviewCount: 312,
     interests: ['culture', 'history'],
-    summary: ['Visit Fushimi Inari Shrine', 'Arashiyama Bamboo Grove', 'Kinkaku-ji Temple'],
+    travelerType: 'Couple getaway',
+    budget: 'Moderate',
+    dateLabel: '3 days',
+    durationLabel: '3 days',
+    source: 'demo',
+    overview:
+      'A relaxed Kyoto long weekend built around temples, tea houses, scenic walks, and evening food stops.',
+    summary: [
+      'Visit Fushimi Inari Shrine',
+      'Walk through Arashiyama Bamboo Grove',
+      'See Kinkaku-ji Temple',
+    ],
   },
   {
     id: 'demo-itin-2',
     title: 'Amalfi Coast Adventure',
-    heroImage: 'https://images.unsplash.com/photo-1533106418989-88406c7cc8ca?w=400',
+    destinationId: 'demo-dest-2',
+    destinationName: 'Amalfi Coast',
+    destination: 'Amalfi Coast',
+    country: 'Italy',
+    heroImage: 'https://images.unsplash.com/photo-1533106418989-88406c7cc8ca?w=1200',
     rating: '4.9',
+    travelerType: 'Adventure seekers',
+    budget: 'Upscale',
     interests: ['adventure', 'beaches'],
+    durationLabel: '1 day',
+    source: 'demo',
     summary: ['Hike the Path of the Gods', 'Boat tour of sea caves', 'Dinner in Positano'],
   },
   {
     id: 'demo-itin-3',
     title: 'Safari in Kenya',
-    heroImage: 'https://images.unsplash.com/photo-1516426122078-c23e76319801?w=400',
+    destinationId: 'demo-dest-3',
+    destinationName: 'Masai Mara',
+    destination: 'Masai Mara',
+    country: 'Kenya',
+    heroImage: 'https://images.unsplash.com/photo-1516426122078-c23e76319801?w=1200',
     rating: '5.0',
+    travelerType: 'Wildlife lovers',
+    source: 'demo',
+    budget: 'Luxury',
     interests: ['wildlife', 'adventure'],
+    durationLabel: '1 day',
     summary: ['Masai Mara game drive', 'Sundowner cocktails', 'Hot air balloon safari'],
   },
 ];
@@ -126,50 +217,26 @@ export const DEMO_FEATURED_TRIP = {
 export const DEMO_FEATURED_ITINERARY = {
   id: 'demo-itin-1',
   title: 'Weekend in Kyoto',
-  heroImage: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400',
+  heroImage: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1200',
   summary: ['Visit Fushimi Inari Shrine', 'Arashiyama Bamboo Grove', 'Kinkaku-ji Temple'],
 };
 
-export interface DemoTransportOption {
-  mode: 'walk' | 'car' | 'bicycle' | 'bus' | 'train';
-  time: string;
-}
-
-export interface DemoActivity {
-  id: string;
-  name: string;
-  image: string;
-  rating: number;
-  reviewCount: string;
-  time: string;
-  cost?: string;
-  type: 'food' | 'landmark' | 'hotel';
-  transport: DemoTransportOption[];
-  coordinates: { latitude: number; longitude: number };
-}
-
-export interface DemoItineraryDay {
-  label: string;
-  activities: DemoActivity[];
-}
-
-export interface DemoFullItinerary {
-  id: string;
-  title: string;
-  heroImage: string;
-  mapImage: string;
-  subtitle: string;
-  days: DemoItineraryDay[];
-  isActive?: boolean;
-}
+export type DemoTransportOption = ItineraryTransportOption;
+export type DemoActivity = ItineraryActivity;
+export type DemoItineraryDay = ItineraryDay;
+export type DemoFullItinerary = GeneratedItinerary;
 
 export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
   {
     id: 'demo-itin-1',
     title: 'Tokyo, Japan 🇯🇵',
+    destinationId: 'demo-dest-1',
+    destinationName: 'Tokyo',
+    country: 'Japan',
     heroImage: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800',
     mapImage: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=800',
     subtitle: 'Dec 12 - Dec 14, 2023  •  A Couple  •  Luxury',
+    source: 'demo',
     isActive: true,
     days: [
       {
@@ -183,7 +250,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             reviewCount: '1,573',
             time: '08:00 - 09:00 AM',
             cost: '$30.00',
-            type: 'food',
+            category: 'food',
             coordinates: { latitude: 35.6712, longitude: 139.7649 },
             transport: [
               { mode: 'walk', time: '10 min' },
@@ -200,7 +267,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             rating: 4.4,
             reviewCount: '73,258',
             time: '09:00 AM - 12:00 PM',
-            type: 'landmark',
+            category: 'landmark',
             coordinates: { latitude: 35.6586, longitude: 139.7454 },
             transport: [
               { mode: 'walk', time: '9 min' },
@@ -218,7 +285,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             reviewCount: '1,736',
             time: '12:00 - 13:30 PM',
             cost: '$35.00',
-            type: 'food',
+            category: 'food',
             coordinates: { latitude: 35.6655, longitude: 139.7707 },
             transport: [
               { mode: 'walk', time: '12 min' },
@@ -236,7 +303,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             reviewCount: '28,903',
             time: '13:30 - 16:00 PM',
             cost: '$45.00',
-            type: 'landmark',
+            category: 'landmark',
             coordinates: { latitude: 35.6852, longitude: 139.7528 },
             transport: [
               { mode: 'walk', time: '13 min' },
@@ -254,7 +321,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             reviewCount: '1,508',
             time: '16:00 - 17:30 PM',
             cost: '$30.00',
-            type: 'food',
+            category: 'food',
             coordinates: { latitude: 35.6699, longitude: 139.7669 },
             transport: [
               { mode: 'walk', time: '3 min' },
@@ -272,7 +339,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             reviewCount: '4,205',
             time: '17:30 - 20:00 PM',
             cost: '$65.00',
-            type: 'hotel',
+            category: 'hotel',
             coordinates: { latitude: 35.6892, longitude: 139.7709 },
             transport: [
               { mode: 'walk', time: '5 min' },
@@ -294,7 +361,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             rating: 4.7,
             reviewCount: '112,450',
             time: '08:00 - 10:00 AM',
-            type: 'landmark',
+            category: 'landmark',
             coordinates: { latitude: 35.7148, longitude: 139.7967 },
             transport: [
               { mode: 'walk', time: '20 min' },
@@ -311,7 +378,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             rating: 4.5,
             reviewCount: '34,200',
             time: '10:00 AM - 12:00 PM',
-            type: 'landmark',
+            category: 'landmark',
             coordinates: { latitude: 35.7135, longitude: 139.7960 },
             transport: [
               { mode: 'walk', time: '2 min' },
@@ -329,7 +396,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             reviewCount: '8,910',
             time: '12:00 - 13:00 PM',
             cost: '$20.00',
-            type: 'food',
+            category: 'food',
             coordinates: { latitude: 35.7094, longitude: 139.7944 },
             transport: [
               { mode: 'walk', time: '8 min' },
@@ -346,7 +413,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             rating: 4.8,
             reviewCount: '98,340',
             time: '14:00 - 16:00 PM',
-            type: 'landmark',
+            category: 'landmark',
             coordinates: { latitude: 35.6595, longitude: 139.7004 },
             transport: [
               { mode: 'walk', time: '--' },
@@ -369,7 +436,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             reviewCount: '22,100',
             time: '09:00 AM - 12:00 PM',
             cost: '$40.00',
-            type: 'landmark',
+            category: 'landmark',
             coordinates: { latitude: 35.6261, longitude: 139.7758 },
             transport: [
               { mode: 'walk', time: '--' },
@@ -386,7 +453,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             rating: 4.3,
             reviewCount: '41,800',
             time: '12:30 - 14:30 PM',
-            type: 'landmark',
+            category: 'landmark',
             coordinates: { latitude: 35.6702, longitude: 139.7027 },
             transport: [
               { mode: 'walk', time: '--' },
@@ -404,7 +471,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             reviewCount: '3,102',
             time: '18:00 - 20:00 PM',
             cost: '$300.00',
-            type: 'food',
+            category: 'food',
             coordinates: { latitude: 35.6717, longitude: 139.7652 },
             transport: [
               { mode: 'walk', time: '10 min' },
@@ -421,9 +488,13 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
   {
     id: 'demo-itin-paris',
     title: 'Paris, France 🇫🇷',
+    destinationId: 'demo-dest-2',
+    destinationName: 'Paris',
+    country: 'France',
     heroImage: 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=800',
     mapImage: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=800',
     subtitle: 'Mar 5 - Mar 10, 2024  •  Solo  •  Budget',
+    source: 'demo',
     isActive: false,
     days: [],
   },

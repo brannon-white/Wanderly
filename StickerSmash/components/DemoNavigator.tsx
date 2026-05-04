@@ -14,6 +14,7 @@ import { useDemo } from '@/context/DemoContext';
 
 const DEMO_SCREENS: { label: string; screen: keyof RootStackParamList; params?: any }[] = [
   { label: 'Discover (Main App)', screen: 'Index' },
+  { label: 'Destination Detail', screen: 'DestinationDetail', params: { id: 'demo-dest-1' } },
   { label: 'Auth', screen: 'Auth' },
   { label: 'Sign In', screen: 'SignIn' },
   { label: 'Sign Up', screen: 'SignUp' },
