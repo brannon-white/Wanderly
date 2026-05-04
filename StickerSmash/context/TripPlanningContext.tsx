@@ -4,8 +4,9 @@ export type TripFlow = 'full' | 'prebuilt';
 
 interface TripPlanningState {
   flow: TripFlow;
+  editingTripId: string; // non-empty when editing an existing committed trip
   destinationId: string;
-  templateId: string;   // for prebuilt flow: which itinerary template
+  templateId: string;
   templateTitle: string;
   templateHeroImage: string;
   party: string;
@@ -17,6 +18,7 @@ interface TripPlanningState {
 
 interface TripPlanningContextType extends TripPlanningState {
   setFlow: (flow: TripFlow) => void;
+  setEditingTripId: (id: string) => void;
   setDestinationId: (id: string) => void;
   setTemplateId: (id: string) => void;
   setTemplateTitle: (title: string) => void;
@@ -31,6 +33,7 @@ interface TripPlanningContextType extends TripPlanningState {
 
 const defaultState: TripPlanningState = {
   flow: 'full',
+  editingTripId: '',
   destinationId: '',
   templateId: '',
   templateTitle: '',
@@ -45,6 +48,7 @@ const defaultState: TripPlanningState = {
 const TripPlanningContext = createContext<TripPlanningContextType>({
   ...defaultState,
   setFlow: () => {},
+  setEditingTripId: () => {},
   setDestinationId: () => {},
   setTemplateId: () => {},
   setTemplateTitle: () => {},
@@ -61,6 +65,7 @@ export function TripPlanningProvider({ children }: { children: React.ReactNode }
   const [state, setState] = useState<TripPlanningState>(defaultState);
 
   const setFlow = (flow: TripFlow) => setState(s => ({ ...s, flow }));
+  const setEditingTripId = (editingTripId: string) => setState(s => ({ ...s, editingTripId }));
   const setDestinationId = (destinationId: string) => setState(s => ({ ...s, destinationId }));
   const setTemplateId = (templateId: string) => setState(s => ({ ...s, templateId }));
   const setTemplateTitle = (templateTitle: string) => setState(s => ({ ...s, templateTitle }));
@@ -76,7 +81,7 @@ export function TripPlanningProvider({ children }: { children: React.ReactNode }
     <TripPlanningContext.Provider
       value={{
         ...state,
-        setFlow, setDestinationId, setTemplateId, setTemplateTitle, setTemplateHeroImage,
+        setFlow, setEditingTripId, setDestinationId, setTemplateId, setTemplateTitle, setTemplateHeroImage,
         setParty, setStartDate, setEndDate, setInterests, setBudget, reset,
       }}
     >

@@ -14,6 +14,7 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
 import { styles } from '@/styles/destinationScreenStyles';
 import { DEMO_DESTINATIONS, DEMO_DESTINATION_DETAILS } from '@/data/demoData';
+import type { SearchedDestination } from '@/services/locationSearch';
 import { useSaved } from '@/context/SavedContext';
 import { useTripPlanning } from '@/context/TripPlanningContext';
 
@@ -24,14 +25,19 @@ export default function DestinationScreen() {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RoutePropType>();
   const insets = useSafeAreaInsets();
-  const { id } = route.params;
+  const { id, searchedDestination } = route.params;
 
   const { isSaved, toggleSaved } = useSaved();
   const { setDestinationId, reset } = useTripPlanning();
   const [showSavedToast, setShowSavedToast] = useState(false);
 
-  const destination = DEMO_DESTINATIONS.find((d) => d.id === id) ?? DEMO_DESTINATIONS[0];
-  const detail = DEMO_DESTINATION_DETAILS[destination.id];
+  const destination = searchedDestination
+    ? { id: searchedDestination.id, name: searchedDestination.name, country: searchedDestination.country, flag: searchedDestination.flag, imageUrl: searchedDestination.imageUrl }
+    : (DEMO_DESTINATIONS.find((d) => d.id === id) ?? DEMO_DESTINATIONS[0]);
+
+  const detail = searchedDestination
+    ? { id: searchedDestination.id, description: '', gallery: searchedDestination.gallery }
+    : DEMO_DESTINATION_DETAILS[destination.id];
   const saved = isSaved(destination.id);
 
   const handleBookmark = () => {
