@@ -19,6 +19,7 @@ type Tab = 'Active' | 'Passed';
 
 function TripCard({ trip }: { trip: CommittedTrip }) {
   const navigation = useNavigation<NavProp>();
+
   return (
     <TouchableOpacity
       style={styles.card}
@@ -43,7 +44,7 @@ export default function MyTripsScreen() {
   const [activeTab, setActiveTab] = useState<Tab>('Active');
   const { trips } = useMyTrips();
 
-  const filtered = trips.filter(t =>
+  const filtered = trips.filter((t) =>
     activeTab === 'Active' ? isTripActive(t) : !isTripActive(t)
   );
 

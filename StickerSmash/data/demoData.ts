@@ -1,3 +1,11 @@
+import type {
+  GeneratedItinerary,
+  ItineraryActivity,
+  ItineraryCardSummary,
+  ItineraryDay,
+  ItineraryTransportOption,
+} from '@/types/itinerary';
+
 export const DEMO_UID = 'demo-user';
 
 export interface DemoDestinationDetail {
@@ -58,6 +66,13 @@ export interface SavedItem {
   flag?: string;
   rating?: string;
 }
+
+export type DemoItinerarySummary = ItineraryCardSummary & {
+  destination: string;
+  dateLabel?: string;
+  overview?: string;
+  days?: unknown[];
+};
 
 export const DEMO_DESTINATIONS = [
   {
@@ -134,10 +149,12 @@ export const DEMO_DESTINATIONS = [
   },
 ];
 
-export const DEMO_ITINERARIES = [
+export const DEMO_ITINERARIES: DemoItinerarySummary[] = [
   {
     id: 'demo-itin-1',
     title: 'Weekend in Kyoto',
+    destinationId: 'demo-dest-1',
+    destinationName: 'Kyoto',
     destination: 'Kyoto',
     country: 'Japan',
     heroImage: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1200',
@@ -147,6 +164,8 @@ export const DEMO_ITINERARIES = [
     travelerType: 'Couple getaway',
     budget: 'Moderate',
     dateLabel: '3 days',
+    durationLabel: '3 days',
+    source: 'demo',
     overview:
       'A relaxed Kyoto long weekend built around temples, tea houses, scenic walks, and evening food stops.',
     summary: [
@@ -154,145 +173,12 @@ export const DEMO_ITINERARIES = [
       'Walk through Arashiyama Bamboo Grove',
       'See Kinkaku-ji Temple',
     ],
-    days: [
-      {
-        title: 'Arrival and Higashiyama',
-        dateLabel: 'Day 1',
-        items: [
-          {
-            title: 'Coffee and pastries at Weekenders',
-            category: 'Breakfast',
-            description: 'Start the morning with a light breakfast before heading into the temple district.',
-            time: '8:00 AM - 9:00 AM',
-            price: '$18',
-            rating: 4.7,
-            reviewCount: 842,
-            imageUrl:
-              'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=800',
-            mapUrl: 'https://maps.google.com/?q=Weekenders+Coffee+Kyoto',
-            transitOptions: [
-              { mode: 'walk', label: 'Walk', time: '8 min' },
-              { mode: 'train', label: 'Train', time: '14 min' },
-            ],
-          },
-          {
-            title: 'Fushimi Inari Shrine',
-            category: 'Sightseeing',
-            description: 'Climb part of the torii-lined trail before the crowds peak.',
-            time: '10:00 AM - 12:30 PM',
-            price: 'Free',
-            rating: 4.9,
-            reviewCount: 58231,
-            imageUrl:
-              'https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=800',
-            mapUrl: 'https://maps.google.com/?q=Fushimi+Inari+Shrine',
-            transitOptions: [
-              { mode: 'train', label: 'Train', time: '22 min' },
-              { mode: 'taxi', label: 'Taxi', time: '16 min' },
-            ],
-          },
-          {
-            title: 'Kaiseki dinner in Gion',
-            category: 'Dinner',
-            description: 'Slow evening meal with seasonal Kyoto dishes in a traditional setting.',
-            time: '7:00 PM - 9:00 PM',
-            price: '$95',
-            rating: 4.8,
-            reviewCount: 430,
-            imageUrl:
-              'https://images.unsplash.com/photo-1559339352-11d035aa65de?w=800',
-            mapUrl: 'https://maps.google.com/?q=Gion+Kyoto',
-            transitOptions: [
-              { mode: 'walk', label: 'Walk', time: '11 min' },
-            ],
-          },
-        ],
-      },
-      {
-        title: 'Arashiyama and River Views',
-        dateLabel: 'Day 2',
-        items: [
-          {
-            title: 'Arashiyama Bamboo Grove',
-            category: 'Nature',
-            description: 'Go early for quieter paths and better photo light through the grove.',
-            time: '7:30 AM - 9:30 AM',
-            price: 'Free',
-            rating: 4.8,
-            reviewCount: 19442,
-            imageUrl:
-              'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800',
-            mapUrl: 'https://maps.google.com/?q=Arashiyama+Bamboo+Grove',
-            transitOptions: [
-              { mode: 'train', label: 'Train', time: '28 min' },
-              { mode: 'bike', label: 'Bike', time: '34 min' },
-            ],
-          },
-          {
-            title: 'Tenryu-ji garden visit',
-            category: 'Culture',
-            description: 'Spend time in the landscaped temple grounds beside the grove.',
-            time: '10:00 AM - 11:30 AM',
-            price: '$8',
-            rating: 4.6,
-            reviewCount: 2601,
-            imageUrl:
-              'https://images.unsplash.com/photo-1526481280695-3c4691d5d1af?w=800',
-            mapUrl: 'https://maps.google.com/?q=Tenryu-ji+Kyoto',
-          },
-          {
-            title: 'Sunset by Togetsukyo Bridge',
-            category: 'Evening',
-            description: 'End the day with a scenic walk along the Katsura River.',
-            time: '5:30 PM - 7:00 PM',
-            price: 'Free',
-            rating: 4.7,
-            reviewCount: 1387,
-            imageUrl:
-              'https://images.unsplash.com/photo-1492571350019-22de08371fd3?w=800',
-            mapUrl: 'https://maps.google.com/?q=Togetsukyo+Bridge',
-          },
-        ],
-      },
-      {
-        title: 'Northern Kyoto Highlights',
-        dateLabel: 'Day 3',
-        items: [
-          {
-            title: 'Kinkaku-ji Temple',
-            category: 'Sightseeing',
-            description: 'Visit the Golden Pavilion before checkout for one last Kyoto icon.',
-            time: '9:00 AM - 10:30 AM',
-            price: '$4',
-            rating: 4.8,
-            reviewCount: 25014,
-            imageUrl:
-              'https://images.unsplash.com/photo-1491884662610-dfcd28f30cfb?w=800',
-            mapUrl: 'https://maps.google.com/?q=Kinkaku-ji+Kyoto',
-            transitOptions: [
-              { mode: 'bus', label: 'Bus', time: '26 min' },
-              { mode: 'taxi', label: 'Taxi', time: '14 min' },
-            ],
-          },
-          {
-            title: 'Matcha dessert stop',
-            category: 'Dessert',
-            description: 'Pick up a final sweet treat and souvenirs before departure.',
-            time: '11:00 AM - 12:00 PM',
-            price: '$12',
-            rating: 4.5,
-            reviewCount: 219,
-            imageUrl:
-              'https://images.unsplash.com/photo-1515823064-d6e0c04616a7?w=800',
-            mapUrl: 'https://maps.google.com/?q=Matcha+Kyoto',
-          },
-        ],
-      },
-    ],
   },
   {
     id: 'demo-itin-2',
     title: 'Amalfi Coast Adventure',
+    destinationId: 'demo-dest-2',
+    destinationName: 'Amalfi Coast',
     destination: 'Amalfi Coast',
     country: 'Italy',
     heroImage: 'https://images.unsplash.com/photo-1533106418989-88406c7cc8ca?w=1200',
@@ -300,49 +186,25 @@ export const DEMO_ITINERARIES = [
     travelerType: 'Adventure seekers',
     budget: 'Upscale',
     interests: ['adventure', 'beaches'],
+    durationLabel: '1 day',
+    source: 'demo',
     summary: ['Hike the Path of the Gods', 'Boat tour of sea caves', 'Dinner in Positano'],
-    days: [
-      {
-        title: 'Clifftop trails',
-        dateLabel: 'Day 1',
-        items: [
-          {
-            title: 'Path of the Gods hike',
-            category: 'Adventure',
-            time: '8:00 AM - 12:00 PM',
-            price: 'Free',
-            description: 'A coastal ridge walk with panoramic views over the sea and villages below.',
-          },
-        ],
-      },
-    ],
   },
   {
     id: 'demo-itin-3',
     title: 'Safari in Kenya',
+    destinationId: 'demo-dest-3',
+    destinationName: 'Masai Mara',
     destination: 'Masai Mara',
     country: 'Kenya',
     heroImage: 'https://images.unsplash.com/photo-1516426122078-c23e76319801?w=1200',
     rating: '5.0',
     travelerType: 'Wildlife lovers',
+    source: 'demo',
     budget: 'Luxury',
     interests: ['wildlife', 'adventure'],
+    durationLabel: '1 day',
     summary: ['Masai Mara game drive', 'Sundowner cocktails', 'Hot air balloon safari'],
-    days: [
-      {
-        title: 'Reserve arrival',
-        dateLabel: 'Day 1',
-        items: [
-          {
-            title: 'Sunset game drive',
-            category: 'Wildlife',
-            time: '4:00 PM - 7:00 PM',
-            price: 'Included',
-            description: 'Ease into the trip with a first drive across the reserve at golden hour.',
-          },
-        ],
-      },
-    ],
   },
 ];
 
@@ -359,46 +221,22 @@ export const DEMO_FEATURED_ITINERARY = {
   summary: ['Visit Fushimi Inari Shrine', 'Arashiyama Bamboo Grove', 'Kinkaku-ji Temple'],
 };
 
-export interface DemoTransportOption {
-  mode: 'walk' | 'car' | 'bicycle' | 'bus' | 'train';
-  time: string;
-}
-
-export interface DemoActivity {
-  id: string;
-  name: string;
-  image: string;
-  rating: number;
-  reviewCount: string;
-  time: string;
-  cost?: string;
-  type: 'food' | 'landmark' | 'hotel';
-  transport: DemoTransportOption[];
-  coordinates: { latitude: number; longitude: number };
-}
-
-export interface DemoItineraryDay {
-  label: string;
-  activities: DemoActivity[];
-}
-
-export interface DemoFullItinerary {
-  id: string;
-  title: string;
-  heroImage: string;
-  mapImage: string;
-  subtitle: string;
-  days: DemoItineraryDay[];
-  isActive?: boolean;
-}
+export type DemoTransportOption = ItineraryTransportOption;
+export type DemoActivity = ItineraryActivity;
+export type DemoItineraryDay = ItineraryDay;
+export type DemoFullItinerary = GeneratedItinerary;
 
 export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
   {
     id: 'demo-itin-1',
     title: 'Tokyo, Japan 🇯🇵',
+    destinationId: 'demo-dest-1',
+    destinationName: 'Tokyo',
+    country: 'Japan',
     heroImage: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800',
     mapImage: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=800',
     subtitle: 'Dec 12 - Dec 14, 2023  •  A Couple  •  Luxury',
+    source: 'demo',
     isActive: true,
     days: [
       {
@@ -412,7 +250,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             reviewCount: '1,573',
             time: '08:00 - 09:00 AM',
             cost: '$30.00',
-            type: 'food',
+            category: 'food',
             coordinates: { latitude: 35.6712, longitude: 139.7649 },
             transport: [
               { mode: 'walk', time: '10 min' },
@@ -429,7 +267,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             rating: 4.4,
             reviewCount: '73,258',
             time: '09:00 AM - 12:00 PM',
-            type: 'landmark',
+            category: 'landmark',
             coordinates: { latitude: 35.6586, longitude: 139.7454 },
             transport: [
               { mode: 'walk', time: '9 min' },
@@ -447,7 +285,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             reviewCount: '1,736',
             time: '12:00 - 13:30 PM',
             cost: '$35.00',
-            type: 'food',
+            category: 'food',
             coordinates: { latitude: 35.6655, longitude: 139.7707 },
             transport: [
               { mode: 'walk', time: '12 min' },
@@ -465,7 +303,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             reviewCount: '28,903',
             time: '13:30 - 16:00 PM',
             cost: '$45.00',
-            type: 'landmark',
+            category: 'landmark',
             coordinates: { latitude: 35.6852, longitude: 139.7528 },
             transport: [
               { mode: 'walk', time: '13 min' },
@@ -483,7 +321,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             reviewCount: '1,508',
             time: '16:00 - 17:30 PM',
             cost: '$30.00',
-            type: 'food',
+            category: 'food',
             coordinates: { latitude: 35.6699, longitude: 139.7669 },
             transport: [
               { mode: 'walk', time: '3 min' },
@@ -501,7 +339,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             reviewCount: '4,205',
             time: '17:30 - 20:00 PM',
             cost: '$65.00',
-            type: 'hotel',
+            category: 'hotel',
             coordinates: { latitude: 35.6892, longitude: 139.7709 },
             transport: [
               { mode: 'walk', time: '5 min' },
@@ -523,7 +361,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             rating: 4.7,
             reviewCount: '112,450',
             time: '08:00 - 10:00 AM',
-            type: 'landmark',
+            category: 'landmark',
             coordinates: { latitude: 35.7148, longitude: 139.7967 },
             transport: [
               { mode: 'walk', time: '20 min' },
@@ -540,7 +378,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             rating: 4.5,
             reviewCount: '34,200',
             time: '10:00 AM - 12:00 PM',
-            type: 'landmark',
+            category: 'landmark',
             coordinates: { latitude: 35.7135, longitude: 139.7960 },
             transport: [
               { mode: 'walk', time: '2 min' },
@@ -558,7 +396,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             reviewCount: '8,910',
             time: '12:00 - 13:00 PM',
             cost: '$20.00',
-            type: 'food',
+            category: 'food',
             coordinates: { latitude: 35.7094, longitude: 139.7944 },
             transport: [
               { mode: 'walk', time: '8 min' },
@@ -575,7 +413,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             rating: 4.8,
             reviewCount: '98,340',
             time: '14:00 - 16:00 PM',
-            type: 'landmark',
+            category: 'landmark',
             coordinates: { latitude: 35.6595, longitude: 139.7004 },
             transport: [
               { mode: 'walk', time: '--' },
@@ -598,7 +436,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             reviewCount: '22,100',
             time: '09:00 AM - 12:00 PM',
             cost: '$40.00',
-            type: 'landmark',
+            category: 'landmark',
             coordinates: { latitude: 35.6261, longitude: 139.7758 },
             transport: [
               { mode: 'walk', time: '--' },
@@ -615,7 +453,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             rating: 4.3,
             reviewCount: '41,800',
             time: '12:30 - 14:30 PM',
-            type: 'landmark',
+            category: 'landmark',
             coordinates: { latitude: 35.6702, longitude: 139.7027 },
             transport: [
               { mode: 'walk', time: '--' },
@@ -633,7 +471,7 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
             reviewCount: '3,102',
             time: '18:00 - 20:00 PM',
             cost: '$300.00',
-            type: 'food',
+            category: 'food',
             coordinates: { latitude: 35.6717, longitude: 139.7652 },
             transport: [
               { mode: 'walk', time: '10 min' },
@@ -650,9 +488,13 @@ export const DEMO_FULL_ITINERARIES: DemoFullItinerary[] = [
   {
     id: 'demo-itin-paris',
     title: 'Paris, France 🇫🇷',
+    destinationId: 'demo-dest-2',
+    destinationName: 'Paris',
+    country: 'France',
     heroImage: 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=800',
     mapImage: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=800',
     subtitle: 'Mar 5 - Mar 10, 2024  •  Solo  •  Budget',
+    source: 'demo',
     isActive: false,
     days: [],
   },

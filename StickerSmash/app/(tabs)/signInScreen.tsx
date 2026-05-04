@@ -10,17 +10,21 @@ import { GoogleSignin,statusCodes,GoogleSigninButton } from '@react-native-googl
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '@/app/_layout'; // adjust path 
-// @ts-ignore
-const { GOOGLE_WEB_CLIENT_ID, GOOGLE_IOS_CLIENT_ID } = Constants.expoConfig.extra;
-GoogleSignin.configure({
-  // This is your Web client ID, used for Firebase backend authentication
-  webClientId: GOOGLE_WEB_CLIENT_ID,
-  // This is your iOS client ID, which the native Google Sign-In SDK needs
-  // It's usually the 'reversed client ID' or the 'CLIENT_ID' from your GoogleService-Info.plist
-  iosClientId: GOOGLE_IOS_CLIENT_ID,
-  // Uncomment the line below if you need offline access (e.g., to get a refresh token)
-  // offlineAxccess: true,
-});
+const expoExtra = (Constants.expoConfig?.extra ?? {}) as {
+  GOOGLE_WEB_CLIENT_ID?: string;
+  GOOGLE_IOS_CLIENT_ID?: string;
+};
+
+if (expoExtra.GOOGLE_WEB_CLIENT_ID && expoExtra.GOOGLE_IOS_CLIENT_ID) {
+  GoogleSignin.configure({
+    // Web client ID used for Firebase backend authentication
+    webClientId: expoExtra.GOOGLE_WEB_CLIENT_ID,
+    // iOS client ID for native Google Sign-In SDK
+    iosClientId: expoExtra.GOOGLE_IOS_CLIENT_ID,
+  });
+} else {
+  console.warn('Google Sign-In client IDs are missing from Expo extra config.');
+}
 
 export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
   const { isDemoMode } = useDemo();
