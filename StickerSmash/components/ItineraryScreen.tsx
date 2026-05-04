@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,21 +8,34 @@ import {
   Linking,
   Platform,
   StatusBar,
-  Modal,
-  StyleSheet,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
-import ViewShot from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
 import { styles, ICON_COLOR, ICON_COLOR_DIMMED, makeScrollContentStyle } from '../styles/TravelItinerary';
-import { DEMO_FULL_ITINERARIES, DemoActivity } from '@/data/demoData';
+import { DEMO_FULL_ITINERARIES } from '@/data/demoData';
 import { useTripPlanning } from '@/context/TripPlanningContext';
 import { useMyTrips, formatTripSubtitle } from '@/context/MyTripsContext';
+import type { GeneratedItinerary, ItineraryActivity } from '@/types/itinerary';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
+
+let MapsModule:
+  | {
+      default: React.ComponentType<any>;
+      Marker: React.ComponentType<any>;
+    }
+  | null = null;
+
+try {
+  MapsModule = require('react-native-maps');
+} catch {
+  MapsModule = null;
+}
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 type RoutePropType = RouteProp<RootStackParamList, 'ItineraryScreen'>;
@@ -37,7 +50,7 @@ const TRANSPORT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   train: 'train-outline',
 };
 
-function StarRow(_: { rating: number }) {
+function StarRow() {
   return (
     <View style={styles.starRow}>
       {[1, 2, 3, 4, 5].map((i) => (
@@ -47,9 +60,11 @@ function StarRow(_: { rating: number }) {
   );
 }
 
-function ActivityCard({ activity }: { activity: DemoActivity }) {
+function ActivityCard({ activity }: { activity: ItineraryActivity }) {
+  const transportOptions = Array.isArray(activity.transport) ? activity.transport : [];
+
   const openMaps = () => {
-    Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(activity.name + ' Tokyo')}`);
+    Linking.openURL(activity.mapUrl || `https://maps.google.com/?q=${encodeURIComponent(activity.name)}`);
   };
 
   return (
@@ -57,33 +72,40 @@ function ActivityCard({ activity }: { activity: DemoActivity }) {
       <Image source={{ uri: activity.image }} style={styles.itemImage} />
       <View style={styles.itemDetails}>
         <Text style={styles.itemTitle}>{activity.name}</Text>
-        <View style={styles.ratingRow}>
-          <StarRow rating={activity.rating} />
-          <Text style={styles.ratingText}>
-            {'  '}({activity.rating.toFixed(1)}) {activity.reviewCount} reviews
-          </Text>
-        </View>
+
+        {typeof activity.rating === 'number' ? (
+          <View style={styles.ratingRow}>
+            <StarRow />
+            <Text style={styles.ratingText}>
+              {'  '}({activity.rating.toFixed(1)}) {activity.reviewCount} reviews
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.infoRow}>
           <Ionicons name="time-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
           <Text style={styles.infoText}>{activity.time}</Text>
         </View>
+
         {activity.cost ? (
           <View style={styles.infoRow}>
             <Ionicons name="cash-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
             <Text style={styles.infoText}>{activity.cost}</Text>
           </View>
         ) : null}
+
         <View style={styles.infoRow}>
           <Ionicons name="location-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
           <TouchableOpacity onPress={openMaps}>
             <Text style={styles.mapsLink}>View on Google Maps</Text>
           </TouchableOpacity>
         </View>
+
         <View style={styles.transportOptions}>
-          {activity.transport.map((t) => (
-            <View key={t.mode} style={styles.transportOption}>
+          {transportOptions.map((t) => (
+            <View key={`${activity.id}-${t.mode}-${t.time}`} style={styles.transportOption}>
               <Ionicons
-                name={TRANSPORT_ICONS[t.mode]}
+                name={TRANSPORT_ICONS[t.mode] ?? 'navigate-outline'}
                 size={20}
                 color={t.time === '--' ? ICON_COLOR_DIMMED : ICON_COLOR}
               />
@@ -102,51 +124,110 @@ export default function ItineraryScreen() {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RoutePropType>();
   const insets = useSafeAreaInsets();
-  const { reset, setFlow, setEditingTripId, setTemplateId, setTemplateTitle, setTemplateHeroImage, setParty, setStartDate, setEndDate, setInterests, setBudget } = useTripPlanning();
+  const {
+    reset,
+    setFlow,
+    setEditingTripId,
+    setTemplateId,
+    setTemplateTitle,
+    setTemplateHeroImage,
+    setParty,
+    setStartDate,
+    setEndDate,
+    setInterests,
+    setBudget,
+  } = useTripPlanning();
   const { trips, removeTrip } = useMyTrips();
 
   const { id, source, committedTripId } = route.params;
   const isBrowsing = source !== 'mytrips';
-
-  const itinerary = DEMO_FULL_ITINERARIES.find((it) => it.id === id) ?? DEMO_FULL_ITINERARIES[0];
+  const demoItinerary = DEMO_FULL_ITINERARIES.find((it) => it.id === id) ?? null;
   const committedTrip = committedTripId ? trips.find(t => t.id === committedTripId) : undefined;
+  const [remoteItinerary, setRemoteItinerary] = useState<GeneratedItinerary | null>(null);
+  const [loadingRemote, setLoadingRemote] = useState(!demoItinerary);
+  const [remoteLoadError, setRemoteLoadError] = useState<string | null>(null);
+  const itinerary = remoteItinerary ?? demoItinerary;
 
   const [selectedDay, setSelectedDay] = useState(0);
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [shareModalVisible, setShareModalVisible] = useState(false);
-  const shareCardRef = useRef<any>(null);
+  const activities = itinerary?.days[selectedDay]?.activities ?? [];
+  const MapView = MapsModule?.default;
+  const Marker = MapsModule?.Marker;
 
-  const handleShare = async () => {
-    try {
-      const uri = await shareCardRef.current?.capture();
-      if (!uri) return;
-      await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: 'Share your itinerary' });
-      setShareModalVisible(false);
-    } catch {
-      // share cancelled or failed silently
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRemoteItinerary() {
+      if (demoItinerary) {
+        setRemoteLoadError(null);
+        setLoadingRemote(false);
+        return;
+      }
+
+      const uid = auth().currentUser?.uid;
+      if (!uid) {
+        if (!cancelled) {
+          setRemoteLoadError('No signed-in Firebase user was available to load this saved itinerary.');
+        }
+        setLoadingRemote(false);
+        return;
+      }
+
+      setLoadingRemote(true);
+
+      try {
+        const snapshot = await firestore()
+          .collection('users')
+          .doc(uid)
+          .collection('itineraries')
+          .doc(id)
+          .get();
+
+        if (!snapshot.exists) {
+          if (!cancelled) {
+            setRemoteItinerary(null);
+            setRemoteLoadError(`No saved itinerary document was found for id "${id}".`);
+          }
+          return;
+        }
+
+        const data = snapshot.data() as GeneratedItinerary | undefined;
+        if (!cancelled && data) {
+          setRemoteLoadError(null);
+          setRemoteItinerary({
+            ...data,
+            id: data.id || snapshot.id,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load itinerary', error);
+        if (!cancelled) {
+          setRemoteLoadError(error instanceof Error ? error.message : 'Unknown Firestore read failure.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingRemote(false);
+        }
+      }
     }
-  };
 
-  const activities = itinerary.days[selectedDay]?.activities ?? [];
+    loadRemoteItinerary();
 
-  // When browsing show "Day 1", "Day 2" etc. When committed, show real dates.
+    return () => {
+      cancelled = true;
+    };
+  }, [demoItinerary, id]);
+
   const getDayLabel = (index: number): string => {
-    if (isBrowsing || !committedTrip) return `Day ${index + 1}`;
+    if (isBrowsing || !committedTrip) return itinerary?.days[index]?.label ?? `Day ${index + 1}`;
     const d = new Date(committedTrip.startDate);
     d.setDate(d.getDate() + index);
     return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
   };
 
-  const heroSubtitle = committedTrip
-    ? formatTripSubtitle(committedTrip)
-    : itinerary.subtitle;
-
-  const activityTeaser = itinerary.days[0]?.activities
-    .slice(0, 3)
-    .map((a: DemoActivity) => a.name)
-    .join(' · ');
+  const heroSubtitle = committedTrip ? formatTripSubtitle(committedTrip) : itinerary?.subtitle ?? '';
 
   const handlePlanThisTrip = () => {
+    if (!itinerary) return;
     reset();
     setFlow('prebuilt');
     setTemplateId(itinerary.id);
@@ -155,14 +236,8 @@ export default function ItineraryScreen() {
     navigation.navigate('TripDates');
   };
 
-  const handleDeleteTrip = () => {
-    if (committedTripId) removeTrip(committedTripId);
-    setMenuVisible(false);
-    navigation.navigate('Index' as any, { screen: 'MyTrips' } as any);
-  };
-
   const handleModifySettings = () => {
-    if (!committedTrip) return;
+    if (!committedTrip || !itinerary) return;
     reset();
     setFlow('full');
     setEditingTripId(committedTrip.id);
@@ -174,71 +249,111 @@ export default function ItineraryScreen() {
     setEndDate(new Date(committedTrip.endDate));
     setInterests(committedTrip.interests ?? []);
     setBudget(committedTrip.budget ?? '');
-    setMenuVisible(false);
     navigation.navigate('TripParty');
   };
 
+  const handleDeleteTrip = () => {
+    if (committedTripId) removeTrip(committedTripId);
+    navigation.navigate('Index' as any, { screen: 'MyTrips' } as any);
+  };
+
   const mapRegion = useMemo(() => {
-    const coords = activities.map((a) => a.coordinates);
+    const coords = activities
+      .map((activity) => activity.coordinates)
+      .filter((value): value is NonNullable<typeof value> => Boolean(value));
+
     if (!coords.length) return undefined;
+
     const lats = coords.map((c) => c.latitude);
     const lngs = coords.map((c) => c.longitude);
     const minLat = Math.min(...lats);
     const maxLat = Math.max(...lats);
     const minLng = Math.min(...lngs);
     const maxLng = Math.max(...lngs);
+
     return {
       latitude: (minLat + maxLat) / 2,
       longitude: (minLng + maxLng) / 2,
       latitudeDelta: Math.max(maxLat - minLat, 0.02) * 1.4,
       longitudeDelta: Math.max(maxLng - minLng, 0.02) * 1.4,
     };
-  }, [selectedDay]);
+  }, [activities]);
 
   const headerTop = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : insets.top + 8;
+
+  if (loadingRemote) {
+    return (
+      <View style={[styles.screen, { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }]}> 
+        <ActivityIndicator size="large" color={ICON_COLOR} />
+        <Text style={{ marginTop: 16, color: '#3D3555', fontFamily: 'SourceSans3-Regular', fontSize: 16, textAlign: 'center' }}>
+          Loading your itinerary...
+        </Text>
+      </View>
+    );
+  }
+
+  if (!itinerary) {
+    return (
+      <View style={[styles.screen, { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }]}> 
+        <Ionicons name="warning-outline" size={36} color={ICON_COLOR} />
+        <Text style={{ marginTop: 16, color: '#3D3555', fontFamily: 'SourceSans3-SemiBold', fontSize: 18, textAlign: 'center' }}>
+          Saved itinerary unavailable
+        </Text>
+        <Text style={{ marginTop: 8, color: '#5E5670', fontFamily: 'SourceSans3-Regular', fontSize: 15, textAlign: 'center' }}>
+          {remoteLoadError ?? 'The app could not load the saved itinerary document.'}
+        </Text>
+        <TouchableOpacity
+          style={[styles.planTripButton, { marginTop: 24 }]}
+          onPress={() => {
+            if (remoteLoadError) {
+              Alert.alert('Saved itinerary unavailable', remoteLoadError);
+            }
+            navigation.goBack();
+          }}
+        >
+          <Text style={styles.planTripButtonText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.screen}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-
       <ScrollView
         style={styles.itineraryContainer}
         contentContainerStyle={makeScrollContentStyle(insets.bottom, isBrowsing)}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero */}
         <View style={styles.heroSection}>
           <Image source={{ uri: itinerary.heroImage }} style={styles.heroImage} />
           <View style={styles.heroGradient} />
 
-          {/* Top bar */}
-          <View style={[styles.headerRow, { top: headerTop }]}>
+          <View style={[styles.headerRow, { top: headerTop }]}> 
             <TouchableOpacity style={styles.headerIconBtn} onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={20} color="#fff" />
             </TouchableOpacity>
             <View style={styles.headerRightIcons}>
-              <TouchableOpacity style={styles.headerIconBtn} onPress={() => setShareModalVisible(true)}>
+              <TouchableOpacity style={styles.headerIconBtn}>
                 <Ionicons name="share-social-outline" size={20} color="#fff" />
               </TouchableOpacity>
               {!isBrowsing && (
-                <TouchableOpacity style={styles.headerIconBtn} onPress={() => setMenuVisible(true)}>
-                  <Ionicons name="ellipsis-vertical" size={20} color="#fff" />
+                <TouchableOpacity style={styles.headerIconBtn} onPress={handleDeleteTrip}>
+                  <Ionicons name="trash-outline" size={20} color="#fff" />
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          {/* Hero text */}
           <View style={styles.heroTextContainer}>
             <Text style={styles.heroTitle}>{itinerary.title}</Text>
             <Text style={styles.heroSubtitle}>{heroSubtitle}</Text>
           </View>
         </View>
 
-        {/* Map */}
         <View style={styles.mapSection}>
           <View style={styles.mapContainer}>
-            {mapRegion && (
+            {MapView && Marker && mapRegion ? (
               <MapView
                 style={styles.mapImage}
                 region={mapRegion}
@@ -247,24 +362,55 @@ export default function ItineraryScreen() {
                 pitchEnabled={false}
                 rotateEnabled={false}
               >
-                {activities.map((activity) => (
-                  <Marker key={activity.id} coordinate={activity.coordinates} title={activity.name} />
-                ))}
+                {activities
+                  .filter((activity) => activity.coordinates)
+                  .map((activity) => (
+                    <Marker key={activity.id} coordinate={activity.coordinates!} title={activity.name} />
+                  ))}
               </MapView>
+            ) : (
+              <View style={[styles.mapImage, { alignItems: 'center', justifyContent: 'center' }]}> 
+                {activities[0]?.image ? <Image source={{ uri: activities[0].image }} style={styles.mapImage} /> : null}
+                <View
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    left: 0,
+                    backgroundColor: 'rgba(53, 43, 88, 0.25)',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingHorizontal: 20,
+                  }}
+                >
+                  <Ionicons name="map-outline" size={30} color="#fff" />
+                  <Text
+                    style={{
+                      marginTop: 10,
+                      color: '#fff',
+                      fontSize: 14,
+                      textAlign: 'center',
+                      fontFamily: 'SourceSans3-Regular',
+                    }}
+                  >
+                    Map preview unavailable in this build. Use the activity cards below to open locations.
+                  </Text>
+                </View>
+              </View>
             )}
           </View>
         </View>
 
-        {/* Day tabs */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.dateSelector}
           contentContainerStyle={styles.dateSelectorContent}
         >
-          {itinerary.days.map((_, index) => (
+          {itinerary.days.map((day, index) => (
             <TouchableOpacity
-              key={index}
+              key={`${day.label}-${index}`}
               style={[styles.dateBtn, selectedDay === index && styles.dateBtnActive]}
               onPress={() => setSelectedDay(index)}
             >
@@ -275,7 +421,6 @@ export default function ItineraryScreen() {
           ))}
         </ScrollView>
 
-        {/* Activity cards */}
         <View style={styles.itineraryItems}>
           {activities.map((activity) => (
             <ActivityCard key={activity.id} activity={activity} />
@@ -283,225 +428,19 @@ export default function ItineraryScreen() {
         </View>
       </ScrollView>
 
-      {/* Edit FAB — only for committed trips */}
       {!isBrowsing && (
-        <TouchableOpacity style={[styles.fab, { bottom: insets.bottom + 24 }]}>
+        <TouchableOpacity style={[styles.fab, { bottom: insets.bottom + 24 }]} onPress={handleModifySettings}>
           <Ionicons name="pencil" size={22} color="#fff" />
         </TouchableOpacity>
       )}
 
-      {/* Plan This Trip CTA — only when browsing */}
       {isBrowsing && (
-        <View style={[styles.ctaBar, { paddingBottom: insets.bottom + 16 }]}>
+        <View style={[styles.ctaBar, { paddingBottom: insets.bottom + 16 }]}> 
           <TouchableOpacity style={styles.ctaBtn} onPress={handlePlanThisTrip} activeOpacity={0.85}>
             <Text style={styles.ctaBtnText}>Plan This Trip</Text>
           </TouchableOpacity>
         </View>
       )}
-
-      {/* Share card preview */}
-      <Modal visible={shareModalVisible} transparent animationType="slide">
-        <View style={shareStyles.backdrop}>
-          <View style={shareStyles.sheet}>
-            <Text style={shareStyles.sheetTitle}>Share Itinerary</Text>
-
-            <ViewShot ref={shareCardRef} options={{ format: 'jpg', quality: 0.95 }}>
-              <View style={shareStyles.card}>
-                <Image source={{ uri: itinerary.heroImage }} style={shareStyles.cardImage} />
-                <View style={shareStyles.cardScrim} />
-                <View style={shareStyles.cardBottom}>
-                  <View>
-                    <Text style={shareStyles.cardBrand}>WANDERLY</Text>
-                    <Text style={shareStyles.cardTitle}>{itinerary.title}</Text>
-                    <Text style={shareStyles.cardSubtitle}>{heroSubtitle}</Text>
-                    {activityTeaser ? (
-                      <Text style={shareStyles.cardTeaser}>{activityTeaser}</Text>
-                    ) : null}
-                  </View>
-                  <Text style={shareStyles.cardUrl}>wanderly.app</Text>
-                </View>
-              </View>
-            </ViewShot>
-
-            <TouchableOpacity style={shareStyles.shareBtn} onPress={handleShare} activeOpacity={0.85}>
-              <Ionicons name="share-social-outline" size={20} color="#fff" />
-              <Text style={shareStyles.shareBtnText}>Share</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={shareStyles.cancelBtn} onPress={() => setShareModalVisible(false)}>
-              <Text style={shareStyles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Ellipsis dropdown menu */}
-      <Modal visible={menuVisible} transparent animationType="fade">
-        <TouchableOpacity style={menuStyles.overlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
-          <View style={[menuStyles.card, { top: headerTop + 52, right: 16 }]}>
-            <TouchableOpacity style={menuStyles.item} onPress={() => setMenuVisible(false)}>
-              <Ionicons name="refresh-outline" size={20} color="#222" style={menuStyles.icon} />
-              <Text style={menuStyles.itemText}>Regenerate Trip</Text>
-            </TouchableOpacity>
-            <View style={menuStyles.divider} />
-            <TouchableOpacity style={menuStyles.item} onPress={handleModifySettings}>
-              <Ionicons name="settings-outline" size={20} color="#222" style={menuStyles.icon} />
-              <Text style={menuStyles.itemText}>Modify Trip Settings</Text>
-            </TouchableOpacity>
-            <View style={menuStyles.divider} />
-            <TouchableOpacity style={menuStyles.item} onPress={handleDeleteTrip}>
-              <Ionicons name="trash-outline" size={20} color="#E53935" style={menuStyles.icon} />
-              <Text style={[menuStyles.itemText, { color: '#E53935' }]}>Delete Trip</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 }
-
-const menuStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-  },
-  card: {
-    position: 'absolute',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    width: 240,
-    shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 10,
-    overflow: 'hidden',
-  },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-  },
-  icon: {
-    marginRight: 14,
-  },
-  itemText: {
-    fontSize: 16,
-    color: '#222',
-    fontFamily: 'SourceSans3-Regular',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#F0F0F0',
-    marginHorizontal: 0,
-  },
-});
-
-const shareStyles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    padding: 24,
-    paddingBottom: 44,
-    alignItems: 'center',
-  },
-  sheetTitle: {
-    fontSize: 18,
-    fontFamily: 'Merriweather_24pt-Bold',
-    color: '#222',
-    marginBottom: 20,
-  },
-  card: {
-    width: 340,
-    height: 460,
-    borderRadius: 20,
-    overflow: 'hidden',
-    backgroundColor: '#111',
-  },
-  cardImage: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    resizeMode: 'cover',
-  },
-  cardScrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-  },
-  cardBottom: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '52%',
-    backgroundColor: 'rgba(0,0,0,0.68)',
-    padding: 24,
-    justifyContent: 'space-between',
-  },
-  cardBrand: {
-    fontSize: 11,
-    letterSpacing: 3,
-    color: '#b8b2f0',
-    fontFamily: 'SourceSans3-Regular',
-    marginBottom: 8,
-  },
-  cardTitle: {
-    fontSize: 26,
-    fontFamily: 'Merriweather_36pt-Bold',
-    color: '#fff',
-    marginBottom: 8,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-  cardSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    fontFamily: 'SourceSans3-Regular',
-  },
-  cardTeaser: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.55)',
-    fontFamily: 'SourceSans3-Regular',
-    marginTop: 8,
-  },
-  cardUrl: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.4)',
-    fontFamily: 'SourceSans3-Regular',
-    letterSpacing: 0.5,
-  },
-  shareBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#6A62B7',
-    borderRadius: 32,
-    paddingVertical: 16,
-    paddingHorizontal: 40,
-    marginTop: 24,
-    width: '100%',
-    justifyContent: 'center',
-  },
-  shareBtnText: {
-    color: '#fff',
-    fontSize: 17,
-    fontFamily: 'Merriweather_24pt-Bold',
-  },
-  cancelBtn: {
-    marginTop: 12,
-    paddingVertical: 12,
-  },
-  cancelText: {
-    color: '#888',
-    fontSize: 15,
-    fontFamily: 'SourceSans3-Regular',
-  },
-});

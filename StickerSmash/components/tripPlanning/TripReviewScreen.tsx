@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,17 +8,19 @@ import {
   ActivityIndicator,
   Image,
   StyleSheet,
-  Animated,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
-import { PRIMARY, PRIMARY_LIGHT, BORDER_COLOR, TEXT_DARK, TEXT_GRAY } from '@/styles/tripPlanningStyles';
+import auth from '@react-native-firebase/auth';
+import { PRIMARY, BORDER_COLOR, TEXT_DARK, TEXT_GRAY } from '@/styles/tripPlanningStyles';
 import { useTripPlanning } from '@/context/TripPlanningContext';
 import { useMyTrips } from '@/context/MyTripsContext';
 import { DEMO_DESTINATIONS } from '@/data/demoData';
+import { generateItinerary } from '@/services/generateItinerary';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 
@@ -48,69 +50,97 @@ function SectionDivider() {
 export default function TripReviewScreen() {
   const navigation = useNavigation<NavProp>();
   const insets = useSafeAreaInsets();
-  const { editingTripId, destinationId, templateId, templateTitle, templateHeroImage, party, startDate, endDate, interests, budget, reset } = useTripPlanning();
+  const {
+    editingTripId,
+    destinationId,
+    party,
+    startDate,
+    endDate,
+    interests,
+    budget,
+    reset,
+  } = useTripPlanning();
   const isEditing = !!editingTripId;
 
   const [generating, setGenerating] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const spinAnim = useRef(new Animated.Value(0)).current;
   const { addTrip, updateTrip } = useMyTrips();
 
   const destination = DEMO_DESTINATIONS.find(d => d.id === destinationId) ?? DEMO_DESTINATIONS[0];
 
-  useEffect(() => {
-    if (!generating) return;
+  const handleBuild = async () => {
+    const currentUser = auth().currentUser;
 
-    Animated.loop(
-      Animated.timing(spinAnim, { toValue: 1, duration: 900, useNativeDriver: true })
-    ).start();
+    if (!currentUser) {
+      Alert.alert(
+        'Sign in required',
+        'You need to be signed in to generate and save a real itinerary.'
+      );
+      return;
+    }
 
-    let pct = 0;
-    const interval = setInterval(() => {
-      pct += Math.random() * 18 + 4;
-      if (pct >= 100) {
-        pct = 100;
-        clearInterval(interval);
-        setTimeout(() => {
-          setGenerating(false);
-          const committedId = `committed-${Date.now()}`;
-          addTrip({
-            id: committedId,
-            templateId: 'demo-itin-1',
-            title: destination.name + ', ' + destination.country,
-            heroImage: destination.imageUrl,
-            party,
-            startDate: startDate!.toISOString(),
-            endDate: endDate!.toISOString(),
-            origin: 'generated',
-            interests,
-            budget,
-          });
-          reset();
-          navigation.navigate('ItineraryScreen', { id: 'demo-itin-1', source: 'mytrips', committedTripId: committedId });
-        }, 400);
-      }
-      setProgress(Math.floor(pct));
-    }, 320);
+    if (!destinationId || !party || !startDate || !endDate || !budget) {
+      Alert.alert(
+        'Trip details missing',
+        'Destination, party, dates, and budget are required before generating an itinerary.'
+      );
+      return;
+    }
 
-    return () => clearInterval(interval);
-  }, [generating]);
-
-  const spin = spinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
-  const handleBuild = () => {
-    setProgress(0);
     setGenerating(true);
+
+    try {
+      const response = await generateItinerary({
+        destinationId,
+        destinationName: destination.name,
+        country: destination.country,
+        party,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        interests,
+        budget,
+      });
+
+      const committedId = `committed-${response.itineraryId}`;
+      addTrip({
+        id: committedId,
+        templateId: response.itineraryId,
+        title: response.itinerary.title,
+        heroImage: response.itinerary.heroImage,
+        party,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        origin: 'generated',
+        interests,
+        budget,
+      });
+
+      setTimeout(() => {
+        setGenerating(false);
+        reset();
+        navigation.navigate('ItineraryScreen', {
+          id: response.itineraryId,
+          source: 'mytrips',
+          committedTripId: committedId,
+        });
+      }, 300);
+    } catch (error) {
+      console.warn('generateItinerary failed', error);
+      setGenerating(false);
+      const message =
+        error instanceof Error && /unauth/i.test(error.message)
+          ? 'Your sign-in session was not attached to the request. Sign out, sign in again, and retry.'
+          : 'The itinerary could not be generated right now. Please try again.';
+      Alert.alert('Generation failed', message);
+    }
   };
 
   const handleSaveChanges = () => {
+    if (!editingTripId || !startDate || !endDate) return;
+
     updateTrip(editingTripId, {
       party,
-      startDate: startDate!.toISOString(),
-      endDate: endDate!.toISOString(),
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
       interests,
       budget,
     });
@@ -120,8 +150,7 @@ export default function TripReviewScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}> 
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={20} color="#222" />
         </TouchableOpacity>
@@ -134,7 +163,6 @@ export default function TripReviewScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Destination */}
         <View style={styles.section}>
           <View style={styles.sectionRow}>
             <View style={styles.sectionIcon}>
@@ -158,7 +186,6 @@ export default function TripReviewScreen() {
 
         <SectionDivider />
 
-        {/* Party */}
         <View style={styles.section}>
           <View style={styles.sectionRow}>
             <View style={styles.sectionIcon}>
@@ -173,7 +200,6 @@ export default function TripReviewScreen() {
 
         <SectionDivider />
 
-        {/* Dates */}
         <View style={styles.section}>
           <View style={styles.sectionRow}>
             <View style={styles.sectionIcon}>
@@ -188,7 +214,6 @@ export default function TripReviewScreen() {
 
         <SectionDivider />
 
-        {/* Interests */}
         <View style={styles.section}>
           <View style={styles.sectionRow}>
             <View style={styles.sectionIcon}>
@@ -211,7 +236,6 @@ export default function TripReviewScreen() {
 
         <SectionDivider />
 
-        {/* Budget */}
         <View style={styles.section}>
           <View style={styles.sectionRow}>
             <View style={styles.sectionIcon}>
@@ -225,8 +249,7 @@ export default function TripReviewScreen() {
         </View>
       </ScrollView>
 
-      {/* Build / Save button */}
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}> 
         {isEditing ? (
           <TouchableOpacity style={styles.buildBtn} onPress={handleSaveChanges} activeOpacity={0.85}>
             <Text style={styles.buildBtnText}>Save Changes</Text>
@@ -238,14 +261,11 @@ export default function TripReviewScreen() {
         )}
       </View>
 
-      {/* Generating modal */}
       <Modal visible={generating} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <ActivityIndicator size="large" color={PRIMARY} style={{ marginBottom: 20 }} />
-            <Text style={styles.generatingTitle}>
-              Generating Itinerary...  ({progress}%)
-            </Text>
+            <Text style={styles.generatingTitle}>Generating Itinerary...</Text>
             <Text style={styles.generatingSubtitle}>
               Please wait while our AI works its magic to create the perfect trip plan tailored to your preferences.
             </Text>
@@ -388,7 +408,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontFamily: 'Merriweather_24pt-Bold',
   },
-  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -420,6 +439,6 @@ const styles = StyleSheet.create({
     fontFamily: 'SourceSans3-Regular',
     color: TEXT_GRAY,
     textAlign: 'center',
-    lineHeight: 21,
+    lineHeight: 22,
   },
 });

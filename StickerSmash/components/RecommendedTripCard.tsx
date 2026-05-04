@@ -6,8 +6,9 @@ import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
 import { useSaved } from '@/context/SavedContext';
+import type { ItineraryCardSummary } from '@/types/itinerary';
 
-export default function RecommendedTripCard({ itin }: { itin: any }) {
+export default function RecommendedTripCard({ itin }: { itin: ItineraryCardSummary }) {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList, 'ItineraryScreen'>>();
   const { isSaved, toggleSaved } = useSaved();
   const saved = isSaved(itin.id);

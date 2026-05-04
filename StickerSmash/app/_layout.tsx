@@ -84,7 +84,7 @@ export default function RootLayout() {
   useEffect(() => {
     async function checkFlags() {
       if (__DEV__) {
-        setInitialRoute('Index');
+        setInitialRoute('Auth');
         return;
       }
 
