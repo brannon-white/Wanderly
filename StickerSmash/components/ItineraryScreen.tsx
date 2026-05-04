@@ -9,20 +9,20 @@ import {
   Platform,
   StatusBar,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
-import { styles, ICON_COLOR, ICON_COLOR_DIMMED, makeScrollContentStyle } from '../styles/TravelItinerary';
+import { styles, ICON_COLOR, makeScrollContentStyle } from '../styles/TravelItinerary';
 import { DEMO_FULL_ITINERARIES } from '@/data/demoData';
 import { useTripPlanning } from '@/context/TripPlanningContext';
 import { useMyTrips, formatTripSubtitle } from '@/context/MyTripsContext';
 import type { GeneratedItinerary, ItineraryActivity } from '@/types/itinerary';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import { searchPhoto } from '@/services/unsplash';
 
 let MapsModule:
   | {
@@ -48,73 +48,149 @@ const TRANSPORT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   bicycle: 'bicycle-outline',
   bus: 'bus-outline',
   train: 'train-outline',
+  subway: 'train-outline',
+  metro: 'train-outline',
+  taxi: 'car-outline',
+  ferry: 'boat-outline',
+  boat: 'boat-outline',
 };
 
-function StarRow() {
+const CAT_COLOR = '#6A62B7';
+
+const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  food: 'restaurant-outline',
+  restaurant: 'restaurant-outline',
+  culture: 'library-outline',
+  attraction: 'location-outline',
+  landmark: 'location-outline',
+  nature: 'leaf-outline',
+  shopping: 'bag-handle-outline',
+  art: 'color-palette-outline',
+  science: 'flask-outline',
+  adventure: 'compass-outline',
+  hotel: 'bed-outline',
+  nightlife: 'wine-outline',
+  wellness: 'fitness-outline',
+};
+
+function isPlaceholder(url?: string) {
+  return !url || url.includes('placeholder.com') || url.includes('via.placeholder');
+}
+
+function formatCount(n: number | string | undefined): string {
+  const num = typeof n === 'string' ? parseFloat(n) : (n ?? 0);
+  return isNaN(num) ? '0' : num.toLocaleString();
+}
+
+function StarRow({ rating }: { rating: number }) {
+  const full = Math.floor(rating);
+  const half = rating - full >= 0.5;
   return (
     <View style={styles.starRow}>
       {[1, 2, 3, 4, 5].map((i) => (
-        <Ionicons key={i} name="star" size={13} color="#FFB800" style={styles.starIcon} />
+        <Ionicons
+          key={i}
+          name={i <= full ? 'star' : half && i === full + 1 ? 'star-half' : 'star-outline'}
+          size={13}
+          color="#FFB800"
+          style={styles.starIcon}
+        />
       ))}
     </View>
   );
 }
 
-function ActivityCard({ activity }: { activity: ItineraryActivity }) {
+function ActivityCard({ activity, isLast }: { activity: ItineraryActivity; isLast: boolean }) {
+  const [imageUri, setImageUri] = useState<string | undefined>(
+    isPlaceholder(activity.image) ? undefined : activity.image
+  );
   const transportOptions = Array.isArray(activity.transport) ? activity.transport : [];
+  const catKey = (activity.category ?? '').toLowerCase();
+  const catIcon = CATEGORY_ICONS[catKey] ?? 'location-outline';
+
+  useEffect(() => {
+    if (!imageUri) {
+      searchPhoto(activity.name).then(url => {
+        if (url) setImageUri(url);
+      });
+    }
+  }, []);
 
   const openMaps = () => {
-    Linking.openURL(activity.mapUrl || `https://maps.google.com/?q=${encodeURIComponent(activity.name)}`);
+    Linking.openURL(
+      activity.mapUrl || `https://maps.google.com/?q=${encodeURIComponent(activity.name)}`
+    );
   };
 
   return (
-    <View style={styles.itineraryItem}>
-      <Image source={{ uri: activity.image }} style={styles.itemImage} />
-      <View style={styles.itemDetails}>
-        <Text style={styles.itemTitle}>{activity.name}</Text>
-
-        {typeof activity.rating === 'number' ? (
-          <View style={styles.ratingRow}>
-            <StarRow />
-            <Text style={styles.ratingText}>
-              {'  '}({activity.rating.toFixed(1)}) {activity.reviewCount} reviews
-            </Text>
-          </View>
-        ) : null}
-
-        <View style={styles.infoRow}>
-          <Ionicons name="time-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
-          <Text style={styles.infoText}>{activity.time}</Text>
+    <View style={styles.activityRow}>
+      {/* Timeline column */}
+      <View style={styles.timelineCol}>
+        <View style={styles.timelineIconCircle}>
+          <Ionicons name={catIcon} size={15} color={CAT_COLOR} />
         </View>
+        {!isLast && <View style={styles.timelineLine} />}
+      </View>
 
-        {activity.cost ? (
-          <View style={styles.infoRow}>
-            <Ionicons name="cash-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
-            <Text style={styles.infoText}>{activity.cost}</Text>
-          </View>
-        ) : null}
-
-        <View style={styles.infoRow}>
-          <Ionicons name="location-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
-          <TouchableOpacity onPress={openMaps}>
-            <Text style={styles.mapsLink}>View on Google Maps</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.transportOptions}>
-          {transportOptions.map((t) => (
-            <View key={`${activity.id}-${t.mode}-${t.time}`} style={styles.transportOption}>
-              <Ionicons
-                name={TRANSPORT_ICONS[t.mode] ?? 'navigate-outline'}
-                size={20}
-                color={t.time === '--' ? ICON_COLOR_DIMMED : ICON_COLOR}
-              />
-              <Text style={[styles.transportTime, t.time === '--' && styles.transportTimeDimmed]}>
-                {t.time}
-              </Text>
+      {/* Card + transport strip stacked */}
+      <View style={{ flex: 1 }}>
+        <View style={styles.itineraryItem}>
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.itemImage} />
+          ) : (
+            <View style={[styles.itemImage, styles.imageSkeleton]}>
+              <ActivityIndicator color="#6A62B7" />
             </View>
-          ))}
+          )}
+
+          <View style={styles.itemDetails}>
+            <Text style={styles.itemTitle}>{activity.name}</Text>
+
+            {typeof activity.rating === 'number' && (
+              <View style={styles.ratingRow}>
+                <StarRow rating={activity.rating} />
+                <Text style={styles.ratingText}>
+                  {'  '}{activity.rating.toFixed(1)} ({formatCount(activity.reviewCount)} reviews)
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.infoRow}>
+              <Ionicons name="time-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
+              <Text style={styles.infoText}>{activity.time}</Text>
+            </View>
+
+            {activity.cost ? (
+              <View style={styles.infoRow}>
+                <Ionicons name="cash-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
+                <Text style={styles.infoText}>{activity.cost}</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.infoRow}>
+              <Ionicons name="location-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
+              <TouchableOpacity onPress={openMaps}>
+                <Text style={styles.mapsLink}>View on Google Maps</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
+
+        {/* Transport strip — separate section below the card */}
+        {!isLast && transportOptions.length > 0 && (
+          <View style={styles.transportStrip}>
+            {transportOptions.map((t, idx) => (
+              <View key={idx} style={styles.transportStripItem}>
+                <Ionicons
+                  name={TRANSPORT_ICONS[t.mode?.toLowerCase() ?? ''] ?? 'navigate-outline'}
+                  size={22}
+                  color={CAT_COLOR}
+                />
+                <Text style={styles.transportStripTime}>{t.time}</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -146,6 +222,7 @@ export default function ItineraryScreen() {
   const [remoteItinerary, setRemoteItinerary] = useState<GeneratedItinerary | null>(null);
   const [loadingRemote, setLoadingRemote] = useState(!demoItinerary);
   const [remoteLoadError, setRemoteLoadError] = useState<string | null>(null);
+  const [heroUri, setHeroUri] = useState<string | undefined>(undefined);
   const itinerary = remoteItinerary ?? demoItinerary;
 
   const [selectedDay, setSelectedDay] = useState(0);
@@ -193,10 +270,7 @@ export default function ItineraryScreen() {
         const data = snapshot.data() as GeneratedItinerary | undefined;
         if (!cancelled && data) {
           setRemoteLoadError(null);
-          setRemoteItinerary({
-            ...data,
-            id: data.id || snapshot.id,
-          });
+          setRemoteItinerary({ ...data, id: data.id || snapshot.id });
         }
       } catch (error) {
         console.error('Failed to load itinerary', error);
@@ -204,18 +278,25 @@ export default function ItineraryScreen() {
           setRemoteLoadError(error instanceof Error ? error.message : 'Unknown Firestore read failure.');
         }
       } finally {
-        if (!cancelled) {
-          setLoadingRemote(false);
-        }
+        if (!cancelled) setLoadingRemote(false);
       }
     }
 
     loadRemoteItinerary();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [demoItinerary, id]);
+
+  // Resolve hero image — fetch from Unsplash if Gemini generated a placeholder
+  useEffect(() => {
+    if (!itinerary) return;
+    if (!isPlaceholder(itinerary.heroImage)) {
+      setHeroUri(itinerary.heroImage);
+      return;
+    }
+    searchPhoto(`${itinerary.destinationName} ${itinerary.country ?? ''}`).then(url => {
+      setHeroUri(url ?? undefined);
+    });
+  }, [itinerary?.id]);
 
   const getDayLabel = (index: number): string => {
     if (isBrowsing || !committedTrip) return itinerary?.days[index]?.label ?? `Day ${index + 1}`;
@@ -259,18 +340,13 @@ export default function ItineraryScreen() {
 
   const mapRegion = useMemo(() => {
     const coords = activities
-      .map((activity) => activity.coordinates)
-      .filter((value): value is NonNullable<typeof value> => Boolean(value));
-
+      .map((a) => a.coordinates)
+      .filter((v): v is NonNullable<typeof v> => Boolean(v));
     if (!coords.length) return undefined;
-
     const lats = coords.map((c) => c.latitude);
     const lngs = coords.map((c) => c.longitude);
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
-
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
     return {
       latitude: (minLat + maxLat) / 2,
       longitude: (minLng + maxLng) / 2,
@@ -283,7 +359,7 @@ export default function ItineraryScreen() {
 
   if (loadingRemote) {
     return (
-      <View style={[styles.screen, { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }]}> 
+      <View style={[styles.screen, { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }]}>
         <ActivityIndicator size="large" color={ICON_COLOR} />
         <Text style={{ marginTop: 16, color: '#3D3555', fontFamily: 'SourceSans3-Regular', fontSize: 16, textAlign: 'center' }}>
           Loading your itinerary...
@@ -294,7 +370,7 @@ export default function ItineraryScreen() {
 
   if (!itinerary) {
     return (
-      <View style={[styles.screen, { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }]}> 
+      <View style={[styles.screen, { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }]}>
         <Ionicons name="warning-outline" size={36} color={ICON_COLOR} />
         <Text style={{ marginTop: 16, color: '#3D3555', fontFamily: 'SourceSans3-SemiBold', fontSize: 18, textAlign: 'center' }}>
           Saved itinerary unavailable
@@ -304,12 +380,7 @@ export default function ItineraryScreen() {
         </Text>
         <TouchableOpacity
           style={[styles.planTripButton, { marginTop: 24 }]}
-          onPress={() => {
-            if (remoteLoadError) {
-              Alert.alert('Saved itinerary unavailable', remoteLoadError);
-            }
-            navigation.goBack();
-          }}
+          onPress={() => navigation.goBack()}
         >
           <Text style={styles.planTripButtonText}>Go Back</Text>
         </TouchableOpacity>
@@ -325,11 +396,16 @@ export default function ItineraryScreen() {
         contentContainerStyle={makeScrollContentStyle(insets.bottom, isBrowsing)}
         showsVerticalScrollIndicator={false}
       >
+        {/* Hero */}
         <View style={styles.heroSection}>
-          <Image source={{ uri: itinerary.heroImage }} style={styles.heroImage} />
+          {heroUri ? (
+            <Image source={{ uri: heroUri }} style={styles.heroImage} />
+          ) : (
+            <View style={[styles.heroImage, { backgroundColor: '#3D3555' }]} />
+          )}
           <View style={styles.heroGradient} />
 
-          <View style={[styles.headerRow, { top: headerTop }]}> 
+          <View style={[styles.headerRow, { top: headerTop }]}>
             <TouchableOpacity style={styles.headerIconBtn} onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={20} color="#fff" />
             </TouchableOpacity>
@@ -351,6 +427,7 @@ export default function ItineraryScreen() {
           </View>
         </View>
 
+        {/* Map */}
         <View style={styles.mapSection}>
           <View style={styles.mapContainer}>
             {MapView && Marker && mapRegion ? (
@@ -362,46 +439,22 @@ export default function ItineraryScreen() {
                 pitchEnabled={false}
                 rotateEnabled={false}
               >
-                {activities
-                  .filter((activity) => activity.coordinates)
-                  .map((activity) => (
-                    <Marker key={activity.id} coordinate={activity.coordinates!} title={activity.name} />
-                  ))}
+                {activities.filter((a) => a.coordinates).map((a) => (
+                  <Marker key={a.id} coordinate={a.coordinates!} title={a.name} />
+                ))}
               </MapView>
             ) : (
-              <View style={[styles.mapImage, { alignItems: 'center', justifyContent: 'center' }]}> 
-                {activities[0]?.image ? <Image source={{ uri: activities[0].image }} style={styles.mapImage} /> : null}
-                <View
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    right: 0,
-                    bottom: 0,
-                    left: 0,
-                    backgroundColor: 'rgba(53, 43, 88, 0.25)',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    paddingHorizontal: 20,
-                  }}
-                >
-                  <Ionicons name="map-outline" size={30} color="#fff" />
-                  <Text
-                    style={{
-                      marginTop: 10,
-                      color: '#fff',
-                      fontSize: 14,
-                      textAlign: 'center',
-                      fontFamily: 'SourceSans3-Regular',
-                    }}
-                  >
-                    Map preview unavailable in this build. Use the activity cards below to open locations.
-                  </Text>
-                </View>
+              <View style={[styles.mapImage, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#ede7fa' }]}>
+                <Ionicons name="map-outline" size={30} color="#6A62B7" />
+                <Text style={{ marginTop: 8, color: '#6A62B7', fontSize: 13, fontFamily: 'SourceSans3-Regular', textAlign: 'center', paddingHorizontal: 20 }}>
+                  Map unavailable — tap each activity to open in Google Maps
+                </Text>
               </View>
             )}
           </View>
         </View>
 
+        {/* Day tabs */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -421,9 +474,19 @@ export default function ItineraryScreen() {
           ))}
         </ScrollView>
 
+        {/* Day title */}
+        {itinerary.days[selectedDay]?.title ? (
+          <Text style={styles.dayTitle}>{itinerary.days[selectedDay].title}</Text>
+        ) : null}
+
+        {/* Activities */}
         <View style={styles.itineraryItems}>
-          {activities.map((activity) => (
-            <ActivityCard key={activity.id} activity={activity} />
+          {activities.map((activity, idx) => (
+            <ActivityCard
+              key={activity.id}
+              activity={activity}
+              isLast={idx === activities.length - 1}
+            />
           ))}
         </View>
       </ScrollView>
@@ -435,7 +498,7 @@ export default function ItineraryScreen() {
       )}
 
       {isBrowsing && (
-        <View style={[styles.ctaBar, { paddingBottom: insets.bottom + 16 }]}> 
+        <View style={[styles.ctaBar, { paddingBottom: insets.bottom + 16 }]}>
           <TouchableOpacity style={styles.ctaBtn} onPress={handlePlanThisTrip} activeOpacity={0.85}>
             <Text style={styles.ctaBtnText}>Plan This Trip</Text>
           </TouchableOpacity>

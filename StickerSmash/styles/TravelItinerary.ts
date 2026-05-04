@@ -137,12 +137,11 @@ export const styles = StyleSheet.create({
 
   // ── Activity cards ────────────────────────────────────────────────────
   itineraryItems: {
-    paddingHorizontal: 16,
     paddingTop: 8,
   },
 
   itineraryItem: {
-    marginBottom: 20,
+    flex: 1,
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#fff',
@@ -281,6 +280,89 @@ export const styles = StyleSheet.create({
   ctaBtnText: {
     color: '#fff',
     fontSize: 17,
+    fontFamily: 'Merriweather_24pt-Bold',
+  },
+
+  // ── Timeline layout ───────────────────────────────────────────────────
+  activityRow: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    paddingHorizontal: 16,
+  },
+
+  timelineCol: {
+    width: 40,
+    alignItems: 'center',
+    paddingTop: 4,
+  },
+
+  timelineIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#6A62B7',
+    backgroundColor: '#F0EEFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  timelineLine: {
+    width: 2,
+    flex: 1,
+    backgroundColor: '#e8e8e8',
+    marginTop: 6,
+  },
+
+  transportStrip: {
+    flexDirection: 'row',
+    backgroundColor: '#F5F3FF',
+    borderRadius: 12,
+    marginTop: 10,
+    marginBottom: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    gap: 24,
+  },
+
+  transportStripItem: {
+    alignItems: 'center',
+    gap: 4,
+  },
+
+  transportStripTime: {
+    fontSize: 11,
+    color: '#6A62B7',
+    fontFamily: 'SourceSans3-Regular',
+  },
+
+  imageSkeleton: {
+    backgroundColor: '#f0eeff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  dayTitle: {
+    fontSize: 15,
+    color: '#888',
+    fontFamily: 'SourceSans3-Regular',
+    paddingHorizontal: 56,
+    paddingBottom: 12,
+    paddingTop: 2,
+  },
+
+  // ── Plan trip / Go back button ────────────────────────────────────────
+  planTripButton: {
+    backgroundColor: PURPLE,
+    borderRadius: 32,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+  },
+
+  planTripButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontFamily: 'Merriweather_24pt-Bold',
   },
 
