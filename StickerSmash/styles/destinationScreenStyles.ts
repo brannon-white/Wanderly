@@ -131,6 +131,29 @@ export const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
 
+  heroPlaceholder: {
+    backgroundColor: '#ddd',
+  },
+
+  // ── Wiki sections ─────────────────────────────────────────────────────
+  wikiSection: {
+    marginTop: 20,
+  },
+
+  wikiSectionTitle: {
+    fontSize: 16,
+    color: '#222',
+    fontFamily: 'Merriweather_24pt-Bold',
+    marginBottom: 6,
+  },
+
+  wikiSectionText: {
+    fontSize: 14,
+    color: '#555',
+    fontFamily: 'SourceSans3-Regular',
+    lineHeight: 22,
+  },
+
   // ── Bottom CTA ────────────────────────────────────────────────────────
   bottomBar: {
     position: 'absolute',

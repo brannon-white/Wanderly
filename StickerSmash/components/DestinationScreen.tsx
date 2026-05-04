@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Share,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,9 +18,19 @@ import { DEMO_DESTINATIONS, DEMO_DESTINATION_DETAILS } from '@/data/demoData';
 import type { SearchedDestination } from '@/services/locationSearch';
 import { useSaved } from '@/context/SavedContext';
 import { useTripPlanning } from '@/context/TripPlanningContext';
+import { useDestinationContent } from '@/hooks/useDestinationContent';
 
 type NavProp = StackNavigationProp<RootStackParamList, 'DestinationScreen'>;
 type RoutePropType = RouteProp<RootStackParamList, 'DestinationScreen'>;
+
+function WikiSection({ title, text }: { title: string; text: string }) {
+  return (
+    <View style={styles.wikiSection}>
+      <Text style={styles.wikiSectionTitle}>{title}:</Text>
+      <Text style={styles.wikiSectionText}>{text}</Text>
+    </View>
+  );
+}
 
 export default function DestinationScreen() {
   const navigation = useNavigation<NavProp>();
@@ -35,9 +46,19 @@ export default function DestinationScreen() {
     ? { id: searchedDestination.id, name: searchedDestination.name, country: searchedDestination.country, flag: searchedDestination.flag, imageUrl: searchedDestination.imageUrl }
     : (DEMO_DESTINATIONS.find((d) => d.id === id) ?? DEMO_DESTINATIONS[0]);
 
-  const detail = searchedDestination
-    ? { id: searchedDestination.id, description: '', gallery: searchedDestination.gallery }
+  const demoDetail = searchedDestination
+    ? null
     : DEMO_DESTINATION_DETAILS[destination.id];
+
+  const { content, loading: wikiLoading } = useDestinationContent(destination.name, destination.country ?? '');
+
+  const heroImage = destination.imageUrl || content?.wikiImageUrl;
+  const description = demoDetail?.description || content?.description || '';
+  // prefer seeded gallery, fall back to Unsplash results
+  const gallery = (demoDetail?.gallery ?? []).length > 0
+    ? (demoDetail?.gallery ?? [])
+    : (content?.gallery ?? []);
+
   const saved = isSaved(destination.id);
 
   const handleBookmark = () => {
@@ -49,9 +70,7 @@ export default function DestinationScreen() {
       country: destination.country,
       flag: destination.flag,
     });
-    if (!saved) {
-      setShowSavedToast(true);
-    }
+    if (!saved) setShowSavedToast(true);
   };
 
   useEffect(() => {
@@ -65,10 +84,16 @@ export default function DestinationScreen() {
     await Share.share({ message: `Check out ${destination.name}, ${destination.country} on Wanderly!` });
   };
 
+  const { sections } = content ?? { sections: {} };
+
   return (
     <View style={styles.container}>
       {/* Hero image */}
-      <Image source={{ uri: destination.imageUrl }} style={styles.heroImage} />
+      {heroImage ? (
+        <Image source={{ uri: heroImage }} style={styles.heroImage} />
+      ) : (
+        <View style={[styles.heroImage, styles.heroPlaceholder]} />
+      )}
 
       {/* Overlay buttons */}
       <View style={[styles.heroOverlay, { paddingTop: insets.top + 8 }]}>
@@ -109,24 +134,42 @@ export default function DestinationScreen() {
           <Text style={styles.countryName}>{destination.country}</Text>
         </View>
 
-        {detail?.description ? (
-          <Text style={styles.description}>{detail.description}</Text>
+        {description ? (
+          <Text style={styles.description}>{description}</Text>
         ) : null}
 
-        {detail?.gallery?.length ? (
+        {wikiLoading ? (
+          <ActivityIndicator size="small" color="#6A62B7" style={{ marginTop: 24 }} />
+        ) : (
           <>
-            <Text style={styles.sectionTitle}>Gallery</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.galleryScroll}
-            >
-              {detail.gallery.map((uri, i) => (
-                <Image key={i} source={{ uri }} style={styles.galleryImage} />
-              ))}
-            </ScrollView>
+            {/* Gallery — Unsplash or seeded */}
+            {gallery.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Gallery</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.galleryScroll}
+                >
+                  {gallery.map((uri, i) => (
+                    <Image key={i} source={{ uri }} style={styles.galleryImage} />
+                  ))}
+                </ScrollView>
+              </>
+            )}
+
+            {sections.gettingThere && <WikiSection title="Getting There" text={sections.gettingThere} />}
+            {sections.understand && <WikiSection title="Best Time to Visit" text={sections.understand} />}
+            {sections.see && <WikiSection title="Must-See Attractions" text={sections.see} />}
+            {sections.eat && <WikiSection title="Local Cuisine" text={sections.eat} />}
+            {sections.do && <WikiSection title="Activities & Experiences" text={sections.do} />}
+            {sections.sleep && <WikiSection title="Accommodations" text={sections.sleep} />}
+            {sections.getAround && <WikiSection title="Transportation" text={sections.getAround} />}
+            {sections.staySafe && <WikiSection title="Safety & Health Tips" text={sections.staySafe} />}
+            {content?.language && <WikiSection title="Local Language" text={content.language} />}
+            {content?.currency && <WikiSection title="Currency" text={content.currency} />}
           </>
-        ) : null}
+        )}
       </ScrollView>
 
       {/* Fixed bottom CTA */}

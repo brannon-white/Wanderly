@@ -1,5 +1,5 @@
 import firestore from '@react-native-firebase/firestore';
-import { cacheGet, cacheSet } from '@/utils/cache';
+import { cacheGet, cacheSet, cacheDelete } from '@/utils/cache';
 import { useEffect, useState } from 'react';
 import { useDemo } from '@/context/DemoContext';
 import { DEMO_DESTINATIONS } from '@/data/demoData';
@@ -103,13 +103,21 @@ export function useDestinations() {
         setLoading(true);
 
         const cached = await cacheGet<any[]>(CACHE_KEY);
-        if (cached) {
+        // Bust cache if it has fewer entries than what's seeded (stale data)
+        if (cached && cached.length >= 20) {
           setDestinations(cached);
           setLoading(false);
           return;
         }
+        if (cached) {
+          await cacheDelete(CACHE_KEY);
+        }
 
         const snapshot = await firestore().collection('destinations').get();
+        if (!snapshot) {
+          setError('Could not reach Firestore — check security rules.');
+          return;
+        }
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setDestinations(data);
         await cacheSet(CACHE_KEY, data, TTL_DAYS);
