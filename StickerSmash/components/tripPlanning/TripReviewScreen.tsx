@@ -48,12 +48,13 @@ function SectionDivider() {
 export default function TripReviewScreen() {
   const navigation = useNavigation<NavProp>();
   const insets = useSafeAreaInsets();
-  const { destinationId, party, startDate, endDate, interests, budget, reset } = useTripPlanning();
+  const { editingTripId, destinationId, templateId, templateTitle, templateHeroImage, party, startDate, endDate, interests, budget, reset } = useTripPlanning();
+  const isEditing = !!editingTripId;
 
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const spinAnim = useRef(new Animated.Value(0)).current;
-  const { addTrip } = useMyTrips();
+  const { addTrip, updateTrip } = useMyTrips();
 
   const destination = DEMO_DESTINATIONS.find(d => d.id === destinationId) ?? DEMO_DESTINATIONS[0];
 
@@ -72,8 +73,9 @@ export default function TripReviewScreen() {
         clearInterval(interval);
         setTimeout(() => {
           setGenerating(false);
+          const committedId = `committed-${Date.now()}`;
           addTrip({
-            id: `committed-${Date.now()}`,
+            id: committedId,
             templateId: 'demo-itin-1',
             title: destination.name + ', ' + destination.country,
             heroImage: destination.imageUrl,
@@ -81,9 +83,11 @@ export default function TripReviewScreen() {
             startDate: startDate!.toISOString(),
             endDate: endDate!.toISOString(),
             origin: 'generated',
+            interests,
+            budget,
           });
           reset();
-          navigation.navigate('ItineraryScreen', { id: 'demo-itin-1', source: 'mytrips' });
+          navigation.navigate('ItineraryScreen', { id: 'demo-itin-1', source: 'mytrips', committedTripId: committedId });
         }, 400);
       }
       setProgress(Math.floor(pct));
@@ -100,6 +104,18 @@ export default function TripReviewScreen() {
   const handleBuild = () => {
     setProgress(0);
     setGenerating(true);
+  };
+
+  const handleSaveChanges = () => {
+    updateTrip(editingTripId, {
+      party,
+      startDate: startDate!.toISOString(),
+      endDate: endDate!.toISOString(),
+      interests,
+      budget,
+    });
+    reset();
+    navigation.navigate('Index' as any, { screen: 'MyTrips' } as any);
   };
 
   return (
@@ -209,11 +225,17 @@ export default function TripReviewScreen() {
         </View>
       </ScrollView>
 
-      {/* Build button */}
+      {/* Build / Save button */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
-        <TouchableOpacity style={styles.buildBtn} onPress={handleBuild} activeOpacity={0.85}>
-          <Text style={styles.buildBtnText}>Build My Itinerary</Text>
-        </TouchableOpacity>
+        {isEditing ? (
+          <TouchableOpacity style={styles.buildBtn} onPress={handleSaveChanges} activeOpacity={0.85}>
+            <Text style={styles.buildBtnText}>Save Changes</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.buildBtn} onPress={handleBuild} activeOpacity={0.85}>
+            <Text style={styles.buildBtnText}>Build My Itinerary</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Generating modal */}
