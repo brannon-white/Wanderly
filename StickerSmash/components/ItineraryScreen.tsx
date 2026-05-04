@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
+import ViewShot from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 import { styles, ICON_COLOR, ICON_COLOR_DIMMED, makeScrollContentStyle } from '../styles/TravelItinerary';
 import { DEMO_FULL_ITINERARIES, DemoActivity } from '@/data/demoData';
 import { useTripPlanning } from '@/context/TripPlanningContext';
@@ -111,6 +113,19 @@ export default function ItineraryScreen() {
 
   const [selectedDay, setSelectedDay] = useState(0);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const shareCardRef = useRef<any>(null);
+
+  const handleShare = async () => {
+    try {
+      const uri = await shareCardRef.current?.capture();
+      if (!uri) return;
+      await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: 'Share your itinerary' });
+      setShareModalVisible(false);
+    } catch {
+      // share cancelled or failed silently
+    }
+  };
 
   const activities = itinerary.days[selectedDay]?.activities ?? [];
 
@@ -125,6 +140,11 @@ export default function ItineraryScreen() {
   const heroSubtitle = committedTrip
     ? formatTripSubtitle(committedTrip)
     : itinerary.subtitle;
+
+  const activityTeaser = itinerary.days[0]?.activities
+    .slice(0, 3)
+    .map((a: DemoActivity) => a.name)
+    .join(' · ');
 
   const handlePlanThisTrip = () => {
     reset();
@@ -197,7 +217,7 @@ export default function ItineraryScreen() {
               <Ionicons name="arrow-back" size={20} color="#fff" />
             </TouchableOpacity>
             <View style={styles.headerRightIcons}>
-              <TouchableOpacity style={styles.headerIconBtn}>
+              <TouchableOpacity style={styles.headerIconBtn} onPress={() => setShareModalVisible(true)}>
                 <Ionicons name="share-social-outline" size={20} color="#fff" />
               </TouchableOpacity>
               {!isBrowsing && (
@@ -279,6 +299,41 @@ export default function ItineraryScreen() {
         </View>
       )}
 
+      {/* Share card preview */}
+      <Modal visible={shareModalVisible} transparent animationType="slide">
+        <View style={shareStyles.backdrop}>
+          <View style={shareStyles.sheet}>
+            <Text style={shareStyles.sheetTitle}>Share Itinerary</Text>
+
+            <ViewShot ref={shareCardRef} options={{ format: 'jpg', quality: 0.95 }}>
+              <View style={shareStyles.card}>
+                <Image source={{ uri: itinerary.heroImage }} style={shareStyles.cardImage} />
+                <View style={shareStyles.cardScrim} />
+                <View style={shareStyles.cardBottom}>
+                  <View>
+                    <Text style={shareStyles.cardBrand}>WANDERLY</Text>
+                    <Text style={shareStyles.cardTitle}>{itinerary.title}</Text>
+                    <Text style={shareStyles.cardSubtitle}>{heroSubtitle}</Text>
+                    {activityTeaser ? (
+                      <Text style={shareStyles.cardTeaser}>{activityTeaser}</Text>
+                    ) : null}
+                  </View>
+                  <Text style={shareStyles.cardUrl}>wanderly.app</Text>
+                </View>
+              </View>
+            </ViewShot>
+
+            <TouchableOpacity style={shareStyles.shareBtn} onPress={handleShare} activeOpacity={0.85}>
+              <Ionicons name="share-social-outline" size={20} color="#fff" />
+              <Text style={shareStyles.shareBtnText}>Share</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={shareStyles.cancelBtn} onPress={() => setShareModalVisible(false)}>
+              <Text style={shareStyles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Ellipsis dropdown menu */}
       <Modal visible={menuVisible} transparent animationType="fade">
         <TouchableOpacity style={menuStyles.overlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
@@ -338,5 +393,115 @@ const menuStyles = StyleSheet.create({
     height: 1,
     backgroundColor: '#F0F0F0',
     marginHorizontal: 0,
+  },
+});
+
+const shareStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    paddingBottom: 44,
+    alignItems: 'center',
+  },
+  sheetTitle: {
+    fontSize: 18,
+    fontFamily: 'Merriweather_24pt-Bold',
+    color: '#222',
+    marginBottom: 20,
+  },
+  card: {
+    width: 340,
+    height: 460,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#111',
+  },
+  cardImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    resizeMode: 'cover',
+  },
+  cardScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+  },
+  cardBottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '52%',
+    backgroundColor: 'rgba(0,0,0,0.68)',
+    padding: 24,
+    justifyContent: 'space-between',
+  },
+  cardBrand: {
+    fontSize: 11,
+    letterSpacing: 3,
+    color: '#b8b2f0',
+    fontFamily: 'SourceSans3-Regular',
+    marginBottom: 8,
+  },
+  cardTitle: {
+    fontSize: 26,
+    fontFamily: 'Merriweather_36pt-Bold',
+    color: '#fff',
+    marginBottom: 8,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  cardSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    fontFamily: 'SourceSans3-Regular',
+  },
+  cardTeaser: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.55)',
+    fontFamily: 'SourceSans3-Regular',
+    marginTop: 8,
+  },
+  cardUrl: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.4)',
+    fontFamily: 'SourceSans3-Regular',
+    letterSpacing: 0.5,
+  },
+  shareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#6A62B7',
+    borderRadius: 32,
+    paddingVertical: 16,
+    paddingHorizontal: 40,
+    marginTop: 24,
+    width: '100%',
+    justifyContent: 'center',
+  },
+  shareBtnText: {
+    color: '#fff',
+    fontSize: 17,
+    fontFamily: 'Merriweather_24pt-Bold',
+  },
+  cancelBtn: {
+    marginTop: 12,
+    paddingVertical: 12,
+  },
+  cancelText: {
+    color: '#888',
+    fontSize: 15,
+    fontFamily: 'SourceSans3-Regular',
   },
 });
