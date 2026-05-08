@@ -1,5 +1,5 @@
 import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { getAuth } from '@react-native-firebase/auth';
 import storage from '@react-native-firebase/storage';
 import { cacheGet, cacheSet } from '@/utils/cache';
 import { profileCacheKey } from '@/utils/getUserProfile';
@@ -20,7 +20,7 @@ export async function saveUserProfile({
   foodPreferences: string[];
 }) {
   try {
-    const user = auth().currentUser;
+    const user = getAuth().currentUser;
     if (!user) throw new Error('No user signed in');
 
     let avatarUrl = '';

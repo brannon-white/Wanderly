@@ -1,5 +1,4 @@
-import { googleAI } from "@genkit-ai/google-genai";
-import { genkit } from "genkit";
+import Anthropic from "@anthropic-ai/sdk";
 
 import {
   generateItineraryRequestSchema,
@@ -8,98 +7,158 @@ import {
   type GeneratedItinerary,
 } from "./itinerarySchemas";
 
-export const PROMPT_VERSION = "v1";
-export const MODEL_NAME = "gemini-2.5-flash";
-export const FALLBACK_MODEL_NAME = "gemini-2.5-flash-lite";
+export const PROMPT_VERSION = "v2";
+export const MODEL_NAME = "claude-haiku-4-5-20251001";
 
-export const ai = genkit({
-  plugins: [googleAI()],
-  model: googleAI.model(MODEL_NAME),
-});
+// JSON Schema representation of generatedItinerarySchema for Claude tool use
+const ITINERARY_TOOL_INPUT_SCHEMA = {
+  type: "object" as const,
+  required: ["id", "title", "subtitle", "destinationId", "destinationName", "heroImage", "source", "days"],
+  properties: {
+    id: { type: "string", description: "Unique ID, e.g. 'itin-tokyo-001'" },
+    title: { type: "string" },
+    subtitle: { type: "string" },
+    destinationId: { type: "string" },
+    destinationName: { type: "string" },
+    country: { type: "string" },
+    heroImage: { type: "string", description: "Leave as empty string — images are fetched separately" },
+    rating: { type: "string", description: "e.g. '4.7'" },
+    reviewCount: { type: "number" },
+    summary: { type: "array", items: { type: "string" } },
+    source: { type: "string", enum: ["ai_generated"] },
+    days: {
+      type: "array",
+      items: {
+        type: "object",
+        required: ["label", "activities"],
+        properties: {
+          label: { type: "string", description: "e.g. 'Day 1'" },
+          title: { type: "string", description: "Catchy day theme, e.g. 'Temples & Street Food'" },
+          activities: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["id", "name", "time", "transport"],
+              properties: {
+                id: { type: "string" },
+                name: { type: "string" },
+                category: {
+                  type: "string",
+                  enum: ["food", "attraction", "culture", "nature", "shopping", "art", "science", "adventure", "hotel", "nightlife", "wellness"],
+                },
+                description: { type: "string" },
+                time: { type: "string", description: "e.g. '09:00 AM - 11:00 AM'" },
+                cost: { type: "string", description: "Realistic cost in local or USD, e.g. '$15' or 'Free'" },
+                rating: { type: "number", description: "0–5 rating based on real-world reputation" },
+                reviewCount: { type: "number" },
+                image: { type: "string", description: "Leave as empty string" },
+                mapUrl: { type: "string", description: "Google Maps URL for this specific place" },
+                coordinates: {
+                  type: "object",
+                  required: ["latitude", "longitude"],
+                  properties: {
+                    latitude: { type: "number" },
+                    longitude: { type: "number" },
+                  },
+                },
+                transport: {
+                  type: "array",
+                  description: "How to travel from this activity to the next one",
+                  items: {
+                    type: "object",
+                    required: ["mode", "time"],
+                    properties: {
+                      mode: {
+                        type: "string",
+                        enum: ["walk", "subway", "train", "bus", "taxi", "car", "ferry"],
+                      },
+                      time: { type: "string", description: "e.g. '12 min'" },
+                      label: { type: "string", description: "e.g. 'Take the Yamanote Line to Shibuya'" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
 
-function shouldRetryWithFallback(error: unknown): boolean {
-  const maybeCode =
-    typeof error === "object" && error !== null && "code" in error
-      ? (error as { code?: unknown }).code
-      : undefined;
-  const maybeStatus =
-    typeof error === "object" && error !== null && "status" in error
-      ? (error as { status?: unknown }).status
-      : undefined;
+function buildPrompt(input: GenerateItineraryRequest): string {
+  const nights = (() => {
+    if (input.startDate && input.endDate) {
+      const ms = new Date(input.endDate).getTime() - new Date(input.startDate).getTime();
+      return Math.max(1, Math.round(ms / 86_400_000));
+    }
+    return 3;
+  })();
 
-  return maybeCode === 503 || maybeStatus === "UNAVAILABLE";
+  return `You are a professional travel planner creating a detailed itinerary for a mobile travel app.
+
+Destination: ${input.destinationName}${input.country ? `, ${input.country}` : ""}
+Trip length: ${nights} day${nights !== 1 ? "s" : ""}
+Traveler party: ${input.party}
+Budget style: ${input.budget}
+Interests: ${input.interests.length ? input.interests.join(", ") : "general sightseeing"}
+Dates: ${input.startDate ?? "flexible"} to ${input.endDate ?? "flexible"}
+
+Guidelines:
+- Create ${nights} day${nights !== 1 ? "s" : ""} with 3–5 activities each. Balance morning, afternoon, and evening.
+- Use real, well-known places with accurate coordinates and realistic ratings.
+- For each activity's transport array, describe the recommended way to get from THAT activity to the NEXT one. Last activity per day can have an empty transport array.
+- Use accurate travel times based on real distances (e.g. don't say 5 min if it's 30 min away).
+- Cost should be realistic: "Free", "$5–10", "$25", etc.
+- Leave all image fields as empty strings — images are sourced separately.
+- Day titles should be catchy and thematic (e.g. "Temples & Street Food", "Modern Tokyo").
+- Subtitle should be 1 sentence describing the overall trip vibe.`;
 }
 
-async function generateWithModel(
-  input: GenerateItineraryRequest,
-  modelName: string
+export async function generateItineraryFlow(
+  input: GenerateItineraryRequest
 ): Promise<GeneratedItinerary> {
-  const { output } = await ai.generate({
-    model: googleAI.model(modelName),
-    prompt: itineraryPrompt(input),
-    output: {
-      schema: generatedItinerarySchema,
-    },
+  // Validate input
+  generateItineraryRequestSchema.parse(input);
+
+  const client = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
   });
 
-  if (!output) {
-    throw new Error(`Model ${modelName} returned no itinerary output.`);
+  const response = await client.messages.create({
+    model: MODEL_NAME,
+    max_tokens: 8192,
+    tools: [
+      {
+        name: "create_itinerary",
+        description: "Create a structured travel itinerary",
+        input_schema: ITINERARY_TOOL_INPUT_SCHEMA,
+      },
+    ],
+    tool_choice: { type: "tool", name: "create_itinerary" },
+    messages: [{ role: "user", content: buildPrompt(input) }],
+  });
+
+  const toolBlock = response.content.find((b) => b.type === "tool_use");
+  if (!toolBlock || toolBlock.type !== "tool_use") {
+    throw new Error("Claude did not return a structured itinerary.");
   }
 
-  return {
-    ...output,
+  const raw = toolBlock.input as Record<string, unknown>;
+
+  return generatedItinerarySchema.parse({
+    ...raw,
     destinationId: input.destinationId,
-    destinationName: output.destinationName || input.destinationName,
-    country: output.country || input.country,
+    destinationName: (raw.destinationName as string) || input.destinationName,
+    country: (raw.country as string) || input.country,
     budget: input.budget,
     interests: input.interests,
     travelerType: input.party,
     startDate: input.startDate,
     endDate: input.endDate,
     source: "ai_generated",
-    model: modelName,
+    model: MODEL_NAME,
     promptVersion: PROMPT_VERSION,
     isActive: true,
-  };
+  });
 }
-
-const itineraryPrompt = (input: GenerateItineraryRequest) => `
-You are generating a mobile-friendly travel itinerary as strict JSON.
-
-Requirements:
-- Return only JSON matching the provided output schema.
-- Build a realistic itinerary for "${input.destinationName}"${input.country ? `, ${input.country}` : ""}.
-- Use destinationId "${input.destinationId}" only as an internal identifier, not as the human-facing destination name.
-- Keep the tone concise and practical.
-- Include 2 to 4 days depending on the trip information.
-- Each day must contain 2 to 5 activities.
-- Activities should include specific names, time labels, short descriptions, image URLs, and transport suggestions.
-- Set source to "ai_generated".
-- Keep budget aligned to "${input.budget}".
-- Reflect these traveler interests when relevant: ${input.interests.join(", ") || "general sightseeing"}.
-- Traveler party: ${input.party}.
-- Start date: ${input.startDate ?? "not provided"}.
-- End date: ${input.endDate ?? "not provided"}.
-
-Use public placeholder image URLs if you do not know exact assets.
-Do not include markdown fences or commentary.
-`;
-
-export const generateItineraryFlow = ai.defineFlow(
-  {
-    name: "generateItinerary",
-    inputSchema: generateItineraryRequestSchema,
-    outputSchema: generatedItinerarySchema,
-  },
-  async (input): Promise<GeneratedItinerary> => {
-    try {
-      return await generateWithModel(input, MODEL_NAME);
-    } catch (error) {
-      if (!shouldRetryWithFallback(error)) {
-        throw error;
-      }
-
-      return generateWithModel(input, FALLBACK_MODEL_NAME);
-    }
-  }
-);

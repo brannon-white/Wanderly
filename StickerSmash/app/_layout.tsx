@@ -6,7 +6,7 @@ import OnboardingSecondPage from './(tabs)/onboardingSecondPage';
 import OnboardingThirdPage from './(tabs)/onboardingThirdPage';
 import AuthScreen from './(tabs)/authScreen';
 import SignInScreen from './(tabs)/signInScreen';
-import auth from '@react-native-firebase/auth';
+import { getAuth } from '@react-native-firebase/auth';
 import SignUpscreen from './(tabs)/signUpScreen';
 import TravelPreferencesScreen from './(tabs)/travelPreferencesScreen';
 import FoodPreferencesScreen from './(tabs)/foodPreferencesScreen';
@@ -42,8 +42,8 @@ export type RootStackParamList = {
   SignIn: undefined;
   Index: undefined;
   SignUp: undefined;
-  TravelPreferences: undefined;
-  FoodPreferences: undefined;
+  TravelPreferences: { fromSettings?: boolean } | undefined;
+  FoodPreferences: { fromSettings?: boolean } | undefined;
   UserInfoSignUp: undefined;
   OnboardingComplete: undefined;
   ItineraryScreen: { id: string; source?: 'browse' | 'mytrips'; committedTripId?: string };
@@ -92,7 +92,7 @@ export default function RootLayout() {
         return;
       }
 
-      const firebaseUser = auth().currentUser;
+      const firebaseUser = getAuth().currentUser;
 
       if (!firebaseUser) {
         setInitialRoute('Auth');
@@ -101,7 +101,7 @@ export default function RootLayout() {
 
       const exists = await userExists(firebaseUser.uid);
       if (exists) {
-        const uid = auth().currentUser?.uid;
+        const uid = getAuth().currentUser?.uid;
         if (uid) {
           getUserProfile(uid);
         }

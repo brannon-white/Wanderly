@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator, StyleSheet } from 'react-native';
 import { GoogleSignin, GoogleSigninButton } from '@react-native-google-signin/google-signin';
-import auth from '@react-native-firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, signInWithCredential, GoogleAuthProvider } from '@react-native-firebase/auth';
 import { styles } from '@/styles/signUpStyles';
 import { useDemo } from '@/context/DemoContext';
 import { userExists } from '@/hooks/useSaveUserProfile';
@@ -25,7 +25,7 @@ async function signUpWithEmail() {
   }
   setLoading(true);
   try {
-    const result = await auth().createUserWithEmailAndPassword(email, password);
+    const result = await createUserWithEmailAndPassword(getAuth(), email, password);
     const uid = result.user.uid;
     const exists = await userExists(uid);
 
@@ -59,8 +59,8 @@ async function signUpWithGoogle() {
       throw new Error('No idToken returned from Google Sign-In.');
     }
     // @ts-ignore
-    const googleCredential = auth.GoogleAuthProvider.credential(googleUser.data.idToken);
-    const result = await auth().signInWithCredential(googleCredential);
+    const googleCredential = GoogleAuthProvider.credential(googleUser.data.idToken);
+    const result = await signInWithCredential(getAuth(), googleCredential);
 
     const uid = result.user.uid;
     const exists = await userExists(uid);

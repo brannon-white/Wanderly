@@ -1,4 +1,4 @@
-import auth from '@react-native-firebase/auth';
+import { getAuth, getIdToken } from '@react-native-firebase/auth';
 
 import type {
   FirestoreItineraryDocument,
@@ -13,13 +13,13 @@ export interface GenerateItineraryResponse {
 export async function generateItinerary(
   payload: GenerateItineraryRequest
 ): Promise<GenerateItineraryResponse> {
-  const currentUser = auth().currentUser;
+  const currentUser = getAuth().currentUser;
 
   if (!currentUser) {
     throw new Error('No Firebase auth user is currently signed in.');
   }
 
-  const idToken = await currentUser.getIdToken(true);
+  const idToken = await getIdToken(currentUser, true);
   const response = await fetch(
     'https://us-central1-wanderly-dff52.cloudfunctions.net/generateItineraryHttp',
     {

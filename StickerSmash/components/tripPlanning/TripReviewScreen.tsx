@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
-import auth from '@react-native-firebase/auth';
+import { getAuth } from '@react-native-firebase/auth';
 import { PRIMARY, BORDER_COLOR, TEXT_DARK, TEXT_GRAY } from '@/styles/tripPlanningStyles';
 import { useTripPlanning } from '@/context/TripPlanningContext';
 import { useMyTrips } from '@/context/MyTripsContext';
@@ -68,7 +68,7 @@ export default function TripReviewScreen() {
   const destination = destinationSnapshot ?? { id: destinationId, name: 'Unknown', country: '', flag: '', imageUrl: '' };
 
   const handleBuild = async () => {
-    const currentUser = auth().currentUser;
+    const currentUser = getAuth().currentUser;
 
     if (!currentUser) {
       Alert.alert(

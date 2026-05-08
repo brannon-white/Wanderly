@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { getAuth } from '@react-native-firebase/auth';
 import { useDemo } from './DemoContext';
 import { SavedItem } from '@/data/demoData';
 
@@ -22,7 +22,7 @@ export const SavedProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     if (isDemoMode) return;
-    const uid = auth().currentUser?.uid;
+    const uid = getAuth().currentUser?.uid;
     if (!uid) return;
 
     const unsubscribe = firestore()
@@ -43,7 +43,7 @@ export const SavedProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (isSaved(item.id)) {
       setSavedItems((prev) => prev.filter((i) => i.id !== item.id));
       if (!isDemoMode) {
-        const uid = auth().currentUser?.uid;
+        const uid = getAuth().currentUser?.uid;
         if (uid) {
           firestore().collection('users').doc(uid).collection('savedItems').doc(item.id).delete();
         }
@@ -51,7 +51,7 @@ export const SavedProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } else {
       setSavedItems((prev) => [...prev, item]);
       if (!isDemoMode) {
-        const uid = auth().currentUser?.uid;
+        const uid = getAuth().currentUser?.uid;
         if (uid) {
           firestore().collection('users').doc(uid).collection('savedItems').doc(item.id).set(item);
         }

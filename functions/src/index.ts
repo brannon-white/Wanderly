@@ -5,6 +5,7 @@ import { defineSecret } from "firebase-functions/params";
 import * as functionsV1 from "firebase-functions/v1";
 import * as logger from "firebase-functions/logger";
 
+import Anthropic from "@anthropic-ai/sdk";
 import { generateItineraryFlow, MODEL_NAME, PROMPT_VERSION } from "./itineraryGeneration";
 import {
   callableGenerateItineraryResponseSchema,
@@ -13,7 +14,7 @@ import {
 
 initializeApp();
 
-const geminiApiKey = defineSecret("GEMINI_API_KEY");
+const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
 
 type HttpErrorDetails = {
   status: number;
@@ -54,16 +55,20 @@ function classifyHttpError(error: unknown): HttpErrorDetails {
 
   if (typeof maybeCode === "number") {
     if (maybeCode === 429) {
-      return { status: 429, error: "gemini_resource_exhausted", details: message };
+      return { status: 429, error: "rate_limit_exceeded", details: message };
     }
 
     if (maybeCode === 400) {
-      return { status: 400, error: "gemini_bad_request", details: message };
+      return { status: 400, error: "bad_request", details: message };
+    }
+
+    if (maybeCode === 529) {
+      return { status: 503, error: "api_overloaded", details: message };
     }
   }
 
   if (maybeStatus === "RESOURCE_EXHAUSTED") {
-    return { status: 429, error: "gemini_resource_exhausted", details: message };
+    return { status: 429, error: "rate_limit_exceeded", details: message };
   }
 
   if (message.includes("verifyIdToken")) {
@@ -143,7 +148,7 @@ export const generateItineraryV1 = functionsV1
   .region("us-central1")
   .runWith({
     maxInstances: 10,
-    secrets: [geminiApiKey],
+    secrets: [anthropicApiKey],
     serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
   })
   .https.onCall(async (data, context): Promise<CallableGenerateItineraryResponse> => {
@@ -163,7 +168,7 @@ export const generateItineraryHttp = functionsV1
   .region("us-central1")
   .runWith({
     maxInstances: 10,
-    secrets: [geminiApiKey],
+    secrets: [anthropicApiKey],
     serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
   })
   .https.onRequest(async (req, res) => {
@@ -219,6 +224,114 @@ export const generateItineraryHttp = functionsV1
         ...classifiedError,
         rawError: error,
       });
+      res.status(classifiedError.status).json(classifiedError);
+    }
+  });
+
+const DESTINATION_CONTENT_TOOL_SCHEMA = {
+  type: "object" as const,
+  required: [
+    "description", "gettingThere", "bestTime", "attractions",
+    "cuisine", "activities", "accommodations", "transportation",
+    "safety", "language", "currency", "visa",
+  ],
+  properties: {
+    description: { type: "string", description: "2-3 sentence destination overview for travelers" },
+    gettingThere: { type: "string", description: "How to arrive — airports, trains, major routes" },
+    bestTime: { type: "string", description: "Best seasons or months to visit and why" },
+    attractions: { type: "string", description: "Top sights, landmarks, and must-see places" },
+    cuisine: { type: "string", description: "Local food scene, signature dishes, dining tips" },
+    activities: { type: "string", description: "Activities, experiences, and things to do" },
+    accommodations: { type: "string", description: "Types of accommodation and areas to stay" },
+    transportation: { type: "string", description: "Getting around locally — transit, taxis, etc." },
+    safety: { type: "string", description: "Safety tips, health considerations, emergency info" },
+    language: { type: "string", description: "Language(s) spoken and a few useful local phrases" },
+    currency: { type: "string", description: "Local currency, payment methods, tipping customs" },
+    visa: { type: "string", description: "Visa and entry requirements overview for travelers" },
+  },
+};
+
+export interface DestinationContentResponse {
+  description: string;
+  gettingThere: string;
+  bestTime: string;
+  attractions: string;
+  cuisine: string;
+  activities: string;
+  accommodations: string;
+  transportation: string;
+  safety: string;
+  language: string;
+  currency: string;
+  visa: string;
+}
+
+export const getDestinationContentHttp = functionsV1
+  .region("us-central1")
+  .runWith({
+    maxInstances: 10,
+    secrets: [anthropicApiKey],
+    serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
+  })
+  .https.onRequest(async (req, res) => {
+    if (req.method === "OPTIONS") {
+      res.set("Access-Control-Allow-Origin", "*");
+      res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+      res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.status(204).send("");
+      return;
+    }
+
+    res.set("Access-Control-Allow-Origin", "*");
+
+    if (req.method !== "POST") {
+      res.status(405).json({ error: "Method not allowed." });
+      return;
+    }
+
+    const authHeader = req.headers.authorization ?? "";
+    const match = authHeader.match(/^Bearer (.+)$/i);
+    if (!match) {
+      res.status(401).json({ error: "Missing bearer token." });
+      return;
+    }
+
+    try {
+      await getAuth().verifyIdToken(match[1]);
+
+      const { cityName, country } = req.body as { cityName?: string; country?: string };
+      if (!cityName) {
+        res.status(400).json({ error: "cityName is required." });
+        return;
+      }
+
+      const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+      const message = await client.messages.create({
+        model: MODEL_NAME,
+        max_tokens: 2048,
+        tools: [{
+          name: "create_destination_guide",
+          description: "Create concise travel guide sections for a destination",
+          input_schema: DESTINATION_CONTENT_TOOL_SCHEMA,
+        }],
+        tool_choice: { type: "tool", name: "create_destination_guide" },
+        messages: [{
+          role: "user",
+          content: `Write a concise travel guide for ${cityName}${country ? `, ${country}` : ""}. Each section should be 2-3 sentences of practical, useful travel information.`,
+        }],
+      });
+
+      const toolUse = message.content.find((c) => c.type === "tool_use");
+      if (!toolUse || toolUse.type !== "tool_use") {
+        res.status(500).json({ error: "No structured response from AI." });
+        return;
+      }
+
+      logger.info("getDestinationContentHttp success", { cityName, country });
+      res.status(200).json(toolUse.input as DestinationContentResponse);
+    } catch (error) {
+      const classifiedError = classifyHttpError(error);
+      logger.error("getDestinationContentHttp failed", { ...classifiedError, rawError: error });
       res.status(classifiedError.status).json(classifiedError);
     }
   });

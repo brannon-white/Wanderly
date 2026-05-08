@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator, StyleSheet } from 'react-native';
 import { styles } from '@/styles/signInScreenStyles';
-import auth from '@react-native-firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signInWithCredential, signOut, GoogleAuthProvider } from '@react-native-firebase/auth';
 import { useDemo } from '@/context/DemoContext';
 import Constants from 'expo-constants';
 import { userExists } from '@/hooks/useSaveUserProfile';
@@ -35,7 +35,7 @@ export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   
   useEffect(() => {
-    const subscriber = auth().onAuthStateChanged(firebaseUser => {
+    const subscriber = onAuthStateChanged(getAuth(), firebaseUser => {
       setUser(firebaseUser);
 
     });
@@ -45,7 +45,7 @@ export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
 async function signInWithEmail() {
   setLoading(true);
   try {
-    const result = await auth().signInWithEmailAndPassword(email, password);
+    const result = await signInWithEmailAndPassword(getAuth(), email, password);
     const uid = result.user.uid;
     const exists = await userExists(uid);
 
@@ -78,8 +78,8 @@ async function signInWithGoogle() {
     }
     // @ts-ignore
     const idTokenString: string = googleUser.data.idToken;
-    const googleCredential = auth.GoogleAuthProvider.credential(idTokenString);
-    const result = await auth().signInWithCredential(googleCredential);
+    const googleCredential = GoogleAuthProvider.credential(idTokenString);
+    const result = await signInWithCredential(getAuth(), googleCredential);
 
     const uid = result.user.uid;
     const exists = await userExists(uid);
@@ -106,7 +106,7 @@ async function signInWithGoogle() {
   async function signOut() {
     try {
       await GoogleSignin.revokeAccess();
-      await auth().signOut();
+      await signOut(getAuth());
       Alert.alert('Signed Out', 'You have been signed out.');
     } catch (error: any) {
       Alert.alert('Error', `Could not sign out: ${error.message}`);

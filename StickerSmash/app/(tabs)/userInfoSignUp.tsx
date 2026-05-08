@@ -4,7 +4,7 @@ import CountryPicker from 'react-native-country-picker-modal';
 import { styles } from '@/styles/userInfoSignUpStyles';
 import { useOnboarding } from '@/context/OnboardingContext';
 import * as ImagePicker from 'expo-image-picker';
-import auth from '@react-native-firebase/auth';
+import { getAuth } from '@react-native-firebase/auth';
 import { getOnboardingStepData, clearOnboardingProgress } from '@/utils/onboardingStorage';
 import { saveUserProfile } from '@/hooks/useSaveUserProfile';
 import { useNavigation } from '@react-navigation/native';
@@ -160,7 +160,7 @@ onPress={async () => {
 
   await saveUserProfile(profile);
 
-  const uid = auth().currentUser?.uid;
+  const uid = getAuth().currentUser?.uid;
   if (uid) {
     await AsyncStorage.setItem(`userProfile_${uid}`, JSON.stringify(profile));
   }

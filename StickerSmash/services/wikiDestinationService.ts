@@ -15,6 +15,7 @@ export interface DestinationWikiContent {
     eat?: string;
     sleep?: string;
     staySafe?: string;
+    visa?: string;
   };
 }
 
