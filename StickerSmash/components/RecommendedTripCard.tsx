@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, Image, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from '@/styles/discoverScreenStyles';
 import { useNavigation } from '@react-navigation/native';
@@ -7,20 +7,38 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
 import { useSaved } from '@/context/SavedContext';
 import type { ItineraryCardSummary } from '@/types/itinerary';
+import { searchPhoto } from '@/services/unsplash';
 
 export default function RecommendedTripCard({ itin }: { itin: ItineraryCardSummary }) {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList, 'ItineraryScreen'>>();
   const { isSaved, toggleSaved } = useSaved();
   const saved = isSaved(itin.id);
+  const [imageUri, setImageUri] = useState<string | undefined>(
+    itin.heroImage || undefined
+  );
+
+  useEffect(() => {
+    if (!imageUri) {
+      searchPhoto(`${itin.destinationName} ${itin.country ?? ''} travel`).then(url => {
+        if (url) setImageUri(url);
+      });
+    }
+  }, [itin.id]);
 
   return (
     <TouchableOpacity onPress={() => navigation.navigate('ItineraryScreen', { id: itin.id })} activeOpacity={0.85}>
       <View style={styles.recommendedCard}>
-        <Image
-          source={{ uri: itin.heroImage || 'https://via.placeholder.com/400x200?text=No+Image' }}
-          style={styles.recommendedTripImage}
-          resizeMode="cover"
-        />
+        {imageUri ? (
+          <Image
+            source={{ uri: imageUri }}
+            style={styles.recommendedTripImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.recommendedTripImage, { backgroundColor: '#e8e4ff', alignItems: 'center', justifyContent: 'center' }]}>
+            <ActivityIndicator color="#6A62B7" />
+          </View>
+        )}
         <View style={styles.recommendedCardContent}>
           <Text style={styles.recommendedCardTitle}>{itin.title}</Text>
           <View style={styles.ratingRow}>

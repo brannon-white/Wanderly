@@ -18,36 +18,40 @@ export default function BottomTabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarShowLabel: false,
+        tabBarShowLabel: true,
         tabBarStyle: {
-          borderRadius: 32,
-          margin: 16,
-          height: 64,
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
+          height: 80,
           backgroundColor: '#fff',
-          elevation: 8,
+          borderTopWidth: 1,
+          borderTopColor: '#f0f0f0',
+          elevation: 0,
           shadowColor: '#000',
-          shadowOpacity: 0.06,
-          shadowRadius: 8,
-          boxShadow: '0px -2px 20px 0px rgba(0, 0, 0, 0.20)',
+          shadowOpacity: 0.05,
+          shadowRadius: 4,
+          shadowOffset: { width: 0, height: -1 },
         },
-        tabBarIcon: ({ color, size }) => {
-          if (route.name === 'Discover') return <Ionicons name="home" size={size} color={color} />;
-          if (route.name === 'Bookmarks') return <Ionicons name="bookmark-outline" size={size} color={color} />;
-          if (route.name === 'MyTrips') return <Ionicons name="location-outline" size={size} color={color} />;
-          if (route.name === 'Profile') return <Ionicons name="person-outline" size={size} color={color} />;
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontFamily: 'SourceSans3-Regular',
+          marginBottom: 8,
+        },
+        tabBarIconStyle: {
+          marginTop: 8,
+        },
+        tabBarIcon: ({ color, focused }) => {
+          if (route.name === 'Discover') return <Ionicons name={focused ? 'home' : 'home-outline'} size={26} color={color} />;
+          if (route.name === 'Bookmarks') return <Ionicons name={focused ? 'bookmark' : 'bookmark-outline'} size={26} color={color} />;
+          if (route.name === 'MyTrips') return <Ionicons name={focused ? 'location' : 'location-outline'} size={26} color={color} />;
+          if (route.name === 'Profile') return <Ionicons name={focused ? 'person' : 'person-outline'} size={26} color={color} />;
         },
         tabBarActiveTintColor: '#6A62B7',
-        tabBarInactiveTintColor: '#bdbdbd',
+        tabBarInactiveTintColor: '#b0b0b0',
       })}
     >
-      <Tab.Screen name="Discover" component={DiscoverScreen} />
-      <Tab.Screen name="Bookmarks" component={BookmarksScreen} />
+      <Tab.Screen name="Discover" component={DiscoverScreen} options={{ tabBarLabel: 'Discover' }} />
+      <Tab.Screen name="Bookmarks" component={BookmarksScreen} options={{ tabBarLabel: 'Saved' }} />
       <Tab.Screen name="MyTrips" component={MyTripsScreen} options={{ tabBarLabel: 'My Trips' }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: 'Profile' }} />
     </Tab.Navigator>
     {isDemoMode && <DemoNavigator />}
     </View>

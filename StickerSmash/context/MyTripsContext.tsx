@@ -1,5 +1,12 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getAuth } from '@react-native-firebase/auth';
 import { useDemo } from './DemoContext';
+
+const STORAGE_KEY = () => {
+  const uid = getAuth().currentUser?.uid;
+  return uid ? `committedTrips:${uid}` : 'committedTrips:guest';
+};
 
 export interface CommittedTrip {
   id: string;
@@ -66,6 +73,27 @@ const DEMO_TRIPS: CommittedTrip[] = [
 export function MyTripsProvider({ children }: { children: React.ReactNode }) {
   const { isDemoMode } = useDemo();
   const [trips, setTrips] = useState<CommittedTrip[]>(isDemoMode ? DEMO_TRIPS : []);
+  const [loaded, setLoaded] = useState(isDemoMode);
+
+  // Load persisted trips on mount (non-demo only)
+  useEffect(() => {
+    if (isDemoMode) return;
+    AsyncStorage.getItem(STORAGE_KEY()).then(raw => {
+      if (raw) {
+        try {
+          const saved: CommittedTrip[] = JSON.parse(raw);
+          if (Array.isArray(saved)) setTrips(saved);
+        } catch {}
+      }
+      setLoaded(true);
+    });
+  }, [isDemoMode]);
+
+  // Persist whenever trips change (non-demo, after initial load)
+  useEffect(() => {
+    if (isDemoMode || !loaded) return;
+    AsyncStorage.setItem(STORAGE_KEY(), JSON.stringify(trips)).catch(() => {});
+  }, [trips, isDemoMode, loaded]);
 
   const addTrip = (trip: CommittedTrip) => {
     setTrips(prev => [trip, ...prev]);

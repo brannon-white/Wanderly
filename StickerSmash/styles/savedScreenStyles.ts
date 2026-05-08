@@ -3,7 +3,7 @@ import { StyleSheet } from 'react-native';
 export const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f4f2ff',
   },
 
   header: {
@@ -16,7 +16,7 @@ export const styles = StyleSheet.create({
   },
 
   headerTitle: {
-    fontSize: 26,
+    fontSize: 28,
     color: '#222',
     fontFamily: 'Merriweather_36pt-Bold',
   },
@@ -25,9 +25,16 @@ export const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e8e4ff',
+    shadowColor: '#6A62B7',
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
 
   headerSpacer: {
@@ -36,7 +43,7 @@ export const styles = StyleSheet.create({
 
   list: {
     paddingHorizontal: 20,
-    paddingBottom: 100,
+    paddingBottom: 24,
   },
 
   // ── Card — matches the home page recommendedCard pattern ──────────────

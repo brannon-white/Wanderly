@@ -34,18 +34,19 @@ function normalizeItinerarySummary(
 
 export function useMatchingItineraries(uid: string) {
   const { isDemoMode } = useDemo();
-  const [itineraries, setItineraries] = useState<ItineraryCardSummary[]>(DEMO_ITINERARIES);
-  const [loading, setLoading] = useState(false);
+  const [itineraries, setItineraries] = useState<ItineraryCardSummary[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isDemoMode) {
       setItineraries(DEMO_ITINERARIES);
+      setLoading(false);
       return;
     }
 
     if (!uid) {
-      setItineraries(DEMO_ITINERARIES);
+      setLoading(false);
       return;
     }
 
@@ -53,40 +54,42 @@ export function useMatchingItineraries(uid: string) {
       try {
         setLoading(true);
 
-        const cacheKey = `itineraries:v2:${uid}`;
+        const profile = await getUserProfile(uid).catch(() => null);
+        const userInterests = new Set(
+          (profile?.activityPreferences ?? []).map((i: string) => i.toLowerCase())
+        );
+
+        const cacheKey = `itineraries:v3:${uid}`;
         const cached = await cacheGet<ItineraryCardSummary[]>(cacheKey);
         if (cached && cached.length > 0) {
           setItineraries(cached);
           return;
         }
 
-        const profile = await getUserProfile(uid).catch(() => null);
-        const userInterests: string[] = profile?.activityPreferences ?? [];
-
-        let snapshot;
-        if (userInterests.length) {
-          snapshot = await firestore()
-            .collection('prebuiltItineraries')
-            .where('interests', 'array-contains-any', userInterests.slice(0, 10))
-            .get();
-        } else {
-          snapshot = await firestore()
-            .collection('prebuiltItineraries')
-            .limit(10)
-            .get();
-        }
+        const snapshot = await firestore()
+          .collection('prebuiltItineraries')
+          .get();
 
         const results = snapshot.docs.map(doc =>
-          normalizeItinerarySummary({ id: doc.id, ...(doc.data() as Partial<FirestoreItineraryDocument>) })
+          normalizeItinerarySummary({ ...(doc.data() as Partial<FirestoreItineraryDocument>), id: doc.id })
         );
 
-        if (results.length > 0) {
-          setItineraries(results);
-          await cacheSet(cacheKey, results, TTL_DAYS);
+        // Sort by number of matching interests so most relevant appear first
+        const scored = results.map(itin => ({
+          itin,
+          score: userInterests.size > 0
+            ? (itin.interests ?? []).filter((i: string) => userInterests.has(i.toLowerCase())).length
+            : 0,
+        }));
+        scored.sort((a, b) => b.score - a.score);
+        const sorted = scored.map(s => s.itin);
+
+        setItineraries(sorted);
+        if (sorted.length > 0) {
+          await cacheSet(cacheKey, sorted, TTL_DAYS);
         }
-        // If results empty, DEMO_ITINERARIES from initial state stay visible
       } catch (err: any) {
-        // Firestore failure — DEMO_ITINERARIES from initial state stay visible
+        setError(err.message ?? 'Failed to load recommended trips');
         console.warn('useMatchingItineraries:', err.message);
       } finally {
         setLoading(false);
