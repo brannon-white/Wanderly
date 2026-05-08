@@ -438,11 +438,11 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Wanderly/Wanderly.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_IDENTITY = "iPhone Distribution";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = SPLDGUQ5UK;
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = SPLDGUQ5UK;
 				INFOPLIST_FILE = Wanderly/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Wanderly;
