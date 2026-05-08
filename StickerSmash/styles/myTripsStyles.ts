@@ -5,7 +5,7 @@ const PRIMARY = '#6A62B7';
 export const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f4f2ff',
   },
 
   header: {
@@ -18,7 +18,7 @@ export const styles = StyleSheet.create({
   },
 
   headerTitle: {
-    fontSize: 26,
+    fontSize: 28,
     color: '#222',
     fontFamily: 'Merriweather_36pt-Bold',
   },
@@ -27,9 +27,16 @@ export const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e8e4ff',
+    shadowColor: '#6A62B7',
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
 
   headerSpacer: {
@@ -41,7 +48,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     marginHorizontal: 20,
     marginBottom: 20,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#e8e4ff',
     borderRadius: 16,
     padding: 4,
   },
@@ -72,7 +79,7 @@ export const styles = StyleSheet.create({
   // ── Trip card ─────────────────────────────────────────────────────────
   list: {
     paddingHorizontal: 20,
-    paddingBottom: 110,
+    paddingBottom: 24,
   },
 
   card: {
@@ -140,7 +147,7 @@ export const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#e8e4ff',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,

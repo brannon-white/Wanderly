@@ -3,11 +3,11 @@ import { StyleSheet } from 'react-native';
 export const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f4f2ff',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f4f2ff',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -17,10 +17,10 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 12,
     paddingBottom: 16,
-    backgroundColor: '#fff',
+    backgroundColor: '#f4f2ff',
   },
   pageTitle: {
-    fontSize: 30,
+    fontSize: 28,
     fontFamily: 'Merriweather_36pt-Bold',
     color: '#222',
   },
@@ -28,10 +28,10 @@ export const styles = StyleSheet.create({
   // ── Scroll ──
   scrollView: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f4f2ff',
   },
   scrollContent: {
-    paddingBottom: 120,
+    paddingBottom: 24,
   },
 
   // ── Profile card (tap to edit) ──
@@ -39,11 +39,19 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
+    marginHorizontal: 24,
+    paddingHorizontal: 16,
     paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    marginBottom: 8,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+    marginBottom: 16,
+    shadowColor: '#6A62B7',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   profileCardLeft: {
     flexDirection: 'row',
@@ -143,9 +151,15 @@ export const styles = StyleSheet.create({
   signOutRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    marginHorizontal: 24,
+    paddingHorizontal: 16,
     paddingVertical: 16,
     gap: 12,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+    marginBottom: 16,
   },
   signOutText: {
     fontSize: 17,

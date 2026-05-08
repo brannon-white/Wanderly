@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -6,6 +6,7 @@ import {
   Text,
   Image,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -13,12 +14,22 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
 import { styles } from '@/styles/myTripsStyles';
 import { useMyTrips, CommittedTrip, isTripActive, formatTripSubtitle } from '@/context/MyTripsContext';
+import { searchPhoto } from '@/services/unsplash';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 type Tab = 'Active' | 'Passed';
 
 function TripCard({ trip }: { trip: CommittedTrip }) {
   const navigation = useNavigation<NavProp>();
+  const [imageUri, setImageUri] = useState<string | undefined>(trip.heroImage || undefined);
+
+  useEffect(() => {
+    if (!imageUri) {
+      searchPhoto(`${trip.title} travel destination`).then(url => {
+        if (url) setImageUri(url);
+      });
+    }
+  }, [trip.id]);
 
   return (
     <TouchableOpacity
@@ -26,7 +37,13 @@ function TripCard({ trip }: { trip: CommittedTrip }) {
       activeOpacity={0.85}
       onPress={() => navigation.navigate('ItineraryScreen', { id: trip.templateId, source: 'mytrips', committedTripId: trip.id })}
     >
-      <Image source={{ uri: trip.heroImage }} style={styles.cardImage} />
+      {imageUri ? (
+        <Image source={{ uri: imageUri }} style={styles.cardImage} />
+      ) : (
+        <View style={[styles.cardImage, { backgroundColor: '#e8e4ff', alignItems: 'center', justifyContent: 'center' }]}>
+          <ActivityIndicator color="#6A62B7" />
+        </View>
+      )}
       <View style={styles.cardContent}>
         <View style={styles.cardMeta}>
           <Text style={styles.cardTitle} numberOfLines={1}>{trip.title}</Text>

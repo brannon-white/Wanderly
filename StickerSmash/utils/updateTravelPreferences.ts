@@ -20,6 +20,6 @@ export async function updateTravelPreferences(selected: string[]) {
     }
 
     // Invalidate itinerary cache so recommendations refresh with new interests
-    await cacheDelete(`itineraries:${uid}`);
+    await cacheDelete(`itineraries:v3:${uid}`);
   }
 }

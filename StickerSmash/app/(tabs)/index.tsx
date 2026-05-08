@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SafeAreaView, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -15,18 +15,37 @@ import { useDestinations } from '@/hooks/useDestinations';
 import { useDemo } from '@/context/DemoContext';
 import { DEMO_UID } from '@/data/demoData';
 import type { ItineraryCardSummary } from '@/types/itinerary';
+import { getUserProfile } from '@/utils/getUserProfile';
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
 
 export default function DiscoverScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const { isDemoMode } = useDemo();
   const { featuredTrip, itinerary, loading, error } = useFeaturedItinerary();
   const { destinations, loading: loadingDest, error: errorDest } = useDestinations();
+  const [firstName, setFirstName] = useState('');
 
   const uid = isDemoMode ? DEMO_UID : (getAuth().currentUser?.uid ?? '');
   const { prebuiltItineraries, loading: loadingItins, error: errorItins } = useMatchingItineraries(uid);
 
   const [activeItinIndex, setActiveItinIndex] = useState(0);
-  const ITIN_PAGE_WIDTH = 365; // card width (335) + marginLeft (20) + marginRight (10)
+  const ITIN_PAGE_WIDTH = 365;
+
+  useEffect(() => {
+    if (isDemoMode) { setFirstName('Traveler'); return; }
+    const user = getAuth().currentUser;
+    if (!user) return;
+    getUserProfile(user.uid).then((p: any) => {
+      const name = p?.fullName || '';
+      setFirstName(name.split(' ')[0] || '');
+    }).catch(() => {});
+  }, [isDemoMode]);
 
   const handleItinScroll = (e: any) => {
     const index = Math.round(e.nativeEvent.contentOffset.x / ITIN_PAGE_WIDTH);
@@ -36,7 +55,10 @@ export default function DiscoverScreen() {
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Discover</Text>
+        <View>
+          {firstName ? <Text style={styles.greeting}>{getGreeting()}, {firstName}</Text> : null}
+          <Text style={styles.title}>Discover</Text>
+        </View>
       </View>
 
       {/* Search */}
@@ -49,7 +71,7 @@ export default function DiscoverScreen() {
         <Text style={[styles.searchInput, { color: '#bdbdbd' }]}>Where do you want to go?</Text>
       </TouchableOpacity>
 
-       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+       <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
         {/* Featured Trip */}
         <Text style={styles.sectionTitleFeatured}>Featured Trip</Text>
         {loading ? (

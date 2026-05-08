@@ -19,6 +19,6 @@ export async function updateFoodPreferences(selected: string[]) {
       await cacheSet(key, { ...profile, foodPreferences: selected }, 1);
     }
 
-    await cacheDelete(`itineraries:${uid}`);
+    await cacheDelete(`itineraries:v3:${uid}`);
   }
 }

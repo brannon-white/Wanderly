@@ -252,25 +252,43 @@ export default function ItineraryScreen() {
       setLoadingRemote(true);
 
       try {
-        const snapshot = await firestore()
-          .collection('users')
-          .doc(uid)
-          .collection('itineraries')
+        // For mytrips source, look in user's saved itineraries (AI-generated)
+        if (!isBrowsing) {
+          const userSnapshot = await firestore()
+            .collection('users')
+            .doc(uid)
+            .collection('itineraries')
+            .doc(id)
+            .get();
+
+          if (userSnapshot.exists) {
+            const data = userSnapshot.data() as GeneratedItinerary | undefined;
+            if (!cancelled && data) {
+              setRemoteLoadError(null);
+              setRemoteItinerary({ ...data, id: data.id || userSnapshot.id });
+            }
+            return;
+          }
+        }
+
+        // For browsing mode (or fallback): check prebuilt itineraries
+        const prebuiltSnapshot = await firestore()
+          .collection('prebuiltItineraries')
           .doc(id)
           .get();
 
-        if (!snapshot.exists) {
+        if (!prebuiltSnapshot.exists) {
           if (!cancelled) {
             setRemoteItinerary(null);
-            setRemoteLoadError(`No saved itinerary document was found for id "${id}".`);
+            setRemoteLoadError(`No itinerary found for id "${id}".`);
           }
           return;
         }
 
-        const data = snapshot.data() as GeneratedItinerary | undefined;
+        const data = prebuiltSnapshot.data() as GeneratedItinerary | undefined;
         if (!cancelled && data) {
           setRemoteLoadError(null);
-          setRemoteItinerary({ ...data, id: data.id || snapshot.id });
+          setRemoteItinerary({ ...data, id: prebuiltSnapshot.id });
         }
       } catch (error) {
         console.error('Failed to load itinerary', error);
@@ -313,7 +331,7 @@ export default function ItineraryScreen() {
     setFlow('prebuilt');
     setTemplateId(itinerary.id);
     setTemplateTitle(itinerary.title);
-    setTemplateHeroImage(itinerary.heroImage);
+    setTemplateHeroImage(heroUri ?? itinerary.heroImage);
     navigation.navigate('TripDates');
   };
 

@@ -108,51 +108,42 @@ progressBarFill: {
     fontFamily: 'SourceSans3-Regular',
   },
 prefsGrid: {
-  width: '100%',
-  alignItems: 'center', // <-- Add this line!
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  justifyContent: 'center',
+  gap: 10,
+  paddingTop: 4,
 },
 prefsRow: {
-  flexDirection: 'row',
-  justifyContent: 'center', // <-- Change from 'flex-start' to 'center'
-  marginBottom: 0,
+  // kept for compatibility but unused
 },
 prefButton: {
-  borderWidth: 2,
-  borderColor: '#eaeaea',
-  borderRadius: 32,
-  paddingVertical: 2,
-  paddingHorizontal: 10,
-  marginBottom: 10,
-  backgroundColor: '#fff',
-  alignItems: 'center',
-  justifyContent: 'center',
-  marginRight: 8,
-  marginLeft: 8,
-  minWidth: 150,
-  maxWidth: '100%',
   flexDirection: 'row',
-  flexShrink: 1,
-  flexWrap: 'nowrap',      // <-- Prevent wrapping
-  overflow: 'hidden',      // <-- Prevent overflow
+  alignItems: 'center',
+  borderWidth: 1.5,
+  borderColor: '#e0e0e0',
+  borderRadius: 100,
+  paddingVertical: 10,
+  paddingHorizontal: 16,
+  backgroundColor: '#fafafa',
 },
-  prefButtonSelected: {
-    borderColor: '#6A62B7',
-    backgroundColor: '#f3f0ff',
-  },
+prefButtonSelected: {
+  borderColor: '#6A62B7',
+  backgroundColor: '#6A62B7',
+},
 prefText: {
-  fontSize: 16,
-  color: '#222',
+  fontSize: 15,
+  color: '#333',
   fontFamily: 'SourceSans3-Regular',
   fontWeight: '600',
-  flexShrink: 1, // Allow text to shrink within pill
 },
-  prefTextSelected: {
-    color: '#7c5cff',
-    fontWeight: '700',
-  },
+prefTextSelected: {
+  color: '#fff',
+  fontWeight: '700',
+},
 prefEmoji: {
-  fontSize: 16,
-  marginLeft: 4,
+  fontSize: 15,
+  marginLeft: 5,
 },
   bottomBar: {
     position: 'absolute',
