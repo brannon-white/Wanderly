@@ -1,41 +1,37 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Dimensions } from 'react-native';
 
 const PRIMARY = '#6A62B7';
+const { width } = Dimensions.get('window');
+const HERO_HEIGHT = Math.round(width * 0.72);
 
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f5f5f5',
   },
 
-  // ── Hero ──────────────────────────────────────────────────────────────
-  heroImage: {
-    width: '100%',
-    height: 320,
-    resizeMode: 'cover',
-  },
-
+  // ── Overlay header (sits above scroll) ───────────────────────────────
   heroOverlay: {
     position: 'absolute',
-    top: 0,
     left: 0,
     right: 0,
+    zIndex: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     paddingHorizontal: 16,
   },
 
   heroBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
     elevation: 4,
   },
 
@@ -57,6 +53,7 @@ export const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 6,
+    zIndex: 20,
   },
 
   savedToastText: {
@@ -65,93 +62,118 @@ export const styles = StyleSheet.create({
     fontFamily: 'Merriweather_24pt-Bold',
   },
 
-  // ── Content ───────────────────────────────────────────────────────────
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 20,
+  // ── Scroll + hero ─────────────────────────────────────────────────────
+  scrollContent: {
     paddingBottom: 110,
+  },
+
+  heroWrapper: {
+    width: '100%',
+    height: HERO_HEIGHT,
+  },
+
+  heroImage: {
+    width: '100%',
+    height: HERO_HEIGHT,
+    resizeMode: 'cover',
+  },
+
+  heroPlaceholder: {
+    backgroundColor: '#c8c0e8',
+  },
+
+  // ── Content card ──────────────────────────────────────────────────────
+  card: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 32,
   },
 
   title: {
     fontSize: 28,
-    color: '#222',
+    color: '#111',
     fontFamily: 'Merriweather_36pt-Bold',
     marginBottom: 10,
+    lineHeight: 36,
   },
 
+  // ── Country row ───────────────────────────────────────────────────────
   countryRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 10,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
   },
 
-  flag: {
-    fontSize: 18,
+  flagEmoji: {
+    fontSize: 20,
+  },
+
+  flagDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#e55',
   },
 
   countryName: {
     fontSize: 15,
-    color: '#555',
+    color: '#444',
     fontFamily: 'SourceSans3-Regular',
   },
 
+  // ── Description ───────────────────────────────────────────────────────
   description: {
     fontSize: 15,
     color: '#444',
     fontFamily: 'SourceSans3-Regular',
-    lineHeight: 24,
+    lineHeight: 25,
     marginBottom: 24,
   },
 
-  sectionTitle: {
-    fontSize: 20,
-    color: '#222',
-    fontFamily: 'Merriweather_36pt-Bold',
-    marginBottom: 12,
+  // ── Gallery ───────────────────────────────────────────────────────────
+  galleryBlock: {
+    marginBottom: 24,
   },
 
-  galleryScroll: {
-    marginLeft: -20,
-    paddingLeft: 20,
+  galleryHeader: {
+    fontSize: 18,
+    color: '#111',
+    fontFamily: 'Merriweather_24pt-Bold',
+    marginBottom: 14,
+  },
+
+  galleryRow: {
+    gap: 10,
   },
 
   galleryImage: {
-    width: 140,
-    height: 100,
-    borderRadius: 14,
-    marginRight: 12,
+    width: 120,
+    height: 120,
+    borderRadius: 12,
     resizeMode: 'cover',
   },
 
-  heroPlaceholder: {
-    backgroundColor: '#ddd',
+  // ── Content sections ──────────────────────────────────────────────────
+  section: {
+    marginBottom: 20,
   },
 
-  // ── Wiki sections ─────────────────────────────────────────────────────
-  wikiSection: {
-    marginTop: 20,
-  },
-
-  wikiSectionTitle: {
+  sectionTitle: {
     fontSize: 16,
-    color: '#222',
+    color: '#111',
     fontFamily: 'Merriweather_24pt-Bold',
     marginBottom: 6,
   },
 
-  wikiSectionText: {
+  sectionText: {
     fontSize: 14,
     color: '#555',
     fontFamily: 'SourceSans3-Regular',
-    lineHeight: 22,
+    lineHeight: 23,
   },
 
   // ── Bottom CTA ────────────────────────────────────────────────────────
@@ -163,7 +185,6 @@ export const styles = StyleSheet.create({
     backgroundColor: '#fff',
     paddingHorizontal: 20,
     paddingTop: 12,
-    paddingBottom: 28,
     borderTopWidth: 1,
     borderTopColor: '#f0f0f0',
   },

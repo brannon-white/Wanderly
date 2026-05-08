@@ -1,4 +1,4 @@
-import { z } from "genkit";
+import { z } from "zod";
 
 export const generateItineraryRequestSchema = z.object({
   destinationId: z.string().min(1),
@@ -31,7 +31,7 @@ export const itineraryActivitySchema = z.object({
   cost: z.string().optional(),
   rating: z.number().optional(),
   reviewCount: z.union([z.number(), z.string()]).optional(),
-  image: z.string().min(1),
+  image: z.string().default(""),
   mapUrl: z.string().optional(),
   coordinates: itineraryCoordinatesSchema.optional(),
   transport: z.array(itineraryTransportOptionSchema).default([]),
@@ -50,7 +50,7 @@ export const generatedItinerarySchema = z.object({
   destinationId: z.string().min(1),
   destinationName: z.string().min(1),
   country: z.string().optional(),
-  heroImage: z.string().min(1),
+  heroImage: z.string().default(""),
   mapImage: z.string().optional(),
   rating: z.string().optional(),
   reviewCount: z.number().optional(),

@@ -20,7 +20,7 @@ import { DEMO_FULL_ITINERARIES } from '@/data/demoData';
 import { useTripPlanning } from '@/context/TripPlanningContext';
 import { useMyTrips, formatTripSubtitle } from '@/context/MyTripsContext';
 import type { GeneratedItinerary, ItineraryActivity } from '@/types/itinerary';
-import auth from '@react-native-firebase/auth';
+import { getAuth } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { searchPhoto } from '@/services/unsplash';
 
@@ -240,7 +240,7 @@ export default function ItineraryScreen() {
         return;
       }
 
-      const uid = auth().currentUser?.uid;
+      const uid = getAuth().currentUser?.uid;
       if (!uid) {
         if (!cancelled) {
           setRemoteLoadError('No signed-in Firebase user was available to load this saved itinerary.');
@@ -410,6 +410,9 @@ export default function ItineraryScreen() {
               <Ionicons name="arrow-back" size={20} color="#fff" />
             </TouchableOpacity>
             <View style={styles.headerRightIcons}>
+              <TouchableOpacity style={styles.headerIconBtn} onPress={() => navigation.navigate('Index')}>
+                <Ionicons name="home-outline" size={20} color="#fff" />
+              </TouchableOpacity>
               <TouchableOpacity style={styles.headerIconBtn}>
                 <Ionicons name="share-social-outline" size={20} color="#fff" />
               </TouchableOpacity>

@@ -7,7 +7,7 @@ import type { RootStackParamList } from '@/app/_layout';
 import { styles } from '@/styles/discoverScreenStyles';
 import { useFeaturedItinerary } from '@/hooks/userFeaturedItinerary';
 import { useMatchingItineraries } from '@/hooks/useMatchingItineraries';
-import auth from '@react-native-firebase/auth';
+import { getAuth } from '@react-native-firebase/auth';
 import FeaturedTripCard from '@/components/FeaturedTripCard';
 import RecommendedTripCard from '@/components/RecommendedTripCard';
 import DestinationCard from '@/components/DestinationCard';
@@ -22,7 +22,7 @@ export default function DiscoverScreen() {
   const { featuredTrip, itinerary, loading, error } = useFeaturedItinerary();
   const { destinations, loading: loadingDest, error: errorDest } = useDestinations();
 
-  const uid = isDemoMode ? DEMO_UID : (auth().currentUser?.uid ?? '');
+  const uid = isDemoMode ? DEMO_UID : (getAuth().currentUser?.uid ?? '');
   const { prebuiltItineraries, loading: loadingItins, error: errorItins } = useMatchingItineraries(uid);
 
   const [activeItinIndex, setActiveItinIndex] = useState(0);
