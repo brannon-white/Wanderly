@@ -1,0 +1,39 @@
+name: iOS → TestFlight
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-submit:
+    name: Build & Submit to TestFlight
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: StickerSmash/package-lock.json
+
+      - name: Install dependencies
+        working-directory: StickerSmash
+        run: npm ci
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build for iOS (production)
+        working-directory: StickerSmash
+        run: eas build --platform ios --profile production --non-interactive
+
+      - name: Submit to TestFlight
+        working-directory: StickerSmash
+        run: eas submit --platform ios --latest --non-interactive
