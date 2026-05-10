@@ -15,24 +15,24 @@ prepare_react_native_project!
 
 $RNFirebaseAsStaticFramework = true
 
-# Firebase Swift pods need module maps for their ObjC dependencies
-pod 'FirebaseCore', :modular_headers => true
-pod 'FirebaseCoreExtension', :modular_headers => true
-pod 'FirebaseCoreInternal', :modular_headers => true
-pod 'FirebaseAuth', :modular_headers => true
-pod 'FirebaseAuthInterop', :modular_headers => true
-pod 'FirebaseAppCheckInterop', :modular_headers => true
-pod 'FirebaseMessagingInterop', :modular_headers => true
-pod 'FirebaseFirestore', :modular_headers => true
-pod 'FirebaseFirestoreInternal', :modular_headers => true
-pod 'FirebaseFunctions', :modular_headers => true
-pod 'FirebaseStorage', :modular_headers => true
-pod 'FirebaseSharedSwift', :modular_headers => true
-pod 'GoogleUtilities', :modular_headers => true
-pod 'RecaptchaInterop', :modular_headers => true
-
 target 'Wanderly' do
   use_expo_modules!
+
+  # Firebase Swift pods need module maps so their ObjC deps are importable
+  pod 'FirebaseCore', :modular_headers => true
+  pod 'FirebaseCoreExtension', :modular_headers => true
+  pod 'FirebaseCoreInternal', :modular_headers => true
+  pod 'FirebaseAuth', :modular_headers => true
+  pod 'FirebaseAuthInterop', :modular_headers => true
+  pod 'FirebaseAppCheckInterop', :modular_headers => true
+  pod 'FirebaseMessagingInterop', :modular_headers => true
+  pod 'FirebaseFirestore', :modular_headers => true
+  pod 'FirebaseFirestoreInternal', :modular_headers => true
+  pod 'FirebaseFunctions', :modular_headers => true
+  pod 'FirebaseStorage', :modular_headers => true
+  pod 'FirebaseSharedSwift', :modular_headers => true
+  pod 'GoogleUtilities', :modular_headers => true
+  pod 'RecaptchaInterop', :modular_headers => true
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
