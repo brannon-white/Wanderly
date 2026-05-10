@@ -240,20 +240,20 @@ export default function ItineraryScreen() {
         return;
       }
 
-      const uid = getAuth().currentUser?.uid;
-      if (!uid) {
-        if (!cancelled) {
-          setRemoteLoadError('No signed-in Firebase user was available to load this saved itinerary.');
-        }
-        setLoadingRemote(false);
-        return;
-      }
-
       setLoadingRemote(true);
 
       try {
         // For mytrips source, look in user's saved itineraries (AI-generated)
         if (!isBrowsing) {
+          const uid = getAuth().currentUser?.uid;
+          if (!uid) {
+            if (!cancelled) {
+              setRemoteLoadError('Sign in to view your saved itineraries.');
+            }
+            setLoadingRemote(false);
+            return;
+          }
+
           const userSnapshot = await firestore()
             .collection('users')
             .doc(uid)
