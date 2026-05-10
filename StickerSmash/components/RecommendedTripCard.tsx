@@ -26,7 +26,7 @@ export default function RecommendedTripCard({ itin }: { itin: ItineraryCardSumma
   }, [itin.id]);
 
   return (
-    <TouchableOpacity onPress={() => navigation.navigate('ItineraryScreen', { id: itin.id })} activeOpacity={0.85}>
+    <TouchableOpacity onPress={() => navigation.navigate('ItineraryScreen', { id: itin.id, source: 'browse' })} activeOpacity={0.85}>
       <View style={styles.recommendedCard}>
         {imageUri ? (
           <Image
