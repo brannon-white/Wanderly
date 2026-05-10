@@ -53,13 +53,14 @@ target 'Wanderly' do
       :ccache_enabled => podfile_properties['apple.ccacheEnabled'] == 'true',
     )
 
-    # use_modular_headers! breaks gRPC-C++ which ships its own module map.
-    # Turn off DEFINES_MODULE for gRPC pods so they don't conflict.
-    installer.pods_project.targets.each do |target|
-      if target.name.start_with?('gRPC', 'BoringSSL-GRPC', 'abseil')
-        target.build_configurations.each do |config|
-          config.build_settings['DEFINES_MODULE'] = 'NO'
-        end
+    # use_modular_headers! causes CocoaPods to reference a gRPC-Core.modulemap
+    # path in xcconfig files that never gets created. Strip those references
+    # from the generated xcconfigs so gRPC-C++ can compile.
+    Dir.glob(File.join(installer.sandbox.root, 'Target Support Files', '**', '*.xcconfig')).each do |xcconfig_path|
+      content = File.read(xcconfig_path)
+      if content.include?('gRPC-Core.modulemap')
+        content.gsub!(/ -fmodule-map-file=["']?[^"'\s]*gRPC-Core\.modulemap["']?/, '')
+        File.write(xcconfig_path, content)
       end
     end
 
