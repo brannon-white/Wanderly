@@ -11,7 +11,8 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.appsmadehere.wanderly"
+      "bundleIdentifier": "com.appsmadehere.wanderly",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "adaptiveIcon": {
