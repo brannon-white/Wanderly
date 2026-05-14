@@ -215,12 +215,12 @@ export default function ItineraryScreen() {
   } = useTripPlanning();
   const { trips, removeTrip } = useMyTrips();
 
-  const { id, source, committedTripId } = route.params;
+  const { id, source, committedTripId } = route.params ?? {};
   const isBrowsing = source !== 'mytrips';
   const demoItinerary = DEMO_FULL_ITINERARIES.find((it) => it.id === id) ?? null;
   const committedTrip = committedTripId ? trips.find(t => t.id === committedTripId) : undefined;
   const [remoteItinerary, setRemoteItinerary] = useState<GeneratedItinerary | null>(null);
-  const [loadingRemote, setLoadingRemote] = useState(!demoItinerary);
+  const [loadingRemote, setLoadingRemote] = useState(!!id && !demoItinerary);
   const [remoteLoadError, setRemoteLoadError] = useState<string | null>(null);
   const [heroUri, setHeroUri] = useState<string | undefined>(undefined);
   const itinerary = remoteItinerary ?? demoItinerary;
