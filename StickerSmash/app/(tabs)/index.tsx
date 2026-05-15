@@ -12,10 +12,13 @@ import FeaturedTripCard from '@/components/FeaturedTripCard';
 import RecommendedTripCard from '@/components/RecommendedTripCard';
 import DestinationCard from '@/components/DestinationCard';
 import { useDestinations } from '@/hooks/useDestinations';
+import { usePopularArticles } from '@/hooks/usePopularArticles';
 import { useDemo } from '@/context/DemoContext';
 import { DEMO_UID } from '@/data/demoData';
 import type { ItineraryCardSummary } from '@/types/itinerary';
 import { getUserProfile } from '@/utils/getUserProfile';
+import ArticleCard from '@/components/ArticleCard';
+import type { Article } from '@/types/article';
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -29,6 +32,7 @@ export default function DiscoverScreen() {
   const { isDemoMode } = useDemo();
   const { featuredTrip, itinerary, loading, error } = useFeaturedItinerary();
   const { destinations, loading: loadingDest, error: errorDest } = useDestinations();
+  const { articles, loading: loadingArticles } = usePopularArticles();
   const [firstName, setFirstName] = useState('');
 
   const uid = isDemoMode ? DEMO_UID : (getAuth().currentUser?.uid ?? '');
@@ -148,10 +152,19 @@ export default function DiscoverScreen() {
 
         {/* Popular Articles */}
         <Text style={styles.sectionTitle}>Popular Articles</Text>
-        <View style={styles.articlesRow}>
-          <View style={styles.articleCard} />
-          <View style={styles.articleCard} />
-        </View>
+        {loadingArticles ? (
+          <Text style={{ margin: 20 }}>Loading articles...</Text>
+        ) : articles.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingRight: 20, marginBottom: 16 }}
+          >
+            {articles.map((article: Article) => (
+              <ArticleCard key={article.id} article={article} />
+            ))}
+          </ScrollView>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

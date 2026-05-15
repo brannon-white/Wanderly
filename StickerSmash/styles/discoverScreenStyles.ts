@@ -299,7 +299,7 @@ popularCardImage: {
     fontFamily: 'Merriweather_36pt-Bold',
   },
   // Add to your discoverScreenStyles.js or .ts
-destinationCardImage: {
+  destinationCardImage: {
   width: '100%',
   height: 180,
   borderRadius: 24,
@@ -320,4 +320,65 @@ destinationCardImage: {
     justifyContent: 'flex-end',
   },
 
+});
+
+export const articleCardStyles = StyleSheet.create({
+  card: {
+    width: 240,
+    height: 200,
+    borderRadius: 20,
+    marginLeft: 20,
+    marginRight: 4,
+    marginBottom: 8,
+    overflow: 'hidden',
+    backgroundColor: '#e8e4ff',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  image: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  imagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e8e4ff',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(20,10,50,0.42)',
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 14,
+  },
+  categoryPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(106,98,183,0.85)',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 6,
+  },
+  categoryText: {
+    color: '#fff',
+    fontSize: 11,
+    fontFamily: 'SourceSans3-Regular',
+    fontWeight: '700',
+  },
+  title: {
+    color: '#fff',
+    fontSize: 15,
+    fontFamily: 'Merriweather_36pt-Bold',
+    lineHeight: 20,
+    marginBottom: 6,
+  },
+  readTime: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 12,
+    fontFamily: 'SourceSans3-Regular',
+  },
 });

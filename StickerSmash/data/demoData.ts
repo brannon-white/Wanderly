@@ -5,6 +5,7 @@ import type {
   ItineraryDay,
   ItineraryTransportOption,
 } from '@/types/itinerary';
+import type { Article } from '@/types/article';
 
 export const DEMO_UID = 'demo-user';
 
@@ -529,4 +530,43 @@ export const DEMO_FOOD_PREFERENCES: { label: string; emoji: string }[] = [
   { label: 'BBQ', emoji: '🍖' },
   { label: 'Fine Dining', emoji: '🍽️' },
   { label: 'Desserts', emoji: '🍰' },
+];
+
+export const DEMO_ARTICLES: Article[] = [
+  {
+    id: 'demo-article-1',
+    title: '10 Hidden Gems in Southeast Asia You Need to Visit',
+    excerpt: 'Skip the tourist crowds and discover these off-the-beaten-path destinations that offer authentic culture, stunning scenery, and unforgettable experiences.',
+    category: 'Hidden Gems',
+    imageUrl: 'https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=600',
+    readTimeMin: 6,
+    url: 'https://www.booking.com/region/th/south-east-asia.html',
+  },
+  {
+    id: 'demo-article-2',
+    title: 'How to Travel Europe on $60 a Day',
+    excerpt: 'Hostels, night trains, and street food — a practical guide to making the most of Europe without breaking the bank.',
+    category: 'Budget Travel',
+    imageUrl: 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=600',
+    readTimeMin: 8,
+    url: 'https://www.booking.com/region/gb/europe.html',
+  },
+  {
+    id: 'demo-article-3',
+    title: 'The Ultimate Guide to Bali: Where to Stay, Eat & Explore',
+    excerpt: 'From Ubud\'s rice terraces to Uluwatu\'s cliff temples, here\'s everything you need to know before your Bali trip.',
+    category: 'Destination Guide',
+    imageUrl: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=600',
+    readTimeMin: 10,
+    url: 'https://www.booking.com/region/id/bali.html',
+  },
+  {
+    id: 'demo-article-4',
+    title: 'Best Ryokans in Japan for a Traditional Stay',
+    excerpt: 'Onsen baths, tatami floors, and kaiseki dinners — these are the best traditional Japanese inns across the country.',
+    category: 'Accommodation',
+    imageUrl: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=600',
+    readTimeMin: 7,
+    url: 'https://www.booking.com/region/jp/honshu.html',
+  },
 ];
