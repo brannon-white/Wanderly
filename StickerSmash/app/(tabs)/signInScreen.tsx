@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { styles } from '@/styles/signInScreenStyles';
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signInWithCredential, signOut, GoogleAuthProvider } from '@react-native-firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signInWithCredential, signOut as firebaseSignOut, GoogleAuthProvider } from '@react-native-firebase/auth';
 import { useDemo } from '@/context/DemoContext';
 import Constants from 'expo-constants';
 import { userExists } from '@/hooks/useSaveUserProfile';
@@ -70,20 +70,21 @@ async function signInWithEmail() {
 async function signInWithGoogle() {
   setLoading(true);
   try {
-    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-    const googleUser = await GoogleSignin.signIn();
-    // @ts-ignore
-    if (!googleUser.data.idToken) {
-      throw new Error('No idToken returned from Google Sign-In. Check scopes or user consent.');
+    if (Platform.OS === 'android') {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
     }
-    // @ts-ignore
-    const idTokenString: string = googleUser.data.idToken;
-    const googleCredential = GoogleAuthProvider.credential(idTokenString);
+    const response = await GoogleSignin.signIn();
+    // Support both v12 (response.idToken) and v13+ (response.data.idToken)
+    const idToken = (response as any)?.data?.idToken ?? (response as any)?.idToken;
+    if (!idToken) {
+      // User cancelled — not an error
+      return;
+    }
+    const googleCredential = GoogleAuthProvider.credential(idToken);
     const result = await signInWithCredential(getAuth(), googleCredential);
 
     const uid = result.user.uid;
     const exists = await userExists(uid);
-
     const travel = await getOnboardingStepData('travel');
     const food = await getOnboardingStepData('food');
 
@@ -97,16 +98,18 @@ async function signInWithGoogle() {
       navigation.navigate('TravelPreferences');
     }
   } catch (error: any) {
-    Alert.alert('Error', error.message);
+    if (error.code !== statusCodes.SIGN_IN_CANCELLED) {
+      Alert.alert('Sign-in Error', error.message);
+    }
   } finally {
     setLoading(false);
   }
 }
 
-  async function signOut() {
+  async function handleSignOut() {
     try {
       await GoogleSignin.revokeAccess();
-      await signOut(getAuth());
+      await firebaseSignOut(getAuth());
       Alert.alert('Signed Out', 'You have been signed out.');
     } catch (error: any) {
       Alert.alert('Error', `Could not sign out: ${error.message}`);
@@ -127,61 +130,66 @@ async function signInWithGoogle() {
       <Text style={styles.heading}>
         Ready to{'\n'}Wander?
       </Text>
-      <View style={styles.card}>
-        <Text style={styles.welcome}>Welcome{'\n'}Back</Text>
-        {user ? (
-          <View>
-            <Text style={styles.label}>Signed in as: {user.displayName || user.email}</Text>
-            <TouchableOpacity style={styles.signInButton} onPress={signOut}>
-              <Text style={styles.signInButtonText}>Sign Out</Text>
-            </TouchableOpacity>
-          </View>
-        ) :(
-          <>
-            <GoogleSigninButton
-              style={styles.googleButton}
-              size={GoogleSigninButton.Size.Wide}
-              color={GoogleSigninButton.Color.Light}
-              onPress={signInWithGoogle}
-              disabled={loading}
-            />
-            {loading && <ActivityIndicator size="large" color="#0000ff" />}
-            <View style={styles.dividerRow}>
-              <View style={styles.divider} />
-              <Text style={styles.orText}>Or</Text>
-              <View style={styles.divider} />
+      <KeyboardAvoidingView
+        style={{ flex: 1, justifyContent: 'flex-end', width: '100%' }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.card}>
+          <Text style={styles.welcome}>Welcome{'\n'}Back</Text>
+          {user ? (
+            <View>
+              <Text style={styles.label}>Signed in as: {user.displayName || user.email}</Text>
+              <TouchableOpacity style={styles.signInButton} onPress={handleSignOut}>
+                <Text style={styles.signInButtonText}>Sign Out</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.label}>Email</Text>
-            <View style={styles.inputRow}>
-              <Text style={styles.inputIcon}>📧</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              placeholderTextColor="#aaa"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={email}
-              onChangeText={setEmail}
-            />
-            </View>
-            <Text style={styles.label}>Password</Text>
-            <View style={styles.inputRow}>
-              <Text style={styles.inputIcon}>🔒</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor="#aaa"
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
+          ) : (
+            <>
+              <GoogleSigninButton
+                style={styles.googleButton}
+                size={GoogleSigninButton.Size.Wide}
+                color={GoogleSigninButton.Color.Light}
+                onPress={signInWithGoogle}
+                disabled={loading}
               />
-            </View>
-            <TouchableOpacity style={styles.signInButton} onPress={signInWithEmail}>
-              <Text style={styles.signInButtonText}>Sign In</Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
+              {loading && <ActivityIndicator size="large" color="#0000ff" />}
+              <View style={styles.dividerRow}>
+                <View style={styles.divider} />
+                <Text style={styles.orText}>Or</Text>
+                <View style={styles.divider} />
+              </View>
+              <Text style={styles.label}>Email</Text>
+              <View style={styles.inputRow}>
+                <Text style={styles.inputIcon}>📧</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  placeholderTextColor="#aaa"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={email}
+                  onChangeText={setEmail}
+                />
+              </View>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.inputRow}>
+                <Text style={styles.inputIcon}>🔒</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  placeholderTextColor="#aaa"
+                  secureTextEntry
+                  value={password}
+                  onChangeText={setPassword}
+                />
+              </View>
+              <TouchableOpacity style={styles.signInButton} onPress={signInWithEmail}>
+                <Text style={styles.signInButtonText}>Sign In</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </KeyboardAvoidingView>
     </ImageBackground>
   );
 }
