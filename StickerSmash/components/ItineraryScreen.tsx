@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Linking,
   Platform,
+  Share,
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
@@ -377,6 +378,14 @@ export default function ItineraryScreen() {
     navigation.navigate('Index' as any, { screen: 'MyTrips' } as any);
   };
 
+  const handleShare = async () => {
+    if (!itinerary) return;
+    await Share.share({
+      title: itinerary.title,
+      message: `Check out this itinerary on Wanderly: ${itinerary.title}${itinerary.subtitle ? ` — ${itinerary.subtitle}` : ''}`,
+    });
+  };
+
   const mapRegion = useMemo(() => {
     const coords = activities
       .map((a) => a.coordinates)
@@ -452,7 +461,7 @@ export default function ItineraryScreen() {
               <TouchableOpacity style={styles.headerIconBtn} onPress={() => navigation.navigate('Index')}>
                 <Ionicons name="home-outline" size={20} color="#fff" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.headerIconBtn}>
+              <TouchableOpacity style={styles.headerIconBtn} onPress={handleShare}>
                 <Ionicons name="share-social-outline" size={20} color="#fff" />
               </TouchableOpacity>
               {!isBrowsing && (

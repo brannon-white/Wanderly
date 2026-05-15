@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Platform } from 'react-native';
 
 export const styles = StyleSheet.create({
   screen: {
@@ -13,14 +13,13 @@ export const styles = StyleSheet.create({
     position: 'relative',
   },
   heroImage: {
-    width: '100%',
-    height: '100%',
+    ...StyleSheet.absoluteFillObject,
   },
   heroOverlay: {
     flex: 1,
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 52,
+    paddingTop: Platform.OS === 'android' ? 52 : 60,
     paddingBottom: 26,
     backgroundColor: 'rgba(17, 12, 36, 0.28)',
   },

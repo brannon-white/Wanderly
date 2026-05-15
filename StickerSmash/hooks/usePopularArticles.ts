@@ -5,7 +5,7 @@ import { useDemo } from '@/context/DemoContext';
 import { DEMO_ARTICLES } from '@/data/demoData';
 import type { Article } from '@/types/article';
 
-const CACHE_KEY = 'popular-articles:v1';
+const CACHE_KEY = 'popular-articles:v2';
 const TTL_DAYS = 1;
 
 export function usePopularArticles() {

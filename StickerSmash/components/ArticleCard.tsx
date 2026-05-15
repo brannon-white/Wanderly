@@ -1,12 +1,15 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { openBrowserAsync } from 'expo-web-browser';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import type { RootStackParamList } from '@/app/_layout';
 import type { Article } from '@/types/article';
 import { articleCardStyles as s } from '@/styles/discoverScreenStyles';
 
 export default function ArticleCard({ article }: { article: Article }) {
-  const handlePress = async () => {
-    await openBrowserAsync(article.url);
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+  const handlePress = () => {
+    navigation.navigate('ArticleDetail', { article });
   };
 
   return (

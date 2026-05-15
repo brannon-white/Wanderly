@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Alert,
   SafeAreaView,
   ScrollView,
   View,
@@ -21,6 +22,7 @@ type Tab = 'Active' | 'Passed';
 
 function TripCard({ trip }: { trip: CommittedTrip }) {
   const navigation = useNavigation<NavProp>();
+  const { removeTrip } = useMyTrips();
   const [imageUri, setImageUri] = useState<string | undefined>(trip.heroImage || undefined);
 
   useEffect(() => {
@@ -30,6 +32,24 @@ function TripCard({ trip }: { trip: CommittedTrip }) {
       });
     }
   }, [trip.id]);
+
+  const handleMenu = () => {
+    Alert.alert(trip.title, undefined, [
+      {
+        text: 'Modify Trip',
+        onPress: () => navigation.navigate('ItineraryScreen', { id: trip.templateId, source: 'mytrips', committedTripId: trip.id }),
+      },
+      {
+        text: 'Delete Trip',
+        style: 'destructive',
+        onPress: () => Alert.alert('Delete Trip', 'Are you sure you want to delete this trip?', [
+          { text: 'Delete', style: 'destructive', onPress: () => removeTrip(trip.id) },
+          { text: 'Cancel', style: 'cancel' },
+        ]),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
   return (
     <TouchableOpacity
@@ -47,7 +67,7 @@ function TripCard({ trip }: { trip: CommittedTrip }) {
       <View style={styles.cardContent}>
         <View style={styles.cardMeta}>
           <Text style={styles.cardTitle} numberOfLines={1}>{trip.title}</Text>
-          <TouchableOpacity style={styles.menuBtn}>
+          <TouchableOpacity style={styles.menuBtn} onPress={handleMenu}>
             <Ionicons name="ellipsis-vertical" size={20} color="#555" />
           </TouchableOpacity>
         </View>
@@ -60,6 +80,7 @@ function TripCard({ trip }: { trip: CommittedTrip }) {
 export default function MyTripsScreen() {
   const [activeTab, setActiveTab] = useState<Tab>('Active');
   const { trips } = useMyTrips();
+  const navigation = useNavigation<NavProp>();
 
   const filtered = trips.filter((t) =>
     activeTab === 'Active' ? isTripActive(t) : !isTripActive(t)
@@ -70,7 +91,7 @@ export default function MyTripsScreen() {
       <View style={styles.header}>
         <View style={styles.headerSpacer} />
         <Text style={styles.headerTitle}>My Trips</Text>
-        <TouchableOpacity style={styles.searchBtn}>
+        <TouchableOpacity style={styles.searchBtn} onPress={() => navigation.navigate('SearchScreen')}>
           <Ionicons name="search" size={20} color="#222" />
         </TouchableOpacity>
       </View>
