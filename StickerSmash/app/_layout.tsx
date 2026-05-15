@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, View, Text } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import OnboardingFirstPage from './(tabs)/onboardingFirstPage';
@@ -32,7 +33,9 @@ import TripInterestsScreen from '@/components/tripPlanning/TripInterestsScreen';
 import TripBudgetScreen from '@/components/tripPlanning/TripBudgetScreen';
 import TripReviewScreen from '@/components/tripPlanning/TripReviewScreen';
 import SearchScreen from '@/app/SearchScreen';
+import ArticleDetailScreen from '@/components/ArticleDetailScreen';
 import type { SearchedDestination } from '@/services/locationSearch';
+import type { Article } from '@/types/article';
 
 export type RootStackParamList = {
   OnboardingFirst: undefined;
@@ -56,6 +59,7 @@ export type RootStackParamList = {
   TripBudget: undefined;
   TripReview: undefined;
   AllDestinations: undefined;
+  ArticleDetail: { article: Article };
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -129,7 +133,16 @@ export default function RootLayout() {
     checkFlags();
   }, []);
 
-  if (!initialRoute) return null;
+  if (!initialRoute) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#f4f2ff', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 32, color: '#6A62B7', fontWeight: 'bold', marginBottom: 24, letterSpacing: 0.5 }}>
+          Wanderly
+        </Text>
+        <ActivityIndicator size="large" color="#6A62B7" />
+      </View>
+    );
+  }
 
   return (
     <DemoProvider>
@@ -173,6 +186,7 @@ export default function RootLayout() {
                 <Stack.Screen name="DestinationDetail" component={DestinationDetailScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="DestinationScreen" component={DestinationScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="AllDestinations" component={AllDestinationsScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="ArticleDetail" component={ArticleDetailScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripParty" component={TripPartyScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripDates" component={TripDatesScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripInterests" component={TripInterestsScreen} options={{ headerShown: false }} />

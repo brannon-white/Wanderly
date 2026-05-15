@@ -6,6 +6,7 @@ import type { RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
 import { useDestinationById } from '@/hooks/useDestinations';
+import { useSaved } from '@/context/SavedContext';
 import { styles } from '@/styles/destinationDetailStyles';
 
 function StateScreen({
@@ -51,6 +52,8 @@ export default function DestinationDetailScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'DestinationDetail'>>();
   const { detail, loading, error } = useDestinationById(route.params.id);
+  const { isSaved, toggleSaved } = useSaved();
+  const saved = detail ? isSaved(route.params.id) : false;
 
   if (loading) {
     return (
@@ -99,9 +102,19 @@ export default function DestinationDetailScreen() {
             >
               <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
             </TouchableOpacity>
-            <View style={styles.iconButton}>
-              <Ionicons name="heart-outline" size={20} color="#FFFFFF" />
-            </View>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => detail && toggleSaved({
+                id: route.params.id,
+                type: 'destination',
+                title: detail.name,
+                imageUrl: detail.imageUrl,
+                country: detail.country,
+              })}
+              activeOpacity={0.85}
+            >
+              <Ionicons name={saved ? 'heart' : 'heart-outline'} size={20} color={saved ? '#FF4B6E' : '#FFFFFF'} />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.heroCopy}>

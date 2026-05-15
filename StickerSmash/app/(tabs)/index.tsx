@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SafeAreaView, View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { SafeAreaView, View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -32,7 +32,7 @@ export default function DiscoverScreen() {
   const { isDemoMode } = useDemo();
   const { featuredTrip, itinerary, loading, error } = useFeaturedItinerary();
   const { destinations, loading: loadingDest, error: errorDest } = useDestinations();
-  const { articles, loading: loadingArticles } = usePopularArticles();
+  const { articles, loading: loadingArticles, error: errorArticles } = usePopularArticles();
   const [firstName, setFirstName] = useState('');
 
   const uid = isDemoMode ? DEMO_UID : (getAuth().currentUser?.uid ?? '');
@@ -79,9 +79,15 @@ export default function DiscoverScreen() {
         {/* Featured Trip */}
         <Text style={styles.sectionTitleFeatured}>Featured Trip</Text>
         {loading ? (
-          <Text style={{ margin: 20 }}>Loading featured trip...</Text>
-        ) : error ? (
-          <Text style={{ margin: 20, color: 'red' }}>{error}</Text>
+          <View style={styles.featuredTripCard}>
+            <View style={[styles.featuredTripImage, { backgroundColor: '#e8e4ff' }]} />
+            <View style={styles.featuredTripContent}>
+              <View style={{ height: 14, width: '60%', borderRadius: 7, backgroundColor: '#ede9ff', marginBottom: 10 }} />
+              <View style={{ height: 12, width: '80%', borderRadius: 6, backgroundColor: '#ede9ff', marginBottom: 6 }} />
+              <View style={{ height: 12, width: '50%', borderRadius: 6, backgroundColor: '#ede9ff', marginBottom: 18 }} />
+              <View style={[styles.featuredTripButton, { backgroundColor: '#e8e4ff' }]} />
+            </View>
+          </View>
         ) : featuredTrip && itinerary ? (
           <FeaturedTripCard itinerary={itinerary} featuredTrip={featuredTrip} />
         ) : null}
@@ -96,16 +102,20 @@ export default function DiscoverScreen() {
           scrollEventThrottle={16}
         >
           {loadingItins ? (
-            <Text style={{ margin: 20 }}>Loading recommended trips...</Text>
-          ) : errorItins ? (
-            <Text style={{ margin: 20, color: 'red' }}>{errorItins}</Text>
+            [0, 1, 2].map(i => (
+              <View key={i} style={[styles.recommendedCard, { marginLeft: i === 0 ? 20 : 10 }]}>
+                <View style={{ flex: 1, backgroundColor: '#e8e4ff' }} />
+                <View style={styles.recommendedCardContent}>
+                  <View style={{ height: 14, width: '65%', borderRadius: 7, backgroundColor: '#ede9ff', marginBottom: 8 }} />
+                  <View style={{ height: 11, width: '45%', borderRadius: 6, backgroundColor: '#ede9ff' }} />
+                </View>
+              </View>
+            ))
           ) : prebuiltItineraries && prebuiltItineraries.length > 0 ? (
             prebuiltItineraries.map((itin: ItineraryCardSummary) => (
               <RecommendedTripCard key={itin.id} itin={itin} />
             ))
-          ) : (
-            <Text style={{ margin: 20 }}>No recommended trips found.</Text>
-          )}
+          ) : null}
         </ScrollView>
 
         {/* Pagination dots */}
@@ -131,9 +141,9 @@ export default function DiscoverScreen() {
   style={{ marginBottom: 16 }}
 >
   {loadingDest ? (
-    <Text style={{ margin: 20 }}>Loading destinations...</Text>
-  ) : errorDest ? (
-    <Text style={{ margin: 20, color: 'red' }}>{errorDest}</Text>
+    [0, 1, 2].map(i => (
+      <View key={i} style={[styles.destinationCard, { marginLeft: i === 0 ? 20 : 10, backgroundColor: '#e8e4ff' }]} />
+    ))
   ) : destinations && destinations.length > 0 ? (
     destinations.map((dest: any) => (
       <DestinationCard
@@ -145,15 +155,19 @@ export default function DiscoverScreen() {
         flag={dest.flag}
       />
     ))
-  ) : (
-    <Text style={{ margin: 20 }}>No destinations found.</Text>
-  )}
+  ) : null}
 </ScrollView>
 
         {/* Popular Articles */}
         <Text style={styles.sectionTitle}>Popular Articles</Text>
         {loadingArticles ? (
-          <Text style={{ margin: 20 }}>Loading articles...</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 20, marginBottom: 16 }}>
+            {[0, 1, 2].map(i => (
+              <View key={i} style={{ width: 240, height: 200, borderRadius: 20, marginLeft: i === 0 ? 20 : 4, backgroundColor: '#e8e4ff' }} />
+            ))}
+          </ScrollView>
+        ) : errorArticles ? (
+          <Text style={{ margin: 20, color: 'red' }}>{errorArticles}</Text>
         ) : articles.length > 0 ? (
           <ScrollView
             horizontal
