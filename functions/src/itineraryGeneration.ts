@@ -153,7 +153,7 @@ export async function generateItineraryFlow(
 
   const response = await client.messages.create({
     model: MODEL_NAME,
-    max_tokens: 8192,
+    max_tokens: 16000,
     tools: [
       {
         name: "create_itinerary",

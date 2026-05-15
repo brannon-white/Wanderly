@@ -210,7 +210,7 @@ export const DEMO_ITINERARIES: DemoItinerarySummary[] = [
 
 export const DEMO_FEATURED_TRIP = {
   tripId: 'demo-itin-1',
-  badge: "Editor's Pick",
+  highlights: ["Editor's Pick", 'Cultural', 'Temples'],
   to: { seconds: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30 },
 };
 
@@ -218,6 +218,7 @@ export const DEMO_FEATURED_ITINERARY = {
   id: 'demo-itin-1',
   title: 'Weekend in Kyoto',
   heroImage: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1200',
+  durationDays: 3,
   summary: ['Visit Fushimi Inari Shrine', 'Arashiyama Bamboo Grove', 'Kinkaku-ji Temple'],
 };
 

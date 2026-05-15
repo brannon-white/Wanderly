@@ -148,6 +148,7 @@ export const generateItineraryV1 = functionsV1
   .region("us-central1")
   .runWith({
     maxInstances: 10,
+    timeoutSeconds: 300,
     secrets: [anthropicApiKey],
     serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
   })
@@ -168,6 +169,7 @@ export const generateItineraryHttp = functionsV1
   .region("us-central1")
   .runWith({
     maxInstances: 10,
+    timeoutSeconds: 300,
     secrets: [anthropicApiKey],
     serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
   })

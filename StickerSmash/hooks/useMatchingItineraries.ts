@@ -59,7 +59,7 @@ export function useMatchingItineraries(uid: string) {
           (profile?.activityPreferences ?? []).map((i: string) => i.toLowerCase())
         );
 
-        const cacheKey = `itineraries:v3:${uid}`;
+        const cacheKey = `itineraries:v4:${uid}`;
         const cached = await cacheGet<ItineraryCardSummary[]>(cacheKey);
         if (cached && cached.length > 0) {
           setItineraries(cached);
@@ -70,9 +70,14 @@ export function useMatchingItineraries(uid: string) {
           .collection('prebuiltItineraries')
           .get();
 
-        const results = snapshot.docs.map(doc =>
-          normalizeItinerarySummary({ ...(doc.data() as Partial<FirestoreItineraryDocument>), id: doc.id })
-        );
+        const results = snapshot.docs
+          .filter(doc => {
+            const d = doc.data();
+            return d.isActive === true && Array.isArray(d.days);
+          })
+          .map(doc =>
+            normalizeItinerarySummary({ ...(doc.data() as Partial<FirestoreItineraryDocument>), id: doc.id })
+          );
 
         // Sort by number of matching interests so most relevant appear first
         const scored = results.map(itin => ({

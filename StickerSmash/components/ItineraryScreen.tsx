@@ -19,7 +19,7 @@ import { styles, ICON_COLOR, makeScrollContentStyle } from '../styles/TravelItin
 import { DEMO_FULL_ITINERARIES } from '@/data/demoData';
 import { useTripPlanning } from '@/context/TripPlanningContext';
 import { useMyTrips, formatTripSubtitle } from '@/context/MyTripsContext';
-import type { GeneratedItinerary, ItineraryActivity } from '@/types/itinerary';
+import type { GeneratedItinerary, ItineraryActivity, ItineraryDay } from '@/types/itinerary';
 import { getAuth } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { searchPhoto } from '@/services/unsplash';
@@ -196,6 +196,27 @@ function ActivityCard({ activity, isLast }: { activity: ItineraryActivity; isLas
   );
 }
 
+function normalizePrebuiltItinerary(data: any, docId: string): GeneratedItinerary {
+  const days: ItineraryDay[] = Array.isArray(data.days) && data.days.length > 0
+    ? data.days
+    : (data.template ?? []).map((dayEntry: any, dayIdx: number) => {
+        const activities: ItineraryActivity[] = (dayEntry.slots ?? []).map((slot: any, slotIdx: number) => ({
+          id: `day-${dayIdx + 1}-slot-${slotIdx + 1}`,
+          name: slot.title ?? '',
+          description: slot.description,
+          category: slot.type,
+          time: slot.when ?? '',
+          image: '',
+          transport: [],
+          coordinates: slot.location?.lat != null
+            ? { latitude: slot.location.lat, longitude: slot.location.lng }
+            : undefined,
+        }));
+        return { label: `Day ${dayEntry.day ?? dayIdx + 1}`, activities };
+      });
+  return { ...data, id: docId, days };
+}
+
 export default function ItineraryScreen() {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RoutePropType>();
@@ -285,10 +306,10 @@ export default function ItineraryScreen() {
           return;
         }
 
-        const data = prebuiltSnapshot.data() as GeneratedItinerary | undefined;
+        const data = prebuiltSnapshot.data();
         if (!cancelled && data) {
           setRemoteLoadError(null);
-          setRemoteItinerary({ ...data, id: prebuiltSnapshot.id });
+          setRemoteItinerary(normalizePrebuiltItinerary(data, prebuiltSnapshot.id));
         }
       } catch (error) {
         console.error('Failed to load itinerary', error);
@@ -482,7 +503,7 @@ export default function ItineraryScreen() {
           style={styles.dateSelector}
           contentContainerStyle={styles.dateSelectorContent}
         >
-          {itinerary.days.map((day, index) => (
+          {(itinerary.days ?? []).map((day, index) => (
             <TouchableOpacity
               key={`${day.label}-${index}`}
               style={[styles.dateBtn, selectedDay === index && styles.dateBtnActive]}
