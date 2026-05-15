@@ -33,6 +33,7 @@ import TripDatesScreen from '@/components/tripPlanning/TripDatesScreen';
 import TripInterestsScreen from '@/components/tripPlanning/TripInterestsScreen';
 import TripBudgetScreen from '@/components/tripPlanning/TripBudgetScreen';
 import TripReviewScreen from '@/components/tripPlanning/TripReviewScreen';
+import ArticleWebViewScreen from '@/components/ArticleWebViewScreen';
 import SearchScreen from '@/app/SearchScreen';
 import type { SearchedDestination } from '@/services/locationSearch';
 
@@ -58,6 +59,7 @@ export type RootStackParamList = {
   TripBudget: undefined;
   TripReview: undefined;
   AllDestinations: undefined;
+  ArticleWebView: { url: string; title: string; category: string };
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -190,6 +192,7 @@ export default function RootLayout() {
                 <Stack.Screen name="TripInterests" component={TripInterestsScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripBudget" component={TripBudgetScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripReview" component={TripReviewScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="ArticleWebView" component={ArticleWebViewScreen} options={{ headerShown: false }} />
               </Stack.Navigator>
             </OnboardingProvider>
           </TripPlanningProvider>
