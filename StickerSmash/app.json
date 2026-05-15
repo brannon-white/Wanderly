@@ -44,8 +44,8 @@
       "typedRoutes": true
     },
     "extra": {
-        "GOOGLE_WEB_CLIENT_ID": "y588805144943-7am9qr0jqsdmt478shb1ftjjas93lj4s.apps.googleusercontent.com",
-        "GOOGLE_IOS_CLIENT_ID": "y588805144943-7am9qr0jqsdmt478shb1ftjjas93lj4s.apps.googleusercontent.com",
+        "GOOGLE_WEB_CLIENT_ID": "588805144943-7am9qr0jqsdmt478shb1ftjjas93lj4s.apps.googleusercontent.com",
+        "GOOGLE_IOS_CLIENT_ID": "588805144943-7am9qr0jqsdmt478shb1ftjjas93lj4s.apps.googleusercontent.com",
       "router": {},
       "eas": {
         "projectId": "ec2b1c88-035f-4134-8141-c00280b4f09c"
