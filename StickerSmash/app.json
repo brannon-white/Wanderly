@@ -3,7 +3,7 @@
     "owner": "brannonwhite",
     "name": "Wanderly",
     "slug": "Wanderly",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "wanderly",
@@ -28,6 +28,12 @@
     },
     "plugins": [
       "@react-native-firebase/app",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.588805144943-7am9qr0jqsdmt478shb1ftjjas93lj4s"
+        }
+      ],
       "expo-router",
       [
         "expo-splash-screen",

@@ -323,13 +323,15 @@ popularCardImage: {
 });
 
 export const articleCardStyles = StyleSheet.create({
+  cardTouchable: {
+    marginLeft: 20,
+    marginRight: 4,
+    marginBottom: 8,
+  },
   card: {
     width: 240,
     height: 200,
     borderRadius: 20,
-    marginLeft: 20,
-    marginRight: 4,
-    marginBottom: 8,
     overflow: 'hidden',
     backgroundColor: '#e8e4ff',
     elevation: 3,
