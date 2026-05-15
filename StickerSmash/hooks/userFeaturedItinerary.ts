@@ -1,26 +1,16 @@
 import { useEffect, useState } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import { cacheGet, cacheSet } from '@/utils/cache';
-import { useDemo } from '@/context/DemoContext';
-import { DEMO_FEATURED_TRIP, DEMO_FEATURED_ITINERARY } from '@/data/demoData';
 
-const CACHE_KEY = 'featured:itinerary';
+const CACHE_KEY = 'featured:itinerary:v3';
 
 export function useFeaturedItinerary() {
-  const { isDemoMode } = useDemo();
   const [featuredTrip, setFeaturedTrip] = useState<any>(null);
   const [itinerary, setItinerary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isDemoMode) {
-      setFeaturedTrip(DEMO_FEATURED_TRIP);
-      setItinerary(DEMO_FEATURED_ITINERARY);
-      setLoading(false);
-      return;
-    }
-
     async function fetchData() {
       try {
         setLoading(true);
@@ -60,7 +50,7 @@ export function useFeaturedItinerary() {
       }
     }
     fetchData();
-  }, [isDemoMode]);
+  }, []);
 
   return { featuredTrip, itinerary, loading, error };
 }

@@ -7,29 +7,9 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
 import { shared, PRIMARY, PRIMARY_LIGHT, BORDER_COLOR, TEXT_DARK, TEXT_GRAY } from '@/styles/tripPlanningStyles';
 import { useTripPlanning } from '@/context/TripPlanningContext';
+import { INTERESTS } from '@/constants/interests';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
-
-const INTERESTS = [
-  { label: 'Adventure Travel', emoji: '🏔️' },
-  { label: 'City Breaks', emoji: '🏙️' },
-  { label: 'Cultural Exploration', emoji: '🏛️' },
-  { label: 'Glamping', emoji: '🏕️' },
-  { label: 'Beach Vacations', emoji: '🏖️' },
-  { label: 'Nature Escapes', emoji: '🌿' },
-  { label: 'Relaxing Getaways', emoji: '🏨' },
-  { label: 'Road Trips', emoji: '🚗' },
-  { label: 'Food Tourism', emoji: '🍔' },
-  { label: 'Backpacking', emoji: '🎒' },
-  { label: 'Cruise Vacations', emoji: '🚢' },
-  { label: 'Staycations', emoji: '🏡' },
-  { label: 'Skiing/Snowboarding', emoji: '⛷️' },
-  { label: 'Wine Tours', emoji: '🍷' },
-  { label: 'Wildlife Safaris', emoji: '🦁' },
-  { label: 'Art Galleries', emoji: '🎨' },
-  { label: 'Historical Sites', emoji: '🏰' },
-  { label: 'Eco-Tourism', emoji: '🌱' },
-];
 
 export default function TripInterestsScreen() {
   const navigation = useNavigation<NavProp>();
