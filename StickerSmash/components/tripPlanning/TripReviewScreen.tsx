@@ -118,10 +118,19 @@ export default function TripReviewScreen() {
       setTimeout(() => {
         setGenerating(false);
         reset();
-        navigation.navigate('ItineraryScreen', {
-          id: response.itineraryId,
-          source: 'mytrips',
-          committedTripId: committedId,
+        navigation.reset({
+          index: 1,
+          routes: [
+            { name: 'Index', params: { screen: 'MyTrips' } as any },
+            {
+              name: 'ItineraryScreen',
+              params: {
+                id: response.itineraryId,
+                source: 'mytrips',
+                committedTripId: committedId,
+              },
+            },
+          ],
         });
       }, 300);
     } catch (error) {
