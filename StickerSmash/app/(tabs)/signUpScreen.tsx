@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { GoogleSignin, GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import { getAuth, createUserWithEmailAndPassword, signInWithCredential, GoogleAuthProvider } from '@react-native-firebase/auth';
 import { styles } from '@/styles/signUpStyles';
@@ -52,36 +52,31 @@ async function signUpWithEmail() {
 async function signUpWithGoogle() {
   setLoading(true);
   try {
-    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-    const googleUser = await GoogleSignin.signIn();
-    // @ts-ignore
-    if (!googleUser.data.idToken) {
-      throw new Error('No idToken returned from Google Sign-In.');
+    if (Platform.OS === 'android') {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
     }
-    // @ts-ignore
-    const googleCredential = GoogleAuthProvider.credential(googleUser.data.idToken);
+    const response = await GoogleSignin.signIn();
+    const idToken = (response as any)?.data?.idToken ?? (response as any)?.idToken;
+    if (!idToken) {
+      return;
+    }
+    const googleCredential = GoogleAuthProvider.credential(idToken);
     const result = await signInWithCredential(getAuth(), googleCredential);
 
     const uid = result.user.uid;
     const exists = await userExists(uid);
-    console.log('User exists:', exists);
-    console.log('User ID:', uid);
-const travel = await getOnboardingStepData('travel');
-const food = await getOnboardingStepData('food');
+    const travel = await getOnboardingStepData('travel');
+    const food = await getOnboardingStepData('food');
 
-if (exists) {
-    console.log('Navigating to Index');
-
-  navigation.navigate('Index');
-
-} else if (food) {
-  navigation.navigate('UserInfoSignUp');
-} else if (travel) {
-  navigation.navigate('FoodPreferences');
-} else {
-  navigation.navigate('TravelPreferences');
-}
-    onSignUp?.();
+    if (exists) {
+      navigation.navigate('Index');
+    } else if (food) {
+      navigation.navigate('UserInfoSignUp');
+    } else if (travel) {
+      navigation.navigate('FoodPreferences');
+    } else {
+      navigation.navigate('TravelPreferences');
+    }
   } catch (error: any) {
     Alert.alert('Error', error.message);
   } finally {
@@ -90,7 +85,6 @@ if (exists) {
 }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'position' : undefined}>
     <ImageBackground
       source={require('@/assets/images/OnboardingSloth.png')}
       style={styles.background}
@@ -101,73 +95,85 @@ if (exists) {
           <Text style={demoStyles.bannerText}>Demo Mode — tap to skip to main app</Text>
         </TouchableOpacity>
       )}
-      <View style={styles.topHeadingWrapper}>
-        <Text style={styles.heading}>Ready to{'\n'}Wander?</Text>
-      </View>
-      <View style={styles.card}>
-        <Text style={styles.subheading}>New{'\n'}Account</Text>
-        <GoogleSigninButton
-          style={styles.googleButton}
-          size={GoogleSigninButton.Size.Wide}
-          color={GoogleSigninButton.Color.Light}
-          onPress={signUpWithGoogle}
-          disabled={loading}
-        />
-        <View style={styles.dividerRow}>
-          <View style={styles.divider} />
-          <Text style={styles.orText}>Or</Text>
-          <View style={styles.divider} />
-        </View>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Email</Text>
-          <View style={styles.inputRow}>
-            <Text style={styles.inputIcon}>📧</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              placeholderTextColor="#aaa"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={email}
-              onChangeText={setEmail}
-            />
-          </View>
-          <Text style={styles.label}>Password</Text>
-          <View style={styles.inputRow}>
-            <Text style={styles.inputIcon}>🔒</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              placeholderTextColor="#aaa"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-            />
-          </View>
-          <Text style={styles.label}>Confirm Password</Text>
-          <View style={styles.inputRow}>
-            <Text style={styles.inputIcon}>🔒</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Confirm Password"
-              placeholderTextColor="#aaa"
-              secureTextEntry
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-            />
-          </View>
-        </View>
-        <TouchableOpacity
-          style={styles.signUpButton}
-          onPress={signUpWithEmail}
-          disabled={loading}
+      <KeyboardAvoidingView
+        style={{ flex: 1, width: '100%' }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.signUpButtonText}>Sign Up</Text>
-        </TouchableOpacity>
-        {loading && <ActivityIndicator size="large" color="#7c5cff" style={{ marginTop: 8 }} />}
-      </View>
+          <View style={styles.topHeadingWrapper}>
+            <Text style={styles.heading}>Ready to{'\n'}Wander?</Text>
+          </View>
+          <View style={{ flex: 1 }} />
+          <View style={styles.card}>
+            <Text style={styles.subheading}>New{'\n'}Account</Text>
+            <GoogleSigninButton
+              style={styles.googleButton}
+              size={GoogleSigninButton.Size.Wide}
+              color={GoogleSigninButton.Color.Light}
+              onPress={signUpWithGoogle}
+              disabled={loading}
+            />
+            <View style={styles.dividerRow}>
+              <View style={styles.divider} />
+              <Text style={styles.orText}>Or</Text>
+              <View style={styles.divider} />
+            </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email</Text>
+              <View style={styles.inputRow}>
+                <Text style={styles.inputIcon}>📧</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  placeholderTextColor="#aaa"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={email}
+                  onChangeText={setEmail}
+                />
+              </View>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.inputRow}>
+                <Text style={styles.inputIcon}>🔒</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  placeholderTextColor="#aaa"
+                  secureTextEntry
+                  value={password}
+                  onChangeText={setPassword}
+                />
+              </View>
+              <Text style={styles.label}>Confirm Password</Text>
+              <View style={styles.inputRow}>
+                <Text style={styles.inputIcon}>🔒</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Confirm Password"
+                  placeholderTextColor="#aaa"
+                  secureTextEntry
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                />
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.signUpButton}
+              onPress={signUpWithEmail}
+              disabled={loading}
+            >
+              <Text style={styles.signUpButtonText}>Sign Up</Text>
+            </TouchableOpacity>
+            {loading && <ActivityIndicator size="large" color="#7c5cff" style={{ marginTop: 8 }} />}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ImageBackground>
-    </KeyboardAvoidingView>
   );
 }
 

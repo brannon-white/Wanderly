@@ -4,8 +4,6 @@ export const styles = StyleSheet.create({
   background: {
     flex: 1,
     backgroundColor: '#f6f4ff',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
   },
   backgroundImage: {
     resizeMode: 'cover',
@@ -34,7 +32,6 @@ heading: {
 },
 card: {
   width: '100%',
-  height: 570, // or adjust to your preferred height (e.g., 520, 540, etc.)
   backgroundColor: '#fff',
   borderTopLeftRadius: 36,
   borderTopRightRadius: 36,
@@ -46,9 +43,6 @@ card: {
   shadowOpacity: 0.08,
   shadowRadius: 10,
   elevation: 8,
-  position: 'absolute',
-  bottom: 0,
-  left: 0,
 },
   subheading: {
     fontSize: 24,
