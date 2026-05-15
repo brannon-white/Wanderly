@@ -1,13 +1,16 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
-import { shared, PRIMARY, PRIMARY_LIGHT, BORDER_COLOR, TEXT_DARK, TEXT_GRAY } from '@/styles/tripPlanningStyles';
+import { shared } from '@/styles/tripPlanningStyles';
+import { styles as prefStyles } from '@/styles/travelPreferencesStyles';
 import { useTripPlanning } from '@/context/TripPlanningContext';
 import { INTERESTS } from '@/constants/interests';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getAuth } from '@react-native-firebase/auth';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 
@@ -15,6 +18,26 @@ export default function TripInterestsScreen() {
   const navigation = useNavigation<NavProp>();
   const insets = useSafeAreaInsets();
   const { interests, setInterests } = useTripPlanning();
+
+  useEffect(() => {
+    if (interests.length > 0) return;
+
+    async function preloadSaved() {
+      const uid = getAuth().currentUser?.uid;
+      if (!uid) return;
+      try {
+        const raw = await AsyncStorage.getItem(`userProfile_${uid}`);
+        if (raw) {
+          const profile = JSON.parse(raw);
+          if (Array.isArray(profile.activityPreferences) && profile.activityPreferences.length > 0) {
+            setInterests(profile.activityPreferences);
+          }
+        }
+      } catch {}
+    }
+
+    preloadSaved();
+  }, []);
 
   const toggle = (label: string) => {
     setInterests(
@@ -47,32 +70,29 @@ export default function TripInterestsScreen() {
           Select your travel preferences to customize your trip plan.
         </Text>
 
-        <View style={styles.grid}>
-          {Array.from({ length: Math.ceil(INTERESTS.length / 2) }).map((_, rowIdx) => (
-            <View key={rowIdx} style={styles.row}>
-              {INTERESTS.slice(rowIdx * 2, rowIdx * 2 + 2).map((item) => {
-                const selected = interests.includes(item.label);
-                return (
-                  <TouchableOpacity
-                    key={item.label}
-                    style={[styles.pill, selected && styles.pillSelected]}
-                    onPress={() => toggle(item.label)}
-                    activeOpacity={0.75}
-                  >
-                    <Text style={[styles.pillText, selected && styles.pillTextSelected]}>
-                      {item.label} {item.emoji}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ))}
+        <View style={prefStyles.prefsGrid}>
+          {INTERESTS.map((item) => {
+            const selected = interests.includes(item.label);
+            return (
+              <TouchableOpacity
+                key={item.label}
+                style={[prefStyles.prefButton, selected && prefStyles.prefButtonSelected]}
+                onPress={() => toggle(item.label)}
+                activeOpacity={0.75}
+              >
+                <Text style={[prefStyles.prefText, selected && prefStyles.prefTextSelected]}>
+                  {item.label}
+                </Text>
+                <Text style={prefStyles.prefEmoji}>{item.emoji}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </ScrollView>
 
       <View style={[shared.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
         {!canContinue && (
-          <Text style={styles.helperText}>Select at least 1 interest to continue</Text>
+          <Text style={prefStyles.helperText}>Select at least 1 interest to continue</Text>
         )}
         <TouchableOpacity
           style={[shared.continueBtn, !canContinue && shared.continueBtnDisabled]}
@@ -86,45 +106,3 @@ export default function TripInterestsScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  grid: {
-    gap: 0,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 10,
-    justifyContent: 'flex-start',
-  },
-  pill: {
-    borderWidth: 1.5,
-    borderColor: BORDER_COLOR,
-    borderRadius: 32,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    backgroundColor: '#fff',
-    flexShrink: 1,
-  },
-  pillSelected: {
-    borderColor: PRIMARY,
-    backgroundColor: PRIMARY,
-  },
-  pillText: {
-    fontSize: 13,
-    color: TEXT_DARK,
-    fontFamily: 'SourceSans3-Regular',
-    fontWeight: '600',
-  },
-  pillTextSelected: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  helperText: {
-    textAlign: 'center',
-    color: TEXT_GRAY,
-    fontFamily: 'SourceSans3-Regular',
-    fontSize: 13,
-    marginBottom: 8,
-  },
-});
