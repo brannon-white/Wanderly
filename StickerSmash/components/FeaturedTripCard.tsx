@@ -12,18 +12,31 @@ export default function FeaturedTripCard({ itinerary, featuredTrip }: { itinerar
 
   const tripId = featuredTrip.tripId ?? itinerary.id;
   const durationDays = itinerary.durationDays ?? featuredTrip.durationDays;
-  const summaryItems: string[] = Array.isArray(itinerary.summary) && itinerary.summary.length > 0
-    ? itinerary.summary
-    : [];
+  const badge: string | undefined = featuredTrip.badge;
+  const summaryItems: string[] = Array.isArray(itinerary.summary) ? itinerary.summary : [];
   const interestTags: string[] = Array.isArray(itinerary.interests) ? itinerary.interests : [];
 
   return (
     <View style={styles.featuredTripCard}>
-      <Image
-        source={{ uri: itinerary.heroImage || featuredTrip.heroImage || 'https://via.placeholder.com/400x200?text=No+Image' }}
-        style={styles.featuredTripImage}
-        resizeMode="cover"
-      />
+      <View>
+        <Image
+          source={{ uri: itinerary.heroImage || featuredTrip.heroImage || 'https://via.placeholder.com/400x200?text=No+Image' }}
+          style={styles.featuredTripImage}
+          resizeMode="cover"
+        />
+        {badge ? (
+          <View style={{
+            position: 'absolute', top: 12, left: 12,
+            backgroundColor: '#6A62B7', borderRadius: 12,
+            paddingHorizontal: 10, paddingVertical: 4,
+          }}>
+            <Text style={{ color: '#fff', fontSize: 12, fontFamily: 'SourceSans3-Regular', fontWeight: '700' }}>
+              {badge}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
       <View style={styles.featuredTripContent}>
         <Text style={styles.featuredTripTitle}>{itinerary.title || featuredTrip.title}</Text>
 
@@ -33,11 +46,11 @@ export default function FeaturedTripCard({ itinerary, featuredTrip }: { itinerar
           </Text>
         ) : null}
 
-        {summaryItems.length > 0 && (
-          <Text style={styles.featuredTripSubtitle}>
-            {summaryItems.map((item: string) => `• ${item}`).join('\n')}
-          </Text>
-        )}
+        <Text style={styles.featuredTripSubtitle}>
+          {summaryItems.length > 0
+            ? summaryItems.map((item: string) => `• ${item}`).join('\n')
+            : featuredTrip.description ?? ''}
+        </Text>
 
         {interestTags.length > 0 && (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>

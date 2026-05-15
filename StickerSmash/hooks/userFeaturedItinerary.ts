@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import { cacheGet, cacheSet } from '@/utils/cache';
 
-const CACHE_KEY = 'featured:itinerary:v3';
+const CACHE_KEY = 'featured:itinerary:v4';
 
 export function useFeaturedItinerary() {
   const [featuredTrip, setFeaturedTrip] = useState<any>(null);
