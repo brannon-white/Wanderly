@@ -43,3 +43,14 @@ export async function cacheDelete(key: string): Promise<void> {
     // non-fatal
   }
 }
+
+export async function clearAllCache(): Promise<void> {
+  memory.clear();
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const wcKeys = keys.filter(k => k.startsWith(STORAGE_PREFIX));
+    if (wcKeys.length > 0) await AsyncStorage.multiRemove(wcKeys);
+  } catch {
+    // non-fatal
+  }
+}

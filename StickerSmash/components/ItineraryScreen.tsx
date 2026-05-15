@@ -454,7 +454,16 @@ export default function ItineraryScreen() {
           <View style={styles.heroGradient} />
 
           <View style={[styles.headerRow, { top: headerTop }]}>
-            <TouchableOpacity style={styles.headerIconBtn} onPress={() => navigation.goBack()}>
+            <TouchableOpacity
+              style={styles.headerIconBtn}
+              onPress={() => {
+                if (isBrowsing) {
+                  navigation.goBack();
+                } else {
+                  navigation.navigate('Index' as any, { screen: 'MyTrips' } as any);
+                }
+              }}
+            >
               <Ionicons name="arrow-back" size={20} color="#fff" />
             </TouchableOpacity>
             <View style={styles.headerRightIcons}>
