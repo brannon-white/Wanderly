@@ -323,20 +323,23 @@ popularCardImage: {
 });
 
 export const articleCardStyles = StyleSheet.create({
-  card: {
-    width: 240,
-    height: 200,
-    borderRadius: 20,
+  cardTouchable: {
     marginLeft: 20,
     marginRight: 4,
     marginBottom: 8,
-    overflow: 'hidden',
-    backgroundColor: '#e8e4ff',
+    borderRadius: 20,
     elevation: 3,
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
+  },
+  card: {
+    width: 240,
+    height: 200,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#e8e4ff',
   },
   image: {
     ...StyleSheet.absoluteFillObject,

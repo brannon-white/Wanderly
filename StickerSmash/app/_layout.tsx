@@ -1,6 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import Constants from 'expo-constants';
+
+// Configure Google Sign-In once at app startup so it's ready for both
+// sign-in and sign-up screens regardless of which one the user visits first.
+const _extra = (Constants.expoConfig?.extra ?? {}) as Record<string, string>;
+GoogleSignin.configure({
+  webClientId: _extra.GOOGLE_WEB_CLIENT_ID || '588805144943-1f9uii64tqetroqlhvf7qltvaohku583.apps.googleusercontent.com',
+  iosClientId: _extra.GOOGLE_IOS_CLIENT_ID || '588805144943-7am9qr0jqsdmt478shb1ftjjas93lj4s.apps.googleusercontent.com',
+});
 import OnboardingFirstPage from './(tabs)/onboardingFirstPage';
 import OnboardingSecondPage from './(tabs)/onboardingSecondPage';
 import OnboardingThirdPage from './(tabs)/onboardingThirdPage';

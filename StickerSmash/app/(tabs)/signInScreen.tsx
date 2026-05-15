@@ -3,28 +3,12 @@ import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, Activi
 import { styles } from '@/styles/signInScreenStyles';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signInWithCredential, signOut as firebaseSignOut, GoogleAuthProvider } from '@react-native-firebase/auth';
 import { useDemo } from '@/context/DemoContext';
-import Constants from 'expo-constants';
 import { userExists } from '@/hooks/useSaveUserProfile';
 import { getOnboardingStepData } from '@/utils/onboardingStorage';
-import { GoogleSignin,statusCodes,GoogleSigninButton } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, statusCodes, GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '@/app/_layout'; // adjust path 
-const expoExtra = (Constants.expoConfig?.extra ?? {}) as {
-  GOOGLE_WEB_CLIENT_ID?: string;
-  GOOGLE_IOS_CLIENT_ID?: string;
-};
-
-if (expoExtra.GOOGLE_WEB_CLIENT_ID && expoExtra.GOOGLE_IOS_CLIENT_ID) {
-  GoogleSignin.configure({
-    // Web client ID used for Firebase backend authentication
-    webClientId: expoExtra.GOOGLE_WEB_CLIENT_ID,
-    // iOS client ID for native Google Sign-In SDK
-    iosClientId: expoExtra.GOOGLE_IOS_CLIENT_ID,
-  });
-} else {
-  console.warn('Google Sign-In client IDs are missing from Expo extra config.');
-}
+import { RootStackParamList } from '@/app/_layout'; // GoogleSignin.configure() is called in _layout.tsx
 
 export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
   const { isDemoMode } = useDemo();

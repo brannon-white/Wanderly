@@ -111,6 +111,7 @@ prefsGrid: {
   flexDirection: 'row',
   flexWrap: 'wrap',
   justifyContent: 'center',
+  alignSelf: 'stretch',
   gap: 10,
   paddingTop: 4,
 },
