@@ -22,19 +22,31 @@ export const SavedProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     if (isDemoMode) return;
-    const uid = getAuth().currentUser?.uid;
-    if (!uid) return;
 
-    const unsubscribe = firestore()
-      .collection('users')
-      .doc(uid)
-      .collection('savedItems')
-      .onSnapshot((snapshot) => {
-        if (!snapshot) return;
-        setSavedItems(snapshot.docs.map((doc) => doc.data() as SavedItem));
-      }, () => {});
+    let unsubscribeFirestore: (() => void) | null = null;
 
-    return unsubscribe;
+    const unsubscribeAuth = getAuth().onAuthStateChanged((user) => {
+      if (unsubscribeFirestore) {
+        unsubscribeFirestore();
+        unsubscribeFirestore = null;
+      }
+      setSavedItems([]);
+      if (!user) return;
+
+      unsubscribeFirestore = firestore()
+        .collection('users')
+        .doc(user.uid)
+        .collection('savedItems')
+        .onSnapshot((snapshot) => {
+          if (!snapshot) return;
+          setSavedItems(snapshot.docs.map((doc) => doc.data() as SavedItem));
+        }, () => {});
+    });
+
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeFirestore) unsubscribeFirestore();
+    };
   }, [isDemoMode]);
 
   const isSaved = (id: string) => savedItems.some((item) => item.id === id);
