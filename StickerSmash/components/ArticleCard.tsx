@@ -1,22 +1,23 @@
 import React from 'react';
-import { View, Text, Image, Pressable, ActivityIndicator, Linking } from 'react-native';
-import { openBrowserAsync } from 'expo-web-browser';
+import { View, Text, Image, Pressable, ActivityIndicator } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import type { RootStackParamList } from '@/app/_layout';
 import type { Article } from '@/types/article';
 import { articleCardStyles as s } from '@/styles/discoverScreenStyles';
 
+type NavProp = StackNavigationProp<RootStackParamList>;
+
 export default function ArticleCard({ article }: { article: Article }) {
-  const handlePress = async () => {
-    if (!article.url) return;
-    try {
-      await openBrowserAsync(article.url);
-    } catch {
-      Linking.openURL(article.url).catch(() => {});
-    }
-  };
+  const navigation = useNavigation<NavProp>();
 
   return (
     <Pressable
-      onPress={handlePress}
+      onPress={() => navigation.navigate('ArticleWebView', {
+        url: article.url,
+        title: article.title,
+        category: article.category,
+      })}
       style={({ pressed }) => [s.cardTouchable, pressed && { opacity: 0.88 }]}
     >
       <View style={s.card}>
