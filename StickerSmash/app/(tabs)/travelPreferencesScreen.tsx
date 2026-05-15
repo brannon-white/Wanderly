@@ -93,11 +93,20 @@ export default function TravelPreferencesScreen() {
             </TouchableOpacity>
           </View>
         ) : (
-          /* Onboarding mode: progress bar centered */
-          <View style={{ width: '100%', alignItems: 'center', marginTop: 16, marginBottom: 8 }}>
-            <View style={styles.progressBarWrapper}>
-              <View style={styles.progressBarBg} />
-              <View style={styles.progressBarFill} />
+          /* Onboarding mode: back button + centered progress bar */
+          <View style={styles.topBar}>
+            <TouchableOpacity
+              style={styles.backArrow}
+              onPress={() => navigation.goBack()}
+              hitSlop={{ top: 10, left: 10, bottom: 10, right: 10 }}
+            >
+              <Ionicons name="chevron-back" size={28} color="#222" />
+            </TouchableOpacity>
+            <View style={styles.progressBarAbsoluteContainer}>
+              <View style={styles.progressBarWrapper}>
+                <View style={styles.progressBarBg} />
+                <View style={styles.progressBarFill} />
+              </View>
             </View>
           </View>
         )}

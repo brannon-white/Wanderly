@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { GoogleSignin, GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import { getAuth, createUserWithEmailAndPassword, signInWithCredential, GoogleAuthProvider } from '@react-native-firebase/auth';
 import { styles } from '@/styles/signUpStyles';
@@ -90,6 +90,7 @@ if (exists) {
 }
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'position' : undefined}>
     <ImageBackground
       source={require('@/assets/images/OnboardingSloth.png')}
       style={styles.background}
@@ -166,6 +167,7 @@ if (exists) {
         {loading && <ActivityIndicator size="large" color="#7c5cff" style={{ marginTop: 8 }} />}
       </View>
     </ImageBackground>
+    </KeyboardAvoidingView>
   );
 }
 
