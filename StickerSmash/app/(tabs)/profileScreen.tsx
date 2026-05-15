@@ -24,6 +24,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getUserProfile } from '@/utils/getUserProfile';
 import { updateUserInfo } from '@/utils/updateUserInfo';
 import { useDemo } from '@/context/DemoContext';
+import { clearAllCache } from '@/utils/cache';
 import { styles } from '@/styles/profileScreenStyles';
 
 type ProfileData = {
@@ -131,8 +132,14 @@ export default function ProfileScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            if (isDemoMode) { disableDemoMode(); }
-            else { await getAuth().signOut(); }
+            if (isDemoMode) {
+              disableDemoMode();
+            } else {
+              const uid = getAuth().currentUser?.uid;
+              await clearAllCache();
+              if (uid) await AsyncStorage.removeItem(`userProfile_${uid}`);
+              await getAuth().signOut();
+            }
             navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
           } catch {
             Alert.alert('Error', 'Failed to sign out. Please try again.');
