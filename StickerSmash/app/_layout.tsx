@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import Constants from 'expo-constants';
 import OnboardingFirstPage from './(tabs)/onboardingFirstPage';
 import OnboardingSecondPage from './(tabs)/onboardingSecondPage';
 import OnboardingThirdPage from './(tabs)/onboardingThirdPage';
@@ -82,6 +84,16 @@ export default function RootLayout() {
     'Merriweather_36pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_36pt-Bold.ttf'),
     'Merriweather_24pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_24pt-Bold.ttf'),
   });
+
+  // JS-side configure runs after the bridge/JSI is ready. The native-side
+  // configuration in AppDelegate.swift is the primary safeguard.
+  useEffect(() => {
+    const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, string>;
+    GoogleSignin.configure({
+      webClientId: extra.GOOGLE_WEB_CLIENT_ID || '588805144943-1f9uii64tqetroqlhvf7qltvaohku583.apps.googleusercontent.com',
+      iosClientId: extra.GOOGLE_IOS_CLIENT_ID || '588805144943-7am9qr0jqsdmt478shb1ftjjas93lj4s.apps.googleusercontent.com',
+    });
+  }, []);
 
   useEffect(() => {
     async function checkFlags() {

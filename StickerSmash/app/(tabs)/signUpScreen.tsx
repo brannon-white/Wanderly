@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { GoogleSignin, GoogleSigninButton } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, GoogleSigninButton, statusCodes } from '@react-native-google-signin/google-signin';
 import { getAuth, createUserWithEmailAndPassword, signInWithCredential, GoogleAuthProvider } from '@react-native-firebase/auth';
 import { styles } from '@/styles/signUpStyles';
 import { useDemo } from '@/context/DemoContext';
@@ -78,7 +78,9 @@ async function signUpWithGoogle() {
       navigation.navigate('TravelPreferences');
     }
   } catch (error: any) {
-    Alert.alert('Error', error.message);
+    if (error.code !== statusCodes.SIGN_IN_CANCELLED) {
+      Alert.alert('Error', error.message);
+    }
   } finally {
     setLoading(false);
   }
