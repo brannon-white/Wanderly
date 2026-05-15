@@ -1,15 +1,18 @@
 import React from 'react';
-import { View, Text, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, Image, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { openBrowserAsync } from 'expo-web-browser';
 import type { Article } from '@/types/article';
 import { articleCardStyles as s } from '@/styles/discoverScreenStyles';
 
 export default function ArticleCard({ article }: { article: Article }) {
   const handlePress = async () => {
+    if (!article.url) return;
     try {
       await openBrowserAsync(article.url);
     } catch {
-      // Nothing to do if browser fails to open
+      try {
+        await Linking.openURL(article.url);
+      } catch {}
     }
   };
 
