@@ -1,18 +1,24 @@
 import React from 'react';
-import { View, Text, Image, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, Image, Pressable, ActivityIndicator, Linking } from 'react-native';
+import { openBrowserAsync } from 'expo-web-browser';
 import type { Article } from '@/types/article';
 import { articleCardStyles as s } from '@/styles/discoverScreenStyles';
 
 export default function ArticleCard({ article }: { article: Article }) {
-  const handlePress = () => {
+  const handlePress = async () => {
     if (!article.url) return;
-    Linking.openURL(article.url).catch(() => {});
+    try {
+      await openBrowserAsync(article.url);
+    } catch {
+      Linking.openURL(article.url).catch(() => {});
+    }
   };
 
-  // overflow:'hidden' is on the inner View, not the TouchableOpacity, so the
-  // hit area is never clipped on iOS (a known issue with the New Architecture).
   return (
-    <TouchableOpacity onPress={handlePress} activeOpacity={0.88} style={s.cardTouchable}>
+    <Pressable
+      onPress={handlePress}
+      style={({ pressed }) => [s.cardTouchable, pressed && { opacity: 0.88 }]}
+    >
       <View style={s.card}>
         {article.imageUrl ? (
           <Image source={{ uri: article.imageUrl }} style={s.image} resizeMode="cover" />
@@ -30,6 +36,6 @@ export default function ArticleCard({ article }: { article: Article }) {
           <Text style={s.readTime}>{article.readTimeMin} min read</Text>
         </View>
       </View>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
