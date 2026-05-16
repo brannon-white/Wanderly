@@ -19,6 +19,9 @@ export interface CommittedTrip {
   origin: 'prebuilt' | 'generated';
   interests?: string[];
   budget?: string;
+  destinationName?: string;
+  country?: string;
+  bookedItems?: Record<string, boolean>; // activityId → booked
 }
 
 interface MyTripsContextType {
@@ -26,6 +29,7 @@ interface MyTripsContextType {
   addTrip: (trip: CommittedTrip) => void;
   removeTrip: (id: string) => void;
   updateTrip: (id: string, updates: Partial<CommittedTrip>) => void;
+  markActivityBooked: (tripId: string, activityId: string) => void;
 }
 
 const MyTripsContext = createContext<MyTripsContextType>({
@@ -33,6 +37,7 @@ const MyTripsContext = createContext<MyTripsContextType>({
   addTrip: () => {},
   removeTrip: () => {},
   updateTrip: () => {},
+  markActivityBooked: () => {},
 });
 
 // Future dates for the active demo trip
@@ -107,8 +112,15 @@ export function MyTripsProvider({ children }: { children: React.ReactNode }) {
     setTrips(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
   };
 
+  const markActivityBooked = (tripId: string, activityId: string) => {
+    setTrips(prev => prev.map(t => {
+      if (t.id !== tripId) return t;
+      return { ...t, bookedItems: { ...(t.bookedItems ?? {}), [activityId]: true } };
+    }));
+  };
+
   return (
-    <MyTripsContext.Provider value={{ trips, addTrip, removeTrip, updateTrip }}>
+    <MyTripsContext.Provider value={{ trips, addTrip, removeTrip, updateTrip, markActivityBooked }}>
       {children}
     </MyTripsContext.Provider>
   );

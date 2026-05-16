@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Alert,
+  Linking,
   SafeAreaView,
   ScrollView,
   View,
@@ -15,6 +16,7 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
 import { styles } from '@/styles/myTripsStyles';
 import { useMyTrips, CommittedTrip, isTripActive, formatTripSubtitle } from '@/context/MyTripsContext';
+import { buildHotelSearchUrl, partyToAdults, cleanDestination } from '@/services/bookingService';
 import { searchPhoto } from '@/services/unsplash';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
@@ -72,6 +74,21 @@ function TripCard({ trip }: { trip: CommittedTrip }) {
           </TouchableOpacity>
         </View>
         <Text style={styles.cardSubtitle}>{formatTripSubtitle(trip)}</Text>
+        {isTripActive(trip) && (
+          <TouchableOpacity
+            style={styles.bookHotelsPill}
+            onPress={() => Linking.openURL(buildHotelSearchUrl(
+              trip.destinationName ?? cleanDestination(trip.title),
+              trip.country,
+              new Date(trip.startDate).toISOString().slice(0, 10),
+              new Date(trip.endDate).toISOString().slice(0, 10),
+              partyToAdults(trip.party),
+            ))}
+          >
+            <Ionicons name="bed-outline" size={14} color="#6A62B7" />
+            <Text style={styles.bookHotelsPillText}>Book Hotels</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
