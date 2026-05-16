@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, View, Text } from 'react-native';
+import { ActivityIndicator, Linking, View, Text } from 'react-native';
+import { useNavigationContainerRef } from 'expo-router';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
@@ -84,12 +85,26 @@ function DemoAwareAuth({ navigation }: any) {
 
 export default function RootLayout() {
   const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
+  const navigationRef = useNavigationContainerRef();
 
   useFonts({
     'SourceSans3-Regular': require('@/assets/fonts/Source_Sans_3/static/SourceSans3-Regular.ttf'),
     'Merriweather_36pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_36pt-Bold.ttf'),
     'Merriweather_24pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_24pt-Bold.ttf'),
   });
+
+  // Handle wanderly://itinerary/:id deep links
+  useEffect(() => {
+    const navigate = (url: string) => {
+      const match = url.match(/^wanderly:\/\/itinerary\/(.+)$/);
+      if (match && navigationRef.isReady()) {
+        (navigationRef as any).navigate('ItineraryScreen', { id: match[1], source: 'browse' });
+      }
+    };
+    Linking.getInitialURL().then(url => { if (url) navigate(url); });
+    const sub = Linking.addEventListener('url', ({ url }) => navigate(url));
+    return () => sub.remove();
+  }, [navigationRef]);
 
   // JS-side configure runs after the bridge/JSI is ready. The native-side
   // configuration in AppDelegate.swift is the primary safeguard.

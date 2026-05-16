@@ -134,6 +134,25 @@ export const styles = StyleSheet.create({
     fontFamily: 'SourceSans3-Regular',
   },
 
+  // ── Book Hotels pill ─────────────────────────────────────────────────
+  bookHotelsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#F0EEFF',
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginTop: 8,
+    gap: 4,
+  },
+
+  bookHotelsPillText: {
+    fontSize: 12,
+    color: PRIMARY,
+    fontFamily: 'SourceSans3-SemiBold',
+  },
+
   // ── Empty state ───────────────────────────────────────────────────────
   emptyState: {
     flex: 1,

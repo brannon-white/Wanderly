@@ -7,7 +7,7 @@ import {
   type GeneratedItinerary,
 } from "./itinerarySchemas";
 
-export const PROMPT_VERSION = "v3";
+export const PROMPT_VERSION = "v4";
 export const MODEL_NAME = "claude-sonnet-4-6";
 
 // JSON Schema representation of generatedItinerarySchema for Claude tool use
@@ -107,13 +107,22 @@ TRIP DETAILS:
 
 STRICT RULES — follow every rule exactly:
 
-1. MEALS ARE REQUIRED: Every single day MUST include breakfast, lunch, AND dinner, each at a real named restaurant or café that actually exists in ${input.destinationName}. Use the exact establishment name (e.g. "Café de Flore", not "a charming local café"). Set category to "food" for all meals.
+1. MEALS ARE REQUIRED — STRICT VENUE TYPES:
+   Every day MUST include breakfast, lunch, AND dinner at real, named establishments in ${input.destinationName}. Use the exact establishment name (e.g. "Café de Flore", not "a charming local café"). Set category to "food" for all meals.
 
-2. SPECIFIC NAMED PLACES ONLY: Every non-meal activity must be a real, named attraction — no vague entries like "explore the neighborhood" or "stroll along the waterfront". Use actual names (e.g. "Louvre Museum", "Shibuya Crossing", "Central Park").
+   BREAKFAST (8:00–9:30 AM): Must be a café, bakery, diner, brunch spot, or hotel restaurant. NEVER recommend an ice cream parlor, dessert shop, cocktail bar, fine-dining-only restaurant, or any place that does not actually serve breakfast. Only pick establishments known to open before 9:00 AM.
 
-3. TIME FEASIBILITY — CRITICAL: Schedule activities so a traveler can physically get from one to the next in time. If an activity ends at 10:00 AM and transit to the next place takes 25 minutes, the next activity starts at 10:25 AM at the earliest. Never overlap times or leave gaps that are too short for the transit between locations.
+   LUNCH (12:00–2:00 PM): Must be a restaurant, café, food market, or casual eatery that serves lunch. Avoid dinner-only restaurants.
 
-4. REALISTIC DURATIONS: Allocate appropriate time at each place:
+   DINNER (6:30–9:00 PM): Must be a full-service restaurant appropriate for a ${input.budget} budget. Match the cuisine variety to the destination — do not repeat the same cuisine type across days.
+
+2. ESTABLISHED, WELL-KNOWN VENUES ONLY: Choose restaurants and attractions that are well-established with a strong local or tourist reputation — think popular, long-running institutions rather than obscure or trendy pop-ups. Prefer places that have been operating for several years and are prominently reviewed, as this reduces the chance of recommending a place that has since closed.
+
+3. SPECIFIC NAMED PLACES ONLY: Every non-meal activity must be a real, named attraction — no vague entries like "explore the neighborhood" or "stroll along the waterfront". Use actual names (e.g. "Louvre Museum", "Shibuya Crossing", "Central Park").
+
+4. TIME FEASIBILITY — CRITICAL: Schedule activities so a traveler can physically get from one to the next in time. If an activity ends at 10:00 AM and transit to the next place takes 25 minutes, the next activity starts at 10:25 AM at the earliest. Never overlap times or leave gaps that are too short for the transit between locations.
+
+5. REALISTIC DURATIONS: Allocate appropriate time at each place:
    - Breakfast: 45–60 min
    - Major museum or landmark: 2–3 hours
    - Lunch: 60–75 min
@@ -121,13 +130,13 @@ STRICT RULES — follow every rule exactly:
    - Dinner: 75–90 min
    - Bar or evening activity: 1–2 hours
 
-5. DAY STRUCTURE: Start no earlier than 8:00 AM (breakfast). End no later than 11:00 PM. Format all times as "09:00 AM - 10:30 AM".
+6. DAY STRUCTURE: Start no earlier than 8:00 AM (breakfast). End no later than 11:00 PM. Format all times as "09:00 AM - 10:30 AM".
 
-6. TRANSPORT: For each activity's transport array, specify exactly how to travel from THAT place to the NEXT one (mode + realistic transit time based on actual distance). The last activity of each day has an empty transport array.
+7. TRANSPORT: For each activity's transport array, specify exactly how to travel from THAT place to the NEXT one (mode + realistic transit time based on actual distance). The last activity of each day has an empty transport array.
 
-7. DO NOT REPEAT: Never use the same restaurant or attraction on more than one day.
+8. DO NOT REPEAT: Never use the same restaurant or attraction on more than one day.
 
-8. GOOGLE MAPS URLS: Format as https://www.google.com/maps/search/?api=1&query=Place+Name+City
+9. GOOGLE MAPS URLS: Format as https://www.google.com/maps/search/?api=1&query=Place+Name+City
 
 Each day should follow this rough shape:
 - ~8:00 AM: Breakfast at a named café or bakery

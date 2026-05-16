@@ -6,6 +6,9 @@ service cloud.firestore {
       match /itineraries/{itineraryId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
+      match /savedItems/{itemId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
     }
     match /destinations/{destination} {
       allow read: if request.auth != null;

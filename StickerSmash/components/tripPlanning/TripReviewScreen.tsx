@@ -113,6 +113,8 @@ export default function TripReviewScreen() {
         origin: 'generated',
         interests,
         budget,
+        destinationName: destination.name,
+        country: destination.country,
       });
 
       setTimeout(() => {

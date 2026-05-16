@@ -22,7 +22,7 @@ const PARTY_OPTIONS = [
 export default function TripPartyScreen() {
   const navigation = useNavigation<NavProp>();
   const insets = useSafeAreaInsets();
-  const { flow, party, setParty, templateId, templateTitle, templateHeroImage, startDate, endDate, reset } = useTripPlanning();
+  const { flow, party, setParty, templateId, templateTitle, templateHeroImage, startDate, endDate, reset, destinationSnapshot } = useTripPlanning();
   const { addTrip } = useMyTrips();
 
   const isPrebuilt = flow === 'prebuilt';
@@ -39,6 +39,8 @@ export default function TripPartyScreen() {
         startDate: startDate!.toISOString(),
         endDate: endDate!.toISOString(),
         origin: 'prebuilt',
+        destinationName: destinationSnapshot?.name,
+        country: destinationSnapshot?.country,
       });
       reset();
       navigation.navigate('Index' as any, { screen: 'MyTrips' } as any);

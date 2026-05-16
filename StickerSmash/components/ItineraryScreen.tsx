@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,16 +7,24 @@ import {
   TouchableOpacity,
   Linking,
   Platform,
-  Share,
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
 import { styles, ICON_COLOR, makeScrollContentStyle } from '../styles/TravelItinerary';
+import {
+  buildHotelSearchUrl,
+  buildOpenTableUrl,
+  buildExperienceUrl,
+  buildDirectionsUrl,
+  partyToAdults,
+} from '@/services/bookingService';
 import { DEMO_FULL_ITINERARIES } from '@/data/demoData';
 import { useTripPlanning } from '@/context/TripPlanningContext';
 import { useMyTrips, formatTripSubtitle } from '@/context/MyTripsContext';
@@ -24,6 +32,7 @@ import type { GeneratedItinerary, ItineraryActivity, ItineraryDay } from '@/type
 import { getAuth } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { searchPhoto } from '@/services/unsplash';
+import ShareCard from './ShareCard';
 
 let MapsModule:
   | {
@@ -101,7 +110,18 @@ function StarRow({ rating }: { rating: number }) {
   );
 }
 
-function ActivityCard({ activity, isLast }: { activity: ItineraryActivity; isLast: boolean }) {
+interface ActivityCardProps {
+  activity: ItineraryActivity;
+  isLast: boolean;
+  nextActivity?: ItineraryActivity;
+  destinationName?: string;
+  country?: string;
+  checkin?: string;
+  checkout?: string;
+  adults?: number;
+}
+
+function ActivityCard({ activity, isLast, nextActivity, destinationName, country, checkin = '', checkout = '', adults = 2 }: ActivityCardProps) {
   const [imageUri, setImageUri] = useState<string | undefined>(
     isPlaceholder(activity.image) ? undefined : activity.image
   );
@@ -174,22 +194,69 @@ function ActivityCard({ activity, isLast }: { activity: ItineraryActivity; isLas
                 <Text style={styles.mapsLink}>View on Google Maps</Text>
               </TouchableOpacity>
             </View>
+
+            {destinationName ? (() => {
+              const cat = (activity.category ?? '').toLowerCase();
+              if (cat === 'hotel') return (
+                <View style={styles.infoRow}>
+                  <Ionicons name="bed-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
+                  <TouchableOpacity onPress={() => Linking.openURL(buildHotelSearchUrl(destinationName, country, checkin, checkout, adults))}>
+                    <Text style={styles.mapsLink}>Book on Booking.com</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+              if (cat === 'food' || cat === 'restaurant') return (
+                <View style={styles.infoRow}>
+                  <Ionicons name="restaurant-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
+                  {/* Phase 2: replace with OpenTable API for in-app confirmation # */}
+                  <TouchableOpacity onPress={() => Linking.openURL(buildOpenTableUrl(activity.name, destinationName, checkin, adults, activity.coordinates))}>
+                    <Text style={styles.mapsLink}>Reserve on OpenTable</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+              if (['adventure', 'culture', 'nature', 'wellness', 'nightlife'].includes(cat)) return (
+                <View style={styles.infoRow}>
+                  <Ionicons name="compass-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
+                  {/* Phase 2: replace with Viator Partner API for in-app confirmation # */}
+                  <TouchableOpacity onPress={() => Linking.openURL(buildExperienceUrl(activity.name, destinationName))}>
+                    <Text style={styles.mapsLink}>Find Experiences</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+              return null;
+            })() : null}
           </View>
         </View>
 
-        {/* Transport strip — separate section below the card */}
+        {/* Transport strip — tappable to open directions to the next activity */}
         {!isLast && transportOptions.length > 0 && (
           <View style={styles.transportStrip}>
-            {transportOptions.map((t, idx) => (
-              <View key={idx} style={styles.transportStripItem}>
-                <Ionicons
-                  name={TRANSPORT_ICONS[t.mode?.toLowerCase() ?? ''] ?? 'navigate-outline'}
-                  size={22}
-                  color={CAT_COLOR}
-                />
-                <Text style={styles.transportStripTime}>{t.time}</Text>
-              </View>
-            ))}
+            {transportOptions.map((t, idx) => {
+              const canOpenDirections = !!nextActivity;
+              const onPress = canOpenDirections
+                ? () => Linking.openURL(buildDirectionsUrl(
+                    { name: activity.name, coordinates: activity.coordinates },
+                    { name: nextActivity!.name, coordinates: nextActivity!.coordinates },
+                    t.mode ?? 'walk',
+                  ))
+                : undefined;
+              return (
+                <TouchableOpacity
+                  key={idx}
+                  style={styles.transportStripItem}
+                  onPress={onPress}
+                  disabled={!canOpenDirections}
+                  activeOpacity={canOpenDirections ? 0.6 : 1}
+                >
+                  <Ionicons
+                    name={TRANSPORT_ICONS[t.mode?.toLowerCase() ?? ''] ?? 'navigate-outline'}
+                    size={22}
+                    color={CAT_COLOR}
+                  />
+                  <Text style={styles.transportStripTime}>{t.time}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
       </View>
@@ -248,6 +315,8 @@ export default function ItineraryScreen() {
   const itinerary = remoteItinerary ?? demoItinerary;
 
   const [selectedDay, setSelectedDay] = useState(0);
+  const [sharing, setSharing] = useState(false);
+  const shareCardRef = useRef<View>(null);
   const activities = itinerary?.days[selectedDay]?.activities ?? [];
   const MapView = MapsModule?.default;
   const Marker = MapsModule?.Marker;
@@ -379,11 +448,19 @@ export default function ItineraryScreen() {
   };
 
   const handleShare = async () => {
-    if (!itinerary) return;
-    await Share.share({
-      title: itinerary.title,
-      message: `Check out this itinerary on Wanderly: ${itinerary.title}${itinerary.subtitle ? ` — ${itinerary.subtitle}` : ''}`,
-    });
+    if (!itinerary || sharing) return;
+    setSharing(true);
+    try {
+      const uri = await captureRef(shareCardRef, { format: 'jpg', quality: 0.92 });
+      await Sharing.shareAsync(uri, {
+        mimeType: 'image/jpeg',
+        dialogTitle: itinerary.title,
+      });
+    } catch {
+      // dismissed or capture error
+    } finally {
+      setSharing(false);
+    }
   };
 
   const mapRegion = useMemo(() => {
@@ -467,11 +544,10 @@ export default function ItineraryScreen() {
               <Ionicons name="arrow-back" size={20} color="#fff" />
             </TouchableOpacity>
             <View style={styles.headerRightIcons}>
-              <TouchableOpacity style={styles.headerIconBtn} onPress={() => navigation.navigate('Index')}>
-                <Ionicons name="home-outline" size={20} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.headerIconBtn} onPress={handleShare}>
-                <Ionicons name="share-social-outline" size={20} color="#fff" />
+              <TouchableOpacity style={styles.headerIconBtn} onPress={handleShare} disabled={sharing}>
+                {sharing
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Ionicons name="share-social-outline" size={20} color="#fff" />}
               </TouchableOpacity>
               {!isBrowsing && (
                 <TouchableOpacity style={styles.headerIconBtn} onPress={handleDeleteTrip}>
@@ -546,6 +622,13 @@ export default function ItineraryScreen() {
               key={activity.id}
               activity={activity}
               isLast={idx === activities.length - 1}
+              nextActivity={activities[idx + 1]}
+              destinationName={itinerary?.destinationName}
+              country={itinerary?.country}
+              checkin={committedTrip ? new Date(committedTrip.startDate).toISOString().slice(0, 10) : ''}
+              checkout={committedTrip ? new Date(committedTrip.endDate).toISOString().slice(0, 10) : ''}
+              adults={partyToAdults(committedTrip?.party ?? itinerary?.travelerType)}
+
             />
           ))}
         </View>
@@ -562,6 +645,18 @@ export default function ItineraryScreen() {
           <TouchableOpacity style={styles.ctaBtn} onPress={handlePlanThisTrip} activeOpacity={0.85}>
             <Text style={styles.ctaBtnText}>Plan This Trip</Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Off-screen share card — rendered but invisible, captured on share tap */}
+      {itinerary && (
+        <View style={{ position: 'absolute', left: -10000, top: 0 }} pointerEvents="none">
+          <ShareCard
+            ref={shareCardRef}
+            itinerary={itinerary}
+            heroUri={heroUri}
+            committedTrip={committedTrip}
+          />
         </View>
       )}
     </View>
