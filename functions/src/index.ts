@@ -1,6 +1,7 @@
 import { getAuth } from "firebase-admin/auth";
 import { initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getMessaging } from "firebase-admin/messaging";
 import { defineSecret } from "firebase-functions/params";
 import * as functionsV1 from "firebase-functions/v1";
 import * as logger from "firebase-functions/logger";
@@ -131,6 +132,33 @@ async function buildAndSaveItinerary(
     itineraryId: itineraryRef.id,
     destinationId: input.destinationId,
   });
+
+  // Send push notification if the user has an FCM token
+  try {
+    const userDoc = await getFirestore().collection("users").doc(uid).get();
+    const fcmToken = userDoc.data()?.fcmToken as string | undefined;
+    if (fcmToken) {
+      const committedTripId = `committed-${itineraryRef.id}`;
+      await getMessaging().send({
+        token: fcmToken,
+        notification: {
+          title: "Your itinerary is ready!",
+          body: `Your trip to ${input.destinationName} is all planned out. Tap to view it.`,
+        },
+        data: {
+          itineraryId: itineraryRef.id,
+          committedTripId,
+          screen: "ItineraryScreen",
+        },
+        apns: {
+          payload: { aps: { sound: "default" } },
+        },
+      });
+      logger.info("Push notification sent", { uid, itineraryId: itineraryRef.id });
+    }
+  } catch (notifError) {
+    logger.warn("Push notification failed (non-fatal)", { uid, error: notifError });
+  }
 
   const response = {
     itineraryId: itineraryRef.id,

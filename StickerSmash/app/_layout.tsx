@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, View, Text } from 'react-native';
+import messaging from '@react-native-firebase/messaging';
 import { useNavigationContainerRef } from 'expo-router';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -86,12 +87,51 @@ function DemoAwareAuth({ navigation }: any) {
 export default function RootLayout() {
   const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
   const navigationRef = useNavigationContainerRef();
+  const pendingItineraryId = useRef<string | null>(null);
 
   useFonts({
     'SourceSans3-Regular': require('@/assets/fonts/Source_Sans_3/static/SourceSans3-Regular.ttf'),
     'Merriweather_36pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_36pt-Bold.ttf'),
     'Merriweather_24pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_24pt-Bold.ttf'),
   });
+
+  // Handle notification tap when app is in background (not quit)
+  useEffect(() => {
+    const unsubscribe = messaging().onNotificationOpenedApp(remoteMessage => {
+      const itineraryId = remoteMessage.data?.itineraryId as string | undefined;
+      if (itineraryId && navigationRef.isReady()) {
+        (navigationRef as any).navigate('ItineraryScreen', {
+          id: itineraryId,
+          source: 'mytrips',
+          committedTripId: remoteMessage.data?.committedTripId as string | undefined,
+        });
+      }
+    });
+    return unsubscribe;
+  }, [navigationRef]);
+
+  // Store itinerary ID from quit-state notification tap; navigate once route is resolved
+  useEffect(() => {
+    messaging()
+      .getInitialNotification()
+      .then(remoteMessage => {
+        const itineraryId = remoteMessage?.data?.itineraryId as string | undefined;
+        if (itineraryId) {
+          pendingItineraryId.current = itineraryId;
+        }
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!initialRoute || initialRoute !== 'Index' || !pendingItineraryId.current) return;
+    const id = pendingItineraryId.current;
+    pendingItineraryId.current = null;
+    setTimeout(() => {
+      if (navigationRef.isReady()) {
+        (navigationRef as any).navigate('ItineraryScreen', { id, source: 'mytrips' });
+      }
+    }, 500);
+  }, [initialRoute, navigationRef]);
 
   // Handle wanderly://itinerary/:id deep links
   useEffect(() => {

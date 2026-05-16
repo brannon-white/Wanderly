@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from '@/styles/discoverScreenStyles';
 import { useNavigation } from '@react-navigation/native';
@@ -9,12 +10,16 @@ import { useSaved } from '@/context/SavedContext';
 import type { ItineraryCardSummary } from '@/types/itinerary';
 import { searchPhoto } from '@/services/unsplash';
 
+function isPlaceholderUrl(url?: string) {
+  return !url || url.includes('placeholder.com') || url.includes('via.placeholder');
+}
+
 export default function RecommendedTripCard({ itin }: { itin: ItineraryCardSummary }) {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList, 'ItineraryScreen'>>();
   const { isSaved, toggleSaved } = useSaved();
   const saved = isSaved(itin.id);
   const [imageUri, setImageUri] = useState<string | undefined>(
-    itin.heroImage || undefined
+    isPlaceholderUrl(itin.heroImage) ? undefined : itin.heroImage
   );
 
   useEffect(() => {
@@ -28,17 +33,13 @@ export default function RecommendedTripCard({ itin }: { itin: ItineraryCardSumma
   return (
     <TouchableOpacity onPress={() => navigation.navigate('ItineraryScreen', { id: itin.id, source: 'browse' })} activeOpacity={0.85}>
       <View style={styles.recommendedCard}>
-        {imageUri ? (
-          <Image
-            source={{ uri: imageUri }}
-            style={styles.recommendedTripImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.recommendedTripImage, { backgroundColor: '#e8e4ff', alignItems: 'center', justifyContent: 'center' }]}>
-            <ActivityIndicator color="#6A62B7" />
-          </View>
-        )}
+        <Image
+          source={imageUri ? { uri: imageUri } : undefined}
+          style={[styles.recommendedTripImage, !imageUri && { backgroundColor: '#e8e4ff' }]}
+          cachePolicy="memory-disk"
+          contentFit="cover"
+          transition={200}
+        />
         <View style={styles.recommendedCardContent}>
           <Text style={styles.recommendedCardTitle}>{itin.title}</Text>
           <View style={styles.ratingRow}>

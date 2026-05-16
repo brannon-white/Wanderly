@@ -6,10 +6,9 @@ import {
   ScrollView,
   View,
   Text,
-  Image,
   TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -25,7 +24,9 @@ type Tab = 'Active' | 'Passed';
 function TripCard({ trip }: { trip: CommittedTrip }) {
   const navigation = useNavigation<NavProp>();
   const { removeTrip } = useMyTrips();
-  const [imageUri, setImageUri] = useState<string | undefined>(trip.heroImage || undefined);
+  const [imageUri, setImageUri] = useState<string | undefined>(
+    trip.heroImage && !trip.heroImage.includes('placeholder') ? trip.heroImage : undefined
+  );
 
   useEffect(() => {
     if (!imageUri) {
@@ -59,13 +60,13 @@ function TripCard({ trip }: { trip: CommittedTrip }) {
       activeOpacity={0.85}
       onPress={() => navigation.navigate('ItineraryScreen', { id: trip.templateId, source: 'mytrips', committedTripId: trip.id })}
     >
-      {imageUri ? (
-        <Image source={{ uri: imageUri }} style={styles.cardImage} />
-      ) : (
-        <View style={[styles.cardImage, { backgroundColor: '#e8e4ff', alignItems: 'center', justifyContent: 'center' }]}>
-          <ActivityIndicator color="#6A62B7" />
-        </View>
-      )}
+      <Image
+        source={imageUri ? { uri: imageUri } : undefined}
+        style={[styles.cardImage, !imageUri && { backgroundColor: '#e8e4ff' }]}
+        cachePolicy="memory-disk"
+        contentFit="cover"
+        transition={200}
+      />
       <View style={styles.cardContent}>
         <View style={styles.cardMeta}>
           <Text style={styles.cardTitle} numberOfLines={1}>{trip.title}</Text>

@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
-  Image,
   ScrollView,
   TouchableOpacity,
   Linking,
@@ -10,6 +9,7 @@ import {
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
@@ -114,6 +114,7 @@ interface ActivityCardProps {
   activity: ItineraryActivity;
   isLast: boolean;
   nextActivity?: ItineraryActivity;
+  imageUri?: string;
   destinationName?: string;
   country?: string;
   checkin?: string;
@@ -121,21 +122,10 @@ interface ActivityCardProps {
   adults?: number;
 }
 
-function ActivityCard({ activity, isLast, nextActivity, destinationName, country, checkin = '', checkout = '', adults = 2 }: ActivityCardProps) {
-  const [imageUri, setImageUri] = useState<string | undefined>(
-    isPlaceholder(activity.image) ? undefined : activity.image
-  );
+function ActivityCard({ activity, isLast, nextActivity, imageUri, destinationName, country, checkin = '', checkout = '', adults = 2 }: ActivityCardProps) {
   const transportOptions = Array.isArray(activity.transport) ? activity.transport : [];
   const catKey = (activity.category ?? '').toLowerCase();
   const catIcon = CATEGORY_ICONS[catKey] ?? 'location-outline';
-
-  useEffect(() => {
-    if (!imageUri) {
-      searchPhoto(activity.name).then(url => {
-        if (url) setImageUri(url);
-      });
-    }
-  }, []);
 
   const openMaps = () => {
     Linking.openURL(
@@ -156,13 +146,13 @@ function ActivityCard({ activity, isLast, nextActivity, destinationName, country
       {/* Card + transport strip stacked */}
       <View style={{ flex: 1 }}>
         <View style={styles.itineraryItem}>
-          {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.itemImage} />
-          ) : (
-            <View style={[styles.itemImage, styles.imageSkeleton]}>
-              <ActivityIndicator color="#6A62B7" />
-            </View>
-          )}
+          <Image
+            source={imageUri ? { uri: imageUri } : undefined}
+            style={[styles.itemImage, !imageUri && { backgroundColor: '#f0eeff' }]}
+            cachePolicy="memory-disk"
+            contentFit="cover"
+            transition={200}
+          />
 
           <View style={styles.itemDetails}>
             <Text style={styles.itemTitle}>{activity.name}</Text>
@@ -316,6 +306,7 @@ export default function ItineraryScreen() {
 
   const [selectedDay, setSelectedDay] = useState(0);
   const [sharing, setSharing] = useState(false);
+  const [activityImages, setActivityImages] = useState<Record<string, string>>({});
   const shareCardRef = useRef<View>(null);
   const activities = itinerary?.days[selectedDay]?.activities ?? [];
   const MapView = MapsModule?.default;
@@ -394,6 +385,24 @@ export default function ItineraryScreen() {
     loadRemoteItinerary();
     return () => { cancelled = true; };
   }, [demoItinerary, id]);
+
+  // Pre-resolve all activity images in parallel so cards don't stagger-load
+  useEffect(() => {
+    if (!itinerary) return;
+    const allActivities = itinerary.days.flatMap(d => d.activities);
+    Promise.all(
+      allActivities.map(async a => {
+        const url = isPlaceholder(a.image) ? await searchPhoto(a.name) : a.image;
+        return [a.id, url] as [string, string | null | undefined];
+      })
+    ).then(results => {
+      const map: Record<string, string> = {};
+      for (const [id, url] of results) {
+        if (url) map[id] = url;
+      }
+      setActivityImages(map);
+    });
+  }, [itinerary?.id]);
 
   // Resolve hero image — fetch from Unsplash if Gemini generated a placeholder
   useEffect(() => {
@@ -623,12 +632,12 @@ export default function ItineraryScreen() {
               activity={activity}
               isLast={idx === activities.length - 1}
               nextActivity={activities[idx + 1]}
+              imageUri={activityImages[activity.id]}
               destinationName={itinerary?.destinationName}
               country={itinerary?.country}
               checkin={committedTrip ? new Date(committedTrip.startDate).toISOString().slice(0, 10) : ''}
               checkout={committedTrip ? new Date(committedTrip.endDate).toISOString().slice(0, 10) : ''}
               adults={partyToAdults(committedTrip?.party ?? itinerary?.travelerType)}
-
             />
           ))}
         </View>

@@ -20,6 +20,7 @@ import { PRIMARY, BORDER_COLOR, TEXT_DARK, TEXT_GRAY } from '@/styles/tripPlanni
 import { useTripPlanning } from '@/context/TripPlanningContext';
 import { useMyTrips } from '@/context/MyTripsContext';
 import { generateItinerary } from '@/services/generateItinerary';
+import { requestPermissionAndSaveToken } from '@/services/notifications';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 
@@ -63,10 +64,21 @@ export default function TripReviewScreen() {
   } = useTripPlanning();
   const isEditing = !!editingTripId;
 
-  const [generating, setGenerating] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const userNavigatedAway = React.useRef(false);
   const { addTrip, updateTrip } = useMyTrips();
 
   const destination = destinationSnapshot ?? { id: destinationId, name: 'Unknown', country: '', flag: '', imageUrl: '' };
+
+  const navigateToMyTrips = () => {
+    userNavigatedAway.current = true;
+    setShowConfirmation(false);
+    reset();
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Index', params: { screen: 'MyTrips' } as any }],
+    });
+  };
 
   const handleBuild = async () => {
     const currentUser = getAuth().currentUser;
@@ -87,38 +99,52 @@ export default function TripReviewScreen() {
       return;
     }
 
-    setGenerating(true);
+    // Request notification permission so we can alert them when it's ready
+    await requestPermissionAndSaveToken().catch(() => {});
+
+    // Capture values now — they'll be valid in the closure even after navigation
+    const genPayload = {
+      destinationId,
+      destinationName: destination.name,
+      country: destination.country,
+      party,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      interests: [...interests],
+      budget,
+    };
+    const savedHeroImage = templateHeroImage;
+    const savedParty = party;
+    const savedStartDate = startDate.toISOString();
+    const savedEndDate = endDate.toISOString();
+    const savedInterests = [...interests];
+    const savedBudget = budget;
+    const savedDestName = destination.name;
+    const savedCountry = destination.country;
+
+    userNavigatedAway.current = false;
+    setShowConfirmation(true);
 
     try {
-      const response = await generateItinerary({
-        destinationId,
-        destinationName: destination.name,
-        country: destination.country,
-        party,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-        interests,
-        budget,
-      });
+      const response = await generateItinerary(genPayload);
 
       const committedId = `committed-${response.itineraryId}`;
       addTrip({
         id: committedId,
         templateId: response.itineraryId,
         title: response.itinerary.title,
-        heroImage: response.itinerary.heroImage || templateHeroImage,
-        party,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
+        heroImage: response.itinerary.heroImage || savedHeroImage,
+        party: savedParty,
+        startDate: savedStartDate,
+        endDate: savedEndDate,
         origin: 'generated',
-        interests,
-        budget,
-        destinationName: destination.name,
-        country: destination.country,
+        interests: savedInterests,
+        budget: savedBudget,
+        destinationName: savedDestName,
+        country: savedCountry,
       });
 
-      setTimeout(() => {
-        setGenerating(false);
+      if (!userNavigatedAway.current) {
         reset();
         navigation.reset({
           index: 1,
@@ -126,23 +152,21 @@ export default function TripReviewScreen() {
             { name: 'Index', params: { screen: 'MyTrips' } as any },
             {
               name: 'ItineraryScreen',
-              params: {
-                id: response.itineraryId,
-                source: 'mytrips',
-                committedTripId: committedId,
-              },
+              params: { id: response.itineraryId, source: 'mytrips', committedTripId: committedId },
             },
           ],
         });
-      }, 300);
+      }
     } catch (error) {
       console.warn('generateItinerary failed', error);
-      setGenerating(false);
-      const message =
-        error instanceof Error && /unauth/i.test(error.message)
-          ? 'Your sign-in session was not attached to the request. Sign out, sign in again, and retry.'
-          : 'The itinerary could not be generated right now. Please try again.';
-      Alert.alert('Generation failed', message);
+      if (!userNavigatedAway.current) {
+        setShowConfirmation(false);
+        const message =
+          error instanceof Error && /unauth/i.test(error.message)
+            ? 'Your sign-in session was not attached to the request. Sign out, sign in again, and retry.'
+            : 'The itinerary could not be generated right now. Please try again.';
+        Alert.alert('Generation failed', message);
+      }
     }
   };
 
@@ -273,14 +297,21 @@ export default function TripReviewScreen() {
         )}
       </View>
 
-      <Modal visible={generating} transparent animationType="fade">
+      <Modal visible={showConfirmation} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <ActivityIndicator size="large" color={PRIMARY} style={{ marginBottom: 20 }} />
-            <Text style={styles.generatingTitle}>Generating Itinerary...</Text>
+            <View style={styles.confirmIconWrap}>
+              <Ionicons name="paper-plane-outline" size={32} color={PRIMARY} />
+            </View>
+            <Text style={styles.generatingTitle}>Building Your Trip!</Text>
             <Text style={styles.generatingSubtitle}>
-              Please wait while our AI works its magic to create the perfect trip plan tailored to your preferences.
+              Your personalized itinerary for {destination.name} is on its way.
+              We'll send you a notification when it's ready — feel free to explore in the meantime.
             </Text>
+            <ActivityIndicator size="small" color={PRIMARY} style={{ marginTop: 20, marginBottom: 8 }} />
+            <TouchableOpacity style={styles.continueBtn} onPress={navigateToMyTrips} activeOpacity={0.8}>
+              <Text style={styles.continueBtnText}>Continue Exploring</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -439,6 +470,15 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 12,
   },
+  confirmIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#f0eeff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
   generatingTitle: {
     fontSize: 18,
     fontFamily: 'Merriweather_24pt-Bold',
@@ -452,5 +492,19 @@ const styles = StyleSheet.create({
     color: TEXT_GRAY,
     textAlign: 'center',
     lineHeight: 22,
+  },
+  continueBtn: {
+    marginTop: 16,
+    borderWidth: 1.5,
+    borderColor: PRIMARY,
+    borderRadius: 32,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+  },
+  continueBtnText: {
+    color: PRIMARY,
+    fontSize: 15,
+    fontFamily: 'Merriweather_24pt-Bold',
   },
 });
