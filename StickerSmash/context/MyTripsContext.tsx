@@ -24,12 +24,22 @@ export interface CommittedTrip {
   bookedItems?: Record<string, boolean>; // activityId → booked
 }
 
+export interface PendingGeneration {
+  destName: string;
+  heroImage?: string;
+  party: string;
+  startDate: string;
+  endDate: string;
+}
+
 interface MyTripsContextType {
   trips: CommittedTrip[];
   addTrip: (trip: CommittedTrip) => void;
   removeTrip: (id: string) => void;
   updateTrip: (id: string, updates: Partial<CommittedTrip>) => void;
   markActivityBooked: (tripId: string, activityId: string) => void;
+  pendingGeneration: PendingGeneration | null;
+  setPendingGeneration: (gen: PendingGeneration | null) => void;
 }
 
 const MyTripsContext = createContext<MyTripsContextType>({
@@ -38,6 +48,8 @@ const MyTripsContext = createContext<MyTripsContextType>({
   removeTrip: () => {},
   updateTrip: () => {},
   markActivityBooked: () => {},
+  pendingGeneration: null,
+  setPendingGeneration: () => {},
 });
 
 // Future dates for the active demo trip
@@ -79,6 +91,7 @@ export function MyTripsProvider({ children }: { children: React.ReactNode }) {
   const { isDemoMode } = useDemo();
   const [trips, setTrips] = useState<CommittedTrip[]>(isDemoMode ? DEMO_TRIPS : []);
   const [loaded, setLoaded] = useState(isDemoMode);
+  const [pendingGeneration, setPendingGeneration] = useState<PendingGeneration | null>(null);
 
   // Load persisted trips on mount (non-demo only)
   useEffect(() => {
@@ -120,7 +133,7 @@ export function MyTripsProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <MyTripsContext.Provider value={{ trips, addTrip, removeTrip, updateTrip, markActivityBooked }}>
+    <MyTripsContext.Provider value={{ trips, addTrip, removeTrip, updateTrip, markActivityBooked, pendingGeneration, setPendingGeneration }}>
       {children}
     </MyTripsContext.Provider>
   );

@@ -259,6 +259,28 @@ export const styles = StyleSheet.create({
     elevation: 6,
   },
 
+  fabDone: {
+    backgroundColor: '#3D9970',
+  },
+
+  replaceBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#6A62B7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+
   // ── Plan This Trip CTA bar ────────────────────────────────────────────
   ctaBar: {
     position: 'absolute',

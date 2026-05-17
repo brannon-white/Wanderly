@@ -1,5 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
+import * as logger from "firebase-functions/logger";
 
+import { MODEL_NAME, PROMPT_VERSION, ACTIVITY_TOOL_INPUT_SCHEMA } from "./constants";
 import {
   generateItineraryRequestSchema,
   generatedItinerarySchema,
@@ -7,185 +9,83 @@ import {
   type GeneratedItinerary,
 } from "./itinerarySchemas";
 
-export const PROMPT_VERSION = "v4";
-export const MODEL_NAME = "claude-sonnet-4-6";
+import { extractIntent } from "./orchestration/intentExtraction";
+import { generateTripStrategy } from "./orchestration/tripStrategy";
+import { fetchRecommendations } from "./orchestration/placesRetrieval";
+import { rankRecommendations } from "./orchestration/ranking";
+import { clusterRecommendations } from "./orchestration/clustering";
+import { generateDailyPlans } from "./orchestration/dailyPlanning";
+import { validateItinerary } from "./orchestration/validation";
 
-// JSON Schema representation of generatedItinerarySchema for Claude tool use
-const ITINERARY_TOOL_INPUT_SCHEMA = {
-  type: "object" as const,
-  required: ["id", "title", "subtitle", "destinationId", "destinationName", "heroImage", "source", "days"],
-  properties: {
-    id: { type: "string", description: "Unique ID, e.g. 'itin-tokyo-001'" },
-    title: { type: "string" },
-    subtitle: { type: "string" },
-    destinationId: { type: "string" },
-    destinationName: { type: "string" },
-    country: { type: "string" },
-    heroImage: { type: "string", description: "Leave as empty string — images are fetched separately" },
-    rating: { type: "string", description: "e.g. '4.7'" },
-    reviewCount: { type: "number" },
-    summary: { type: "array", items: { type: "string" } },
-    source: { type: "string", enum: ["ai_generated"] },
-    days: {
-      type: "array",
-      items: {
-        type: "object",
-        required: ["label", "activities"],
-        properties: {
-          label: { type: "string", description: "e.g. 'Day 1'" },
-          title: { type: "string", description: "Catchy day theme, e.g. 'Temples & Street Food'" },
-          activities: {
-            type: "array",
-            items: {
-              type: "object",
-              required: ["id", "name", "time", "transport"],
-              properties: {
-                id: { type: "string" },
-                name: { type: "string" },
-                category: {
-                  type: "string",
-                  enum: ["food", "attraction", "culture", "nature", "shopping", "art", "science", "adventure", "hotel", "nightlife", "wellness"],
-                },
-                description: { type: "string" },
-                time: { type: "string", description: "e.g. '09:00 AM - 11:00 AM'" },
-                cost: { type: "string", description: "Realistic cost in local or USD, e.g. '$15' or 'Free'" },
-                rating: { type: "number", description: "0–5 rating based on real-world reputation" },
-                reviewCount: { type: "number" },
-                image: { type: "string", description: "Leave as empty string" },
-                mapUrl: { type: "string", description: "Google Maps URL for this specific place" },
-                coordinates: {
-                  type: "object",
-                  required: ["latitude", "longitude"],
-                  properties: {
-                    latitude: { type: "number" },
-                    longitude: { type: "number" },
-                  },
-                },
-                transport: {
-                  type: "array",
-                  description: "How to travel from this activity to the next one",
-                  items: {
-                    type: "object",
-                    required: ["mode", "time"],
-                    properties: {
-                      mode: {
-                        type: "string",
-                        enum: ["walk", "subway", "train", "bus", "taxi", "car", "ferry"],
-                      },
-                      time: { type: "string", description: "e.g. '12 min'" },
-                      label: { type: "string", description: "e.g. 'Take the Yamanote Line to Shibuya'" },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-};
+export { MODEL_NAME, PROMPT_VERSION };
 
-function buildPrompt(input: GenerateItineraryRequest): string {
-  const nights = (() => {
-    if (input.startDate && input.endDate) {
-      const ms = new Date(input.endDate).getTime() - new Date(input.startDate).getTime();
-      return Math.max(1, Math.round(ms / 86_400_000));
-    }
-    return 3;
-  })();
+// ─── Merge real Google Places ratings into Claude-generated output ────────────
 
-  return `You are an expert travel planner building a detailed, realistic itinerary for a mobile travel app. Every detail must be accurate and specific.
+function mergeRealRatings(
+  itinerary: GeneratedItinerary,
+  ranked: Awaited<ReturnType<typeof rankRecommendations>>
+): GeneratedItinerary {
+  if (ranked.length === 0) return itinerary;
 
-TRIP DETAILS:
-- Destination: ${input.destinationName}${input.country ? `, ${input.country}` : ""}
-- Duration: ${nights} day${nights !== 1 ? "s" : ""}
-- Party: ${input.party}
-- Budget: ${input.budget}
-- Interests: ${input.interests.length ? input.interests.join(", ") : "general sightseeing"}
-- Dates: ${input.startDate ?? "flexible"} to ${input.endDate ?? "flexible"}
+  const byName = new Map(ranked.map((p) => [p.name.toLowerCase(), p]));
 
-STRICT RULES — follow every rule exactly:
+  const days = itinerary.days.map((day) => ({
+    ...day,
+    activities: day.activities.map((activity) => {
+      const match = byName.get(activity.name.toLowerCase());
+      if (match && match.rating > 0) {
+        return { ...activity, rating: match.rating, reviewCount: match.reviewCount };
+      }
+      return activity;
+    }),
+  }));
 
-1. MEALS ARE REQUIRED — STRICT VENUE TYPES:
-   Every day MUST include breakfast, lunch, AND dinner at real, named establishments in ${input.destinationName}. Use the exact establishment name (e.g. "Café de Flore", not "a charming local café"). Set category to "food" for all meals.
-
-   BREAKFAST (8:00–9:30 AM): Must be a café, bakery, diner, brunch spot, or hotel restaurant. NEVER recommend an ice cream parlor, dessert shop, cocktail bar, fine-dining-only restaurant, or any place that does not actually serve breakfast. Only pick establishments known to open before 9:00 AM.
-
-   LUNCH (12:00–2:00 PM): Must be a restaurant, café, food market, or casual eatery that serves lunch. Avoid dinner-only restaurants.
-
-   DINNER (6:30–9:00 PM): Must be a full-service restaurant appropriate for a ${input.budget} budget. Match the cuisine variety to the destination — do not repeat the same cuisine type across days.
-
-2. ESTABLISHED, WELL-KNOWN VENUES ONLY: Choose restaurants and attractions that are well-established with a strong local or tourist reputation — think popular, long-running institutions rather than obscure or trendy pop-ups. Prefer places that have been operating for several years and are prominently reviewed, as this reduces the chance of recommending a place that has since closed.
-
-3. SPECIFIC NAMED PLACES ONLY: Every non-meal activity must be a real, named attraction — no vague entries like "explore the neighborhood" or "stroll along the waterfront". Use actual names (e.g. "Louvre Museum", "Shibuya Crossing", "Central Park").
-
-4. TIME FEASIBILITY — CRITICAL: Schedule activities so a traveler can physically get from one to the next in time. If an activity ends at 10:00 AM and transit to the next place takes 25 minutes, the next activity starts at 10:25 AM at the earliest. Never overlap times or leave gaps that are too short for the transit between locations.
-
-5. REALISTIC DURATIONS: Allocate appropriate time at each place:
-   - Breakfast: 45–60 min
-   - Major museum or landmark: 2–3 hours
-   - Lunch: 60–75 min
-   - Mid-size attraction: 1–1.5 hours
-   - Dinner: 75–90 min
-   - Bar or evening activity: 1–2 hours
-
-6. DAY STRUCTURE: Start no earlier than 8:00 AM (breakfast). End no later than 11:00 PM. Format all times as "09:00 AM - 10:30 AM".
-
-7. TRANSPORT: For each activity's transport array, specify exactly how to travel from THAT place to the NEXT one (mode + realistic transit time based on actual distance). The last activity of each day has an empty transport array.
-
-8. DO NOT REPEAT: Never use the same restaurant or attraction on more than one day.
-
-9. GOOGLE MAPS URLS: Format as https://www.google.com/maps/search/?api=1&query=Place+Name+City
-
-Each day should follow this rough shape:
-- ~8:00 AM: Breakfast at a named café or bakery
-- Morning: 1–2 specific attractions or activities
-- ~12:30–1:00 PM: Lunch at a named restaurant
-- Afternoon: 1–2 specific attractions or activities
-- ~7:00–8:00 PM: Dinner at a named restaurant
-- Optional: evening bar, show, or nightlife spot
-
-Day titles should be catchy and thematic (e.g. "Temples & Street Food", "Art, Markets & Rooftops").
-Subtitle: one sentence capturing the overall trip vibe.`;
+  return { ...itinerary, days };
 }
 
+// ─── Main orchestration pipeline ────────────────────────────────────────────
+
 export async function generateItineraryFlow(
-  input: GenerateItineraryRequest
+  input: GenerateItineraryRequest,
+  googlePlacesApiKey?: string
 ): Promise<GeneratedItinerary> {
-  // Validate input
   generateItineraryRequestSchema.parse(input);
 
-  const client = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
+  // Step 1: Extract structured intent from user parameters
+  logger.info("Pipeline: extracting intent", { destination: input.destinationName });
+  const intent = await extractIntent(input);
 
-  const response = await client.messages.create({
-    model: MODEL_NAME,
-    max_tokens: 16000,
-    tools: [
-      {
-        name: "create_itinerary",
-        description: "Create a structured travel itinerary",
-        input_schema: ITINERARY_TOOL_INPUT_SCHEMA,
-      },
-    ],
-    tool_choice: { type: "tool", name: "create_itinerary" },
-    messages: [{ role: "user", content: buildPrompt(input) }],
-  });
+  // Step 2: Generate trip strategy (neighborhoods, themes, search queries)
+  logger.info("Pipeline: generating trip strategy", { pace: intent.pace, days: intent.durationDays });
+  const strategy = await generateTripStrategy(intent);
 
-  const toolBlock = response.content.find((b) => b.type === "tool_use");
-  if (!toolBlock || toolBlock.type !== "tool_use") {
-    throw new Error("Claude did not return a structured itinerary.");
+  // Step 3 & 4: Fetch real places from Google Places + rank them
+  let ranked: Awaited<ReturnType<typeof rankRecommendations>> = [];
+  if (googlePlacesApiKey && strategy.searchQueries.length > 0) {
+    logger.info("Pipeline: fetching recommendations from Google Places", {
+      queryCount: strategy.searchQueries.length,
+    });
+    const candidates = await fetchRecommendations(strategy.searchQueries, googlePlacesApiKey);
+    ranked = rankRecommendations(candidates, intent);
+    logger.info("Pipeline: ranking complete", { candidateCount: candidates.length, rankedCount: ranked.length });
+  } else {
+    logger.info("Pipeline: skipping Google Places (no API key or no queries)");
   }
 
-  const raw = toolBlock.input as Record<string, unknown>;
+  // Step 5: Geographic clustering — group places into days
+  logger.info("Pipeline: clustering recommendations", { numDays: intent.durationDays });
+  const clusters = clusterRecommendations(ranked, intent.durationDays, strategy.dayThemes);
 
-  return generatedItinerarySchema.parse({
-    ...raw,
+  // Step 6: Generate structured daily plans using real place data
+  logger.info("Pipeline: generating daily plans");
+  const rawItinerary = await generateDailyPlans(clusters, intent, strategy);
+
+  // Step 7: Parse and validate
+  const parsed = generatedItinerarySchema.parse({
+    ...rawItinerary,
     destinationId: input.destinationId,
-    destinationName: (raw.destinationName as string) || input.destinationName,
-    country: (raw.country as string) || input.country,
+    destinationName: (rawItinerary.destinationName as string) || input.destinationName,
+    country: (rawItinerary.country as string) || input.country,
     budget: input.budget,
     interests: input.interests,
     travelerType: input.party,
@@ -196,4 +96,191 @@ export async function generateItineraryFlow(
     promptVersion: PROMPT_VERSION,
     isActive: true,
   });
+
+  // Step 7b: Merge real Google Places ratings back — Claude tends to round up its own estimates
+  const withRealRatings = mergeRealRatings(parsed, ranked);
+
+  logger.info("Pipeline: validating itinerary");
+  const { itinerary: validated, result } = validateItinerary(withRealRatings);
+
+  if (result.issues.length > 0) {
+    logger.info("Pipeline: validation issues", { issues: result.issues, repaired: result.repaired });
+  }
+
+  return validated;
+}
+
+// ─── Partial regeneration: single activity ──────────────────────────────────
+
+export interface RegenerateActivityInput {
+  itinerary: GeneratedItinerary;
+  dayIndex: number;
+  activityIndex: number;
+  reason?: string;
+}
+
+export async function regenerateActivity(
+  input: RegenerateActivityInput
+): Promise<GeneratedItinerary> {
+  const { itinerary, dayIndex, activityIndex, reason } = input;
+  const day = itinerary.days[dayIndex];
+
+  if (!day) throw new Error(`Day ${dayIndex} not found in itinerary`);
+
+  const activity = day.activities[activityIndex];
+  if (!activity) throw new Error(`Activity ${activityIndex} not found in day ${dayIndex}`);
+
+  const prevActivity = activityIndex > 0 ? day.activities[activityIndex - 1] : null;
+  const nextActivity = activityIndex < day.activities.length - 1
+    ? day.activities[activityIndex + 1]
+    : null;
+
+  const existingVenues = itinerary.days
+    .flatMap((d) => d.activities.map((a) => a.name))
+    .filter((n) => n !== activity.name)
+    .join(", ");
+
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  const prompt = `You are replacing a single activity in a travel itinerary. Return only the replacement activity.
+
+TRIP CONTEXT:
+- Destination: ${itinerary.destinationName}${itinerary.country ? `, ${itinerary.country}` : ""}
+- Budget: ${itinerary.budget ?? "moderate"}
+- Day ${dayIndex + 1} theme: ${day.title ?? day.label}
+
+ACTIVITY TO REPLACE:
+- Name: ${activity.name}
+- Type: ${activity.category}
+- Time slot: ${activity.time}
+${reason ? `- Reason for replacement: ${reason}` : ""}
+
+CONTEXT AROUND THIS SLOT:
+${prevActivity ? `- Previous activity ends at: ${prevActivity.time.split(" - ")[1]} at ${prevActivity.name}` : "- This is the first activity of the day"}
+${nextActivity ? `- Next activity starts at: ${nextActivity.time.split(" - ")[0]} at ${nextActivity.name}` : "- This is the last activity of the day"}
+
+RULES:
+1. Keep the same time slot (${activity.time}) and same category (${activity.category}) unless the reason requests otherwise
+2. Do NOT reuse any of these existing venues: ${existingVenues}
+3. Use a real, well-known establishment
+4. Set transport to travel from this activity to: ${nextActivity?.name ?? "end of day"} (empty array if last)
+5. Coordinates must be real (accurate lat/lng for ${itinerary.destinationName})`;
+
+  const response = await client.messages.create({
+    model: MODEL_NAME,
+    max_tokens: 1024,
+    tools: [{
+      name: "replace_activity",
+      description: "Return a single replacement activity",
+      input_schema: ACTIVITY_TOOL_INPUT_SCHEMA,
+    }],
+    tool_choice: { type: "tool", name: "replace_activity" },
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const toolBlock = response.content.find((b) => b.type === "tool_use");
+  if (!toolBlock || toolBlock.type !== "tool_use") {
+    throw new Error("Activity regeneration failed: no structured output");
+  }
+
+  const newActivity = toolBlock.input as typeof activity;
+
+  const updatedDays = itinerary.days.map((d, di) => {
+    if (di !== dayIndex) return d;
+    return {
+      ...d,
+      activities: d.activities.map((a, ai) => (ai === activityIndex ? newActivity : a)),
+    };
+  });
+
+  return { ...itinerary, days: updatedDays };
+}
+
+// ─── Partial regeneration: full day ─────────────────────────────────────────
+
+export interface RegenerateDayInput {
+  itinerary: GeneratedItinerary;
+  dayIndex: number;
+  modifications?: {
+    budget?: string;
+    theme?: string;
+    excludePlaces?: string[];
+  };
+  googlePlacesApiKey?: string;
+}
+
+export async function regenerateDay(input: RegenerateDayInput): Promise<GeneratedItinerary> {
+  const { itinerary, dayIndex, modifications } = input;
+  const day = itinerary.days[dayIndex];
+
+  if (!day) throw new Error(`Day ${dayIndex} not found in itinerary`);
+
+  const existingVenues = itinerary.days
+    .flatMap((d, di) => (di !== dayIndex ? d.activities.map((a) => a.name) : []))
+    .join(", ");
+
+  const excludePlaces = [
+    ...existingVenues.split(", "),
+    ...(modifications?.excludePlaces ?? []),
+  ].filter(Boolean);
+
+  const budget = modifications?.budget ?? itinerary.budget ?? "moderate";
+  const theme = modifications?.theme ?? day.title ?? day.label;
+
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  const prompt = `You are regenerating a single day in a travel itinerary.
+
+TRIP CONTEXT:
+- Destination: ${itinerary.destinationName}${itinerary.country ? `, ${itinerary.country}` : ""}
+- Budget: ${budget}
+- Interests: ${itinerary.interests?.join(", ") ?? "general sightseeing"}
+- Day ${dayIndex + 1} theme: ${theme}
+
+DO NOT USE any of these venues (used on other days): ${excludePlaces.join(", ")}
+
+RULES — same as full itinerary generation:
+1. Include breakfast, lunch, AND dinner at real named restaurants
+2. Specific named places only — no vague entries
+3. Realistic timing with transit between activities
+4. Format times as "09:00 AM - 10:30 AM"
+5. Transport array for each activity pointing to the next
+6. Google Maps URLs: https://www.google.com/maps/search/?api=1&query=Place+Name+City
+7. Use real coordinates for ${itinerary.destinationName}`;
+
+  const DAY_SCHEMA = {
+    type: "object" as const,
+    required: ["label", "activities"],
+    properties: {
+      label: { type: "string" },
+      title: { type: "string" },
+      activities: {
+        type: "array",
+        items: ACTIVITY_TOOL_INPUT_SCHEMA,
+      },
+    },
+  };
+
+  const response = await client.messages.create({
+    model: MODEL_NAME,
+    max_tokens: 4096,
+    tools: [{
+      name: "replace_day",
+      description: "Return a complete replacement day",
+      input_schema: DAY_SCHEMA,
+    }],
+    tool_choice: { type: "tool", name: "replace_day" },
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const toolBlock = response.content.find((b) => b.type === "tool_use");
+  if (!toolBlock || toolBlock.type !== "tool_use") {
+    throw new Error("Day regeneration failed: no structured output");
+  }
+
+  const newDay = toolBlock.input as typeof day;
+
+  const updatedDays = itinerary.days.map((d, di) => (di === dayIndex ? newDay : d));
+
+  return { ...itinerary, days: updatedDays };
 }

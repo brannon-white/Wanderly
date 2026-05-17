@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Linking,
   SafeAreaView,
   ScrollView,
+  StyleSheet,
   View,
   Text,
   TouchableOpacity,
@@ -14,7 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
 import { styles } from '@/styles/myTripsStyles';
-import { useMyTrips, CommittedTrip, isTripActive, formatTripSubtitle } from '@/context/MyTripsContext';
+import { useMyTrips, CommittedTrip, PendingGeneration, isTripActive, formatTripSubtitle } from '@/context/MyTripsContext';
 import { buildHotelSearchUrl, partyToAdults, cleanDestination } from '@/services/bookingService';
 import { searchPhoto } from '@/services/unsplash';
 
@@ -95,9 +97,58 @@ function TripCard({ trip }: { trip: CommittedTrip }) {
   );
 }
 
+function GeneratingCard({ gen }: { gen: PendingGeneration }) {
+  return (
+    <View style={generatingStyles.card}>
+      <View style={generatingStyles.left}>
+        <ActivityIndicator size="small" color="#6A62B7" style={{ marginRight: 12 }} />
+        <View>
+          <Text style={generatingStyles.title}>{gen.destName}</Text>
+          <Text style={generatingStyles.subtitle}>Building your itinerary…</Text>
+        </View>
+      </View>
+      <Text style={generatingStyles.note}>We'll notify you when it's ready</Text>
+    </View>
+  );
+}
+
+const generatingStyles = StyleSheet.create({
+  card: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 18,
+    backgroundColor: '#f0eeff',
+    borderWidth: 1,
+    borderColor: '#e0d9ff',
+    padding: 16,
+    gap: 8,
+  },
+  left: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 15,
+    fontFamily: 'Merriweather_24pt-Bold',
+    color: '#3d3780',
+  },
+  subtitle: {
+    fontSize: 13,
+    fontFamily: 'SourceSans3-Regular',
+    color: '#6A62B7',
+    marginTop: 2,
+  },
+  note: {
+    fontSize: 12,
+    fontFamily: 'SourceSans3-Regular',
+    color: '#9990d0',
+    paddingLeft: 36,
+  },
+});
+
 export default function MyTripsScreen() {
   const [activeTab, setActiveTab] = useState<Tab>('Active');
-  const { trips } = useMyTrips();
+  const { trips, pendingGeneration } = useMyTrips();
   const navigation = useNavigation<NavProp>();
 
   const filtered = trips.filter((t) =>
@@ -114,7 +165,9 @@ export default function MyTripsScreen() {
         </TouchableOpacity>
       </View>
 
-      {trips.length === 0 ? (
+      {pendingGeneration && <GeneratingCard gen={pendingGeneration} />}
+
+      {trips.length === 0 && !pendingGeneration ? (
         <View style={styles.emptyState}>
           <View style={styles.emptyIconCircle}>
             <Ionicons name="location-outline" size={40} color="#bdbdbd" />
@@ -124,7 +177,7 @@ export default function MyTripsScreen() {
             Browse destinations or pre-built itineraries and commit to a trip to see it here.
           </Text>
         </View>
-      ) : (
+      ) : trips.length === 0 ? null : (
         <>
           <View style={styles.toggleRow}>
             {(['Active', 'Passed'] as Tab[]).map((tab) => (
