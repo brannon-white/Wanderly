@@ -92,6 +92,25 @@ export const callableGenerateItineraryResponseSchema = z.object({
   }),
 });
 
+export const regenerateActivityRequestSchema = z.object({
+  itineraryId: z.string().min(1),
+  dayIndex: z.number().int().nonnegative(),
+  activityIndex: z.number().int().nonnegative(),
+  reason: z.string().optional(),
+});
+
+export const regenerateDayRequestSchema = z.object({
+  itineraryId: z.string().min(1),
+  dayIndex: z.number().int().nonnegative(),
+  modifications: z
+    .object({
+      budget: z.string().optional(),
+      theme: z.string().optional(),
+      excludePlaces: z.array(z.string()).optional(),
+    })
+    .optional(),
+});
+
 export type GenerateItineraryRequest = z.infer<
   typeof generateItineraryRequestSchema
 >;
@@ -99,3 +118,7 @@ export type GeneratedItinerary = z.infer<typeof generatedItinerarySchema>;
 export type CallableGenerateItineraryResponse = z.infer<
   typeof callableGenerateItineraryResponseSchema
 >;
+export type RegenerateActivityRequest = z.infer<
+  typeof regenerateActivityRequestSchema
+>;
+export type RegenerateDayRequest = z.infer<typeof regenerateDayRequestSchema>;

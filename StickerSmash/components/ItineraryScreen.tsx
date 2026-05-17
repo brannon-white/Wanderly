@@ -8,6 +8,7 @@ import {
   Platform,
   StatusBar,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { captureRef } from 'react-native-view-shot';
@@ -32,6 +33,7 @@ import type { GeneratedItinerary, ItineraryActivity, ItineraryDay } from '@/type
 import { getAuth } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { searchPhoto } from '@/services/unsplash';
+import { regenerateActivity } from '@/services/regenerateItinerary';
 import ShareCard from './ShareCard';
 
 let MapsModule:
@@ -120,9 +122,12 @@ interface ActivityCardProps {
   checkin?: string;
   checkout?: string;
   adults?: number;
+  showReplaceButton?: boolean;
+  onReplace?: () => void;
+  isReplacing?: boolean;
 }
 
-function ActivityCard({ activity, isLast, nextActivity, imageUri, destinationName, country, checkin = '', checkout = '', adults = 2 }: ActivityCardProps) {
+function ActivityCard({ activity, isLast, nextActivity, imageUri, destinationName, country, checkin = '', checkout = '', adults = 2, showReplaceButton, onReplace, isReplacing }: ActivityCardProps) {
   const transportOptions = Array.isArray(activity.transport) ? activity.transport : [];
   const catKey = (activity.category ?? '').toLowerCase();
   const catIcon = CATEGORY_ICONS[catKey] ?? 'location-outline';
@@ -145,6 +150,7 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, destinationNam
 
       {/* Card + transport strip stacked */}
       <View style={{ flex: 1 }}>
+        <View style={{ position: 'relative' }}>
         <View style={styles.itineraryItem}>
           <Image
             source={imageUri ? { uri: imageUri } : undefined}
@@ -217,6 +223,18 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, destinationNam
             })() : null}
           </View>
         </View>
+          {showReplaceButton && (
+            <TouchableOpacity
+              style={styles.replaceBtn}
+              onPress={onReplace}
+              disabled={isReplacing}
+            >
+              {isReplacing
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Ionicons name="refresh-outline" size={16} color="#fff" />}
+            </TouchableOpacity>
+          )}
+        </View>
 
         {/* Transport strip — tappable to open directions to the next activity */}
         {!isLast && transportOptions.length > 0 && (
@@ -282,15 +300,9 @@ export default function ItineraryScreen() {
   const {
     reset,
     setFlow,
-    setEditingTripId,
     setTemplateId,
     setTemplateTitle,
     setTemplateHeroImage,
-    setParty,
-    setStartDate,
-    setEndDate,
-    setInterests,
-    setBudget,
   } = useTripPlanning();
   const { trips, removeTrip } = useMyTrips();
 
@@ -307,6 +319,8 @@ export default function ItineraryScreen() {
   const [selectedDay, setSelectedDay] = useState(0);
   const [sharing, setSharing] = useState(false);
   const [activityImages, setActivityImages] = useState<Record<string, string>>({});
+  const [replacingActivityId, setReplacingActivityId] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
   const shareCardRef = useRef<View>(null);
   const activities = itinerary?.days[selectedDay]?.activities ?? [];
   const MapView = MapsModule?.default;
@@ -404,6 +418,8 @@ export default function ItineraryScreen() {
     });
   }, [itinerary?.id]);
 
+  useEffect(() => { setEditMode(false); }, [selectedDay]);
+
   // Resolve hero image — fetch from Unsplash if Gemini generated a placeholder
   useEffect(() => {
     if (!itinerary) return;
@@ -435,25 +451,24 @@ export default function ItineraryScreen() {
     navigation.navigate('TripDates');
   };
 
-  const handleModifySettings = () => {
-    if (!committedTrip || !itinerary) return;
-    reset();
-    setFlow('full');
-    setEditingTripId(committedTrip.id);
-    setTemplateId(itinerary.id);
-    setTemplateTitle(itinerary.title);
-    setTemplateHeroImage(itinerary.heroImage);
-    setParty(committedTrip.party);
-    setStartDate(new Date(committedTrip.startDate));
-    setEndDate(new Date(committedTrip.endDate));
-    setInterests(committedTrip.interests ?? []);
-    setBudget(committedTrip.budget ?? '');
-    navigation.navigate('TripParty');
-  };
+  const handleToggleEditMode = () => setEditMode((prev) => !prev);
 
   const handleDeleteTrip = () => {
     if (committedTripId) removeTrip(committedTripId);
     navigation.navigate('Index' as any, { screen: 'MyTrips' } as any);
+  };
+
+  const handleReplaceActivity = async (dayIndex: number, activityIndex: number, activityId: string) => {
+    if (!itinerary || !id || replacingActivityId) return;
+    setReplacingActivityId(activityId);
+    try {
+      const result = await regenerateActivity({ itineraryId: id, dayIndex, activityIndex });
+      setRemoteItinerary(result.itinerary as GeneratedItinerary);
+    } catch (err) {
+      Alert.alert('Could not replace activity', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setReplacingActivityId(null);
+    }
   };
 
   const handleShare = async () => {
@@ -638,14 +653,20 @@ export default function ItineraryScreen() {
               checkin={committedTrip ? new Date(committedTrip.startDate).toISOString().slice(0, 10) : ''}
               checkout={committedTrip ? new Date(committedTrip.endDate).toISOString().slice(0, 10) : ''}
               adults={partyToAdults(committedTrip?.party ?? itinerary?.travelerType)}
+              showReplaceButton={editMode && !isBrowsing}
+              onReplace={!isBrowsing ? () => handleReplaceActivity(selectedDay, idx, activity.id) : undefined}
+              isReplacing={replacingActivityId === activity.id}
             />
           ))}
         </View>
       </ScrollView>
 
       {!isBrowsing && (
-        <TouchableOpacity style={[styles.fab, { bottom: insets.bottom + 24 }]} onPress={handleModifySettings}>
-          <Ionicons name="pencil" size={22} color="#fff" />
+        <TouchableOpacity
+          style={[styles.fab, editMode && styles.fabDone, { bottom: insets.bottom + 24 }]}
+          onPress={handleToggleEditMode}
+        >
+          <Ionicons name={editMode ? 'checkmark' : 'pencil'} size={22} color="#fff" />
         </TouchableOpacity>
       )}
 

@@ -7,15 +7,24 @@ import * as functionsV1 from "firebase-functions/v1";
 import * as logger from "firebase-functions/logger";
 
 import Anthropic from "@anthropic-ai/sdk";
-import { generateItineraryFlow, MODEL_NAME, PROMPT_VERSION } from "./itineraryGeneration";
+import {
+  generateItineraryFlow,
+  regenerateActivity,
+  regenerateDay,
+  MODEL_NAME,
+  PROMPT_VERSION,
+} from "./itineraryGeneration";
 import {
   callableGenerateItineraryResponseSchema,
+  regenerateActivityRequestSchema,
+  regenerateDayRequestSchema,
   type CallableGenerateItineraryResponse,
 } from "./itinerarySchemas";
 
 initializeApp();
 
 const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
+const googlePlacesApiKey = defineSecret("GOOGLE_PLACES_API_KEY");
 
 type HttpErrorDetails = {
   status: number;
@@ -102,7 +111,7 @@ async function buildAndSaveItinerary(
     interestsCount: input.interests.length,
   });
 
-  const itinerary = await generateItineraryFlow(input);
+  const itinerary = await generateItineraryFlow(input, process.env.GOOGLE_PLACES_API_KEY);
   logger.info("Itinerary generated from model", {
     uid,
     destinationId: input.destinationId,
@@ -177,7 +186,7 @@ export const generateItineraryV1 = functionsV1
   .runWith({
     maxInstances: 10,
     timeoutSeconds: 300,
-    secrets: [anthropicApiKey],
+    secrets: [anthropicApiKey, googlePlacesApiKey],
     serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
   })
   .https.onCall(async (data, context): Promise<CallableGenerateItineraryResponse> => {
@@ -198,7 +207,7 @@ export const generateItineraryHttp = functionsV1
   .runWith({
     maxInstances: 10,
     timeoutSeconds: 300,
-    secrets: [anthropicApiKey],
+    secrets: [anthropicApiKey, googlePlacesApiKey],
     serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
   })
   .https.onRequest(async (req, res) => {
@@ -257,6 +266,136 @@ export const generateItineraryHttp = functionsV1
       res.status(classifiedError.status).json(classifiedError);
     }
   });
+
+// ─── Partial regeneration: single activity ───────────────────────────────────
+
+export const regenerateActivityHttp = functionsV1
+  .region("us-central1")
+  .runWith({
+    maxInstances: 10,
+    timeoutSeconds: 120,
+    secrets: [anthropicApiKey],
+    serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
+  })
+  .https.onRequest(async (req, res) => {
+    if (req.method === "OPTIONS") {
+      res.set("Access-Control-Allow-Origin", "*");
+      res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+      res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.status(204).send("");
+      return;
+    }
+    res.set("Access-Control-Allow-Origin", "*");
+
+    if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed." }); return; }
+
+    const authHeader = req.headers.authorization ?? "";
+    const match = authHeader.match(/^Bearer (.+)$/i);
+    if (!match) { res.status(401).json({ error: "Missing bearer token." }); return; }
+
+    try {
+      const decodedToken = await getAuth().verifyIdToken(match[1]);
+      const uid = decodedToken.uid;
+
+      const parsed = regenerateActivityRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: "Invalid request", details: parsed.error.message });
+        return;
+      }
+
+      const { itineraryId, dayIndex, activityIndex, reason } = parsed.data;
+
+      const itineraryRef = getFirestore()
+        .collection("users").doc(uid)
+        .collection("itineraries").doc(itineraryId);
+
+      const snap = await itineraryRef.get();
+      if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
+
+      const currentItinerary = snap.data() as Parameters<typeof regenerateActivity>[0]["itinerary"];
+
+      logger.info("regenerateActivityHttp", { uid, itineraryId, dayIndex, activityIndex });
+
+      const updated = await regenerateActivity({ itinerary: currentItinerary, dayIndex, activityIndex, reason });
+
+      await itineraryRef.update({
+        days: updated.days,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      res.status(200).json({ itinerary: updated });
+    } catch (error) {
+      const classifiedError = classifyHttpError(error);
+      logger.error("regenerateActivityHttp failed", { ...classifiedError, rawError: error });
+      res.status(classifiedError.status).json(classifiedError);
+    }
+  });
+
+// ─── Partial regeneration: full day ──────────────────────────────────────────
+
+export const regenerateDayHttp = functionsV1
+  .region("us-central1")
+  .runWith({
+    maxInstances: 10,
+    timeoutSeconds: 180,
+    secrets: [anthropicApiKey],
+    serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
+  })
+  .https.onRequest(async (req, res) => {
+    if (req.method === "OPTIONS") {
+      res.set("Access-Control-Allow-Origin", "*");
+      res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+      res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.status(204).send("");
+      return;
+    }
+    res.set("Access-Control-Allow-Origin", "*");
+
+    if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed." }); return; }
+
+    const authHeader = req.headers.authorization ?? "";
+    const match = authHeader.match(/^Bearer (.+)$/i);
+    if (!match) { res.status(401).json({ error: "Missing bearer token." }); return; }
+
+    try {
+      const decodedToken = await getAuth().verifyIdToken(match[1]);
+      const uid = decodedToken.uid;
+
+      const parsed = regenerateDayRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: "Invalid request", details: parsed.error.message });
+        return;
+      }
+
+      const { itineraryId, dayIndex, modifications } = parsed.data;
+
+      const itineraryRef = getFirestore()
+        .collection("users").doc(uid)
+        .collection("itineraries").doc(itineraryId);
+
+      const snap = await itineraryRef.get();
+      if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
+
+      const currentItinerary = snap.data() as Parameters<typeof regenerateDay>[0]["itinerary"];
+
+      logger.info("regenerateDayHttp", { uid, itineraryId, dayIndex, modifications });
+
+      const updated = await regenerateDay({ itinerary: currentItinerary, dayIndex, modifications });
+
+      await itineraryRef.update({
+        days: updated.days,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      res.status(200).json({ itinerary: updated });
+    } catch (error) {
+      const classifiedError = classifyHttpError(error);
+      logger.error("regenerateDayHttp failed", { ...classifiedError, rawError: error });
+      res.status(classifiedError.status).json(classifiedError);
+    }
+  });
+
+// ─── Destination content ──────────────────────────────────────────────────────
 
 const DESTINATION_CONTENT_TOOL_SCHEMA = {
   type: "object" as const,

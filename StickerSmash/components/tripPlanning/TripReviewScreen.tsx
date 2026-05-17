@@ -66,13 +66,14 @@ export default function TripReviewScreen() {
 
   const [showConfirmation, setShowConfirmation] = useState(false);
   const userNavigatedAway = React.useRef(false);
-  const { addTrip, updateTrip } = useMyTrips();
+  const { addTrip, updateTrip, setPendingGeneration } = useMyTrips();
 
   const destination = destinationSnapshot ?? { id: destinationId, name: 'Unknown', country: '', flag: '', imageUrl: '' };
 
-  const navigateToMyTrips = () => {
+  const navigateToMyTrips = (pendingInfo?: { destName: string; heroImage?: string; party: string; startDate: string; endDate: string }) => {
     userNavigatedAway.current = true;
     setShowConfirmation(false);
+    if (pendingInfo) setPendingGeneration(pendingInfo);
     reset();
     navigation.reset({
       index: 0,
@@ -143,6 +144,7 @@ export default function TripReviewScreen() {
         destinationName: savedDestName,
         country: savedCountry,
       });
+      setPendingGeneration(null);
 
       if (!userNavigatedAway.current) {
         reset();
@@ -159,6 +161,7 @@ export default function TripReviewScreen() {
       }
     } catch (error) {
       console.warn('generateItinerary failed', error);
+      setPendingGeneration(null);
       if (!userNavigatedAway.current) {
         setShowConfirmation(false);
         const message =
@@ -309,7 +312,7 @@ export default function TripReviewScreen() {
               We'll send you a notification when it's ready — feel free to explore in the meantime.
             </Text>
             <ActivityIndicator size="small" color={PRIMARY} style={{ marginTop: 20, marginBottom: 8 }} />
-            <TouchableOpacity style={styles.continueBtn} onPress={navigateToMyTrips} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.continueBtn} onPress={() => navigateToMyTrips({ destName: destination.name, heroImage: templateHeroImage, party, startDate: startDate?.toISOString() ?? '', endDate: endDate?.toISOString() ?? '' })} activeOpacity={0.8}>
               <Text style={styles.continueBtnText}>Continue Exploring</Text>
             </TouchableOpacity>
           </View>
