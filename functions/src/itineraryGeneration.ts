@@ -11,17 +11,18 @@ import {
 
 import { extractIntent } from "./orchestration/intentExtraction";
 import { generateTripStrategy } from "./orchestration/tripStrategy";
-import { fetchRecommendations } from "./orchestration/placesRetrieval";
+import { fetchRecommendations, fetchNearbyForClusters } from "./orchestration/placesRetrieval";
 import { rankRecommendations } from "./orchestration/ranking";
 import { clusterRecommendations } from "./orchestration/clustering";
 import { generateDailyPlans } from "./orchestration/dailyPlanning";
 import { validateItinerary } from "./orchestration/validation";
+import { buildCacheKey, getCachedPlaces, setCachedPlaces } from "./orchestration/placesCache";
 
 export { MODEL_NAME, PROMPT_VERSION };
 
-// ─── Merge real Google Places ratings into Claude-generated output ────────────
+// ─── Merge real Google Places data into Claude-generated output ──────────────
 
-function mergeRealRatings(
+function mergePlaceData(
   itinerary: GeneratedItinerary,
   ranked: Awaited<ReturnType<typeof rankRecommendations>>
 ): GeneratedItinerary {
@@ -29,16 +30,26 @@ function mergeRealRatings(
 
   const byName = new Map(ranked.map((p) => [p.name.toLowerCase(), p]));
 
-  const days = itinerary.days.map((day) => ({
-    ...day,
-    activities: day.activities.map((activity) => {
+  const days = itinerary.days.map((day) => {
+    const activities = day.activities.map((activity) => {
       const match = byName.get(activity.name.toLowerCase());
-      if (match && match.rating > 0) {
-        return { ...activity, rating: match.rating, reviewCount: match.reviewCount };
+      if (!match) return activity;
+
+      const updates: Partial<typeof activity> = {};
+
+      if (match.rating > 0) {
+        updates.rating = match.rating;
+        updates.reviewCount = match.reviewCount;
       }
-      return activity;
-    }),
-  }));
+
+      if (match.editorialSummary) {
+        updates.description = match.editorialSummary;
+      }
+
+      return { ...activity, ...updates };
+    });
+    return { ...day, activities };
+  });
 
   return { ...itinerary, days };
 }
@@ -59,28 +70,43 @@ export async function generateItineraryFlow(
   logger.info("Pipeline: generating trip strategy", { pace: intent.pace, days: intent.durationDays });
   const strategy = await generateTripStrategy(intent);
 
-  // Step 3 & 4: Fetch real places from Google Places + rank them
+  // Steps 3 & 4: Fetch real places (with Firestore cache) + rank them
   let ranked: Awaited<ReturnType<typeof rankRecommendations>> = [];
   if (googlePlacesApiKey && strategy.searchQueries.length > 0) {
-    logger.info("Pipeline: fetching recommendations from Google Places", {
-      queryCount: strategy.searchQueries.length,
-    });
-    const candidates = await fetchRecommendations(strategy.searchQueries, googlePlacesApiKey);
+    const cacheKey = buildCacheKey(intent.destination, intent.budget, intent.interests);
+    let candidates = await getCachedPlaces(cacheKey);
+
+    if (!candidates) {
+      logger.info("Pipeline: cache miss — fetching from Google Places", {
+        queryCount: strategy.searchQueries.length,
+      });
+      candidates = await fetchRecommendations(strategy.searchQueries, googlePlacesApiKey);
+      await setCachedPlaces(cacheKey, candidates);
+    } else {
+      logger.info("Pipeline: cache hit", { destination: intent.destination });
+    }
+
     ranked = rankRecommendations(candidates, intent);
     logger.info("Pipeline: ranking complete", { candidateCount: candidates.length, rankedCount: ranked.length });
   } else {
     logger.info("Pipeline: skipping Google Places (no API key or no queries)");
   }
 
-  // Step 5: Geographic clustering — group places into days
+  // Step 5: Geographic clustering
   logger.info("Pipeline: clustering recommendations", { numDays: intent.durationDays });
-  const clusters = clusterRecommendations(ranked, intent.durationDays, strategy.dayThemes);
+  let clusters = clusterRecommendations(ranked, intent.durationDays, strategy.dayThemes);
 
-  // Step 6: Generate structured daily plans using real place data
+  // Step 5b: Nearby search — enrich each cluster with geographically tight results
+  if (googlePlacesApiKey && clusters.length > 0) {
+    logger.info("Pipeline: nearby search enrichment");
+    clusters = await fetchNearbyForClusters(clusters, googlePlacesApiKey);
+  }
+
+  // Step 6: Generate structured daily plans using real place data + opening hours
   logger.info("Pipeline: generating daily plans");
   const rawItinerary = await generateDailyPlans(clusters, intent, strategy);
 
-  // Step 7: Parse and validate
+  // Step 7: Parse
   const parsed = generatedItinerarySchema.parse({
     ...rawItinerary,
     destinationId: input.destinationId,
@@ -97,11 +123,13 @@ export async function generateItineraryFlow(
     isActive: true,
   });
 
-  // Step 7b: Merge real Google Places ratings back — Claude tends to round up its own estimates
-  const withRealRatings = mergeRealRatings(parsed, ranked);
+  // Step 7b: Merge real ratings and editorial descriptions from Google Places
+  logger.info("Pipeline: merging real place data");
+  const withPlaceData = mergePlaceData(parsed, ranked);
 
+  // Step 8: Validate
   logger.info("Pipeline: validating itinerary");
-  const { itinerary: validated, result } = validateItinerary(withRealRatings);
+  const { itinerary: validated, result } = validateItinerary(withPlaceData);
 
   if (result.issues.length > 0) {
     logger.info("Pipeline: validation issues", { issues: result.issues, repaired: result.repaired });

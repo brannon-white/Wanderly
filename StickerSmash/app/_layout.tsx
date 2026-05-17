@@ -154,6 +154,8 @@ export default function RootLayout() {
       webClientId: extra.GOOGLE_WEB_CLIENT_ID || '588805144943-1f9uii64tqetroqlhvf7qltvaohku583.apps.googleusercontent.com',
       iosClientId: extra.GOOGLE_IOS_CLIENT_ID || '588805144943-7am9qr0jqsdmt478shb1ftjjas93lj4s.apps.googleusercontent.com',
     });
+    // Initialize RevenueCat after the JS bridge is ready
+    import('@/services/purchases').then(({ initPurchases }) => initPurchases());
   }, []);
 
   useEffect(() => {

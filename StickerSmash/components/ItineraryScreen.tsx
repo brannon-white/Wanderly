@@ -35,6 +35,8 @@ import firestore from '@react-native-firebase/firestore';
 import { searchPhoto } from '@/services/unsplash';
 import { regenerateActivity } from '@/services/regenerateItinerary';
 import ShareCard from './ShareCard';
+import { getUsageStatus } from '@/services/purchases';
+import PaywallModal from './PaywallModal';
 
 let MapsModule:
   | {
@@ -319,8 +321,10 @@ export default function ItineraryScreen() {
   const [selectedDay, setSelectedDay] = useState(0);
   const [sharing, setSharing] = useState(false);
   const [activityImages, setActivityImages] = useState<Record<string, string>>({});
+  const loadedImageIds = useRef(new Set<string>());
   const [replacingActivityId, setReplacingActivityId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [showRegenPaywall, setShowRegenPaywall] = useState(false);
   const shareCardRef = useRef<View>(null);
   const activities = itinerary?.days[selectedDay]?.activities ?? [];
   const MapView = MapsModule?.default;
@@ -400,23 +404,35 @@ export default function ItineraryScreen() {
     return () => { cancelled = true; };
   }, [demoItinerary, id]);
 
-  // Pre-resolve all activity images in parallel so cards don't stagger-load
+  // Reset image cache when itinerary changes
+  useEffect(() => {
+    loadedImageIds.current = new Set();
+    setActivityImages({});
+  }, [itinerary?.id]);
+
+  // Load images for the selected day only, updating state as each resolves
   useEffect(() => {
     if (!itinerary) return;
-    const allActivities = itinerary.days.flatMap(d => d.activities);
-    Promise.all(
-      allActivities.map(async a => {
+    let cancelled = false;
+    const dayActivities = itinerary.days[selectedDay]?.activities ?? [];
+
+    for (const a of dayActivities) {
+      if (loadedImageIds.current.has(a.id)) continue;
+      loadedImageIds.current.add(a.id);
+
+      (async () => {
         const url = isPlaceholder(a.image) ? await searchPhoto(a.name) : a.image;
-        return [a.id, url] as [string, string | null | undefined];
-      })
-    ).then(results => {
-      const map: Record<string, string> = {};
-      for (const [id, url] of results) {
-        if (url) map[id] = url;
-      }
-      setActivityImages(map);
-    });
-  }, [itinerary?.id]);
+        if (cancelled) return;
+        if (url) {
+          setActivityImages((prev) => ({ ...prev, [a.id]: url }));
+        } else {
+          loadedImageIds.current.delete(a.id);
+        }
+      })();
+    }
+
+    return () => { cancelled = true; };
+  }, [itinerary?.id, selectedDay]);
 
   useEffect(() => { setEditMode(false); }, [selectedDay]);
 
@@ -460,11 +476,22 @@ export default function ItineraryScreen() {
 
   const handleReplaceActivity = async (dayIndex: number, activityIndex: number, activityId: string) => {
     if (!itinerary || !id || replacingActivityId) return;
+
+    const usage = await getUsageStatus().catch(() => null);
+    if (usage && !usage.isPro && usage.regensLeft <= 0) {
+      setShowRegenPaywall(true);
+      return;
+    }
+
     setReplacingActivityId(activityId);
     try {
       const result = await regenerateActivity({ itineraryId: id, dayIndex, activityIndex });
       setRemoteItinerary(result.itinerary as GeneratedItinerary);
     } catch (err) {
+      if (err instanceof Error && /regen_limit_reached/i.test(err.message)) {
+        setShowRegenPaywall(true);
+        return;
+      }
       Alert.alert('Could not replace activity', err instanceof Error ? err.message : 'Please try again.');
     } finally {
       setReplacingActivityId(null);
@@ -689,6 +716,13 @@ export default function ItineraryScreen() {
           />
         </View>
       )}
+
+      <PaywallModal
+        visible={showRegenPaywall}
+        reason="regen"
+        onDismiss={() => setShowRegenPaywall(false)}
+        onSuccess={() => setShowRegenPaywall(false)}
+      />
     </View>
   );
 }
