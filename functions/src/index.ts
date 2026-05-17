@@ -1,10 +1,91 @@
 import { getAuth } from "firebase-admin/auth";
 import { initializeApp } from "firebase-admin/app";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { defineSecret } from "firebase-functions/params";
 import * as functionsV1 from "firebase-functions/v1";
 import * as logger from "firebase-functions/logger";
+
+const FREE_MONTHLY_GENERATION_LIMIT = 3;
+const FREE_MONTHLY_REGEN_LIMIT = 3;
+
+function getNextMonthStart(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+}
+
+async function checkAndConsumeGenerationCredit(uid: string): Promise<void> {
+  const db = getFirestore();
+  const userRef = db.collection("users").doc(uid);
+  const snap = await userRef.get();
+  const data = snap.data() ?? {};
+
+  const tier: string = data.subscription?.tier ?? "free";
+  const expiresAt: Timestamp | null = data.subscription?.expiresAt ?? null;
+  const isPro = tier === "pro" && expiresAt !== null && expiresAt.toDate() > new Date();
+
+  if (isPro) return; // pro users have no limit
+
+  const now = new Date();
+  const resetAt: Date = data.usage?.usageResetAt
+    ? (data.usage.usageResetAt as Timestamp).toDate()
+    : new Date(0);
+  const isNewMonth = resetAt <= now;
+  const currentCount: number = isNewMonth ? 0 : (data.usage?.generationsThisMonth ?? 0);
+
+  if (currentCount >= FREE_MONTHLY_GENERATION_LIMIT) {
+    throw Object.assign(new Error("Monthly generation limit reached"), { code: "LIMIT_REACHED" });
+  }
+
+  const nextReset = getNextMonthStart();
+  await userRef.set(
+    {
+      usage: {
+        generationsThisMonth: isNewMonth ? 1 : FieldValue.increment(1),
+        usageResetAt: isNewMonth ? Timestamp.fromDate(nextReset) : (data.usage?.usageResetAt ?? Timestamp.fromDate(nextReset)),
+        totalGenerations: FieldValue.increment(1),
+        regenCount: isNewMonth ? 0 : (data.usage?.regenCount ?? 0),
+        regenResetAt: isNewMonth ? Timestamp.fromDate(nextReset) : (data.usage?.regenResetAt ?? Timestamp.fromDate(nextReset)),
+      },
+    },
+    { merge: true }
+  );
+}
+
+async function checkAndConsumeRegenCredit(uid: string): Promise<void> {
+  const db = getFirestore();
+  const userRef = db.collection("users").doc(uid);
+  const snap = await userRef.get();
+  const data = snap.data() ?? {};
+
+  const tier: string = data.subscription?.tier ?? "free";
+  const expiresAt: Timestamp | null = data.subscription?.expiresAt ?? null;
+  const isPro = tier === "pro" && expiresAt !== null && expiresAt.toDate() > new Date();
+
+  if (isPro) return;
+
+  const now = new Date();
+  const regenResetAt: Date = data.usage?.regenResetAt
+    ? (data.usage.regenResetAt as Timestamp).toDate()
+    : new Date(0);
+  const isNewMonth = regenResetAt <= now;
+  const currentRegens: number = isNewMonth ? 0 : (data.usage?.regenCount ?? 0);
+
+  if (currentRegens >= FREE_MONTHLY_REGEN_LIMIT) {
+    throw Object.assign(new Error("Monthly regeneration limit reached"), { code: "REGEN_LIMIT_REACHED" });
+  }
+
+  const nextReset = getNextMonthStart();
+  await userRef.set(
+    {
+      usage: {
+        regenCount: isNewMonth ? 1 : FieldValue.increment(1),
+        regenResetAt: isNewMonth ? Timestamp.fromDate(nextReset) : (data.usage?.regenResetAt ?? Timestamp.fromDate(nextReset)),
+      },
+    },
+    { merge: true }
+  );
+}
 
 import Anthropic from "@anthropic-ai/sdk";
 import {
@@ -14,6 +95,7 @@ import {
   MODEL_NAME,
   PROMPT_VERSION,
 } from "./itineraryGeneration";
+import { FAST_MODEL_NAME } from "./constants";
 import {
   callableGenerateItineraryResponseSchema,
   regenerateActivityRequestSchema,
@@ -61,6 +143,14 @@ function classifyHttpError(error: unknown): HttpErrorDetails {
     ["auth/argument-error", "auth/id-token-expired", "auth/invalid-id-token"].includes(maybeCode)
   ) {
     return { status: 401, error: "invalid_auth_token", details: message };
+  }
+
+  if (typeof maybeCode === "string" && maybeCode === "LIMIT_REACHED") {
+    return { status: 402, error: "limit_reached", details: message };
+  }
+
+  if (typeof maybeCode === "string" && maybeCode === "REGEN_LIMIT_REACHED") {
+    return { status: 402, error: "regen_limit_reached", details: message };
   }
 
   if (typeof maybeCode === "number") {
@@ -199,6 +289,7 @@ export const generateItineraryV1 = functionsV1
       );
     }
 
+    await checkAndConsumeGenerationCredit(uid);
     return buildAndSaveItinerary(uid, data);
   });
 
@@ -255,6 +346,7 @@ export const generateItineraryHttp = functionsV1
             ? (req.body as { country?: unknown }).country
             : undefined,
       });
+      await checkAndConsumeGenerationCredit(decodedToken.uid);
       const result = await buildAndSaveItinerary(decodedToken.uid, req.body);
       res.status(200).json(result);
     } catch (error) {
@@ -304,6 +396,8 @@ export const regenerateActivityHttp = functionsV1
       }
 
       const { itineraryId, dayIndex, activityIndex, reason } = parsed.data;
+
+      await checkAndConsumeRegenCredit(uid);
 
       const itineraryRef = getFirestore()
         .collection("users").doc(uid)
@@ -368,6 +462,8 @@ export const regenerateDayHttp = functionsV1
       }
 
       const { itineraryId, dayIndex, modifications } = parsed.data;
+
+      await checkAndConsumeRegenCredit(uid);
 
       const itineraryRef = getFirestore()
         .collection("users").doc(uid)
@@ -474,9 +570,21 @@ export const getDestinationContentHttp = functionsV1
         return;
       }
 
+      const cacheKey = cityName.toLowerCase().replace(/[^a-z0-9]+/g, "_").substring(0, 80);
+      const cacheRef = getFirestore().collection("destinationContentCache").doc(cacheKey);
+      const cached = await cacheRef.get();
+      if (cached.exists) {
+        const data = cached.data() as { content: DestinationContentResponse; expiresAt: number };
+        if (Date.now() < data.expiresAt) {
+          logger.info("getDestinationContentHttp cache hit", { cityName });
+          res.status(200).json(data.content);
+          return;
+        }
+      }
+
       const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
       const message = await client.messages.create({
-        model: MODEL_NAME,
+        model: FAST_MODEL_NAME,
         max_tokens: 2048,
         tools: [{
           name: "create_destination_guide",
@@ -496,11 +604,153 @@ export const getDestinationContentHttp = functionsV1
         return;
       }
 
+      const content = toolUse.input as DestinationContentResponse;
+      await cacheRef.set({ content, expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 }).catch(() => {});
+
       logger.info("getDestinationContentHttp success", { cityName, country });
-      res.status(200).json(toolUse.input as DestinationContentResponse);
+      res.status(200).json(content);
     } catch (error) {
       const classifiedError = classifyHttpError(error);
       logger.error("getDestinationContentHttp failed", { ...classifiedError, rawError: error });
       res.status(classifiedError.status).json(classifiedError);
     }
+  });
+
+// ─── RevenueCat webhook ───────────────────────────────────────────────────────
+
+const revenueCatWebhookSecret = defineSecret("REVENUECAT_WEBHOOK_SECRET");
+
+export const revenueCatWebhook = functionsV1
+  .region("us-central1")
+  .runWith({
+    maxInstances: 5,
+    secrets: [revenueCatWebhookSecret],
+  })
+  .https.onRequest(async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+
+    if (req.method !== "POST") {
+      res.status(405).json({ error: "Method not allowed." });
+      return;
+    }
+
+    // Verify shared secret header
+    const secret = process.env.REVENUECAT_WEBHOOK_SECRET;
+    const authHeader = req.headers.authorization ?? "";
+    if (secret && authHeader !== secret) {
+      logger.warn("revenueCatWebhook unauthorized", { authHeader: authHeader.substring(0, 8) });
+      res.status(401).json({ error: "Unauthorized." });
+      return;
+    }
+
+    try {
+      const event = req.body as {
+        event: {
+          type: string;
+          app_user_id: string;
+          expiration_at_ms?: number;
+          product_id?: string;
+        };
+      };
+
+      const { type, app_user_id: uid, expiration_at_ms, product_id } = event.event;
+      if (!uid) {
+        res.status(400).json({ error: "Missing app_user_id." });
+        return;
+      }
+
+      const db = getFirestore();
+      const userRef = db.collection("users").doc(uid);
+
+      logger.info("revenueCatWebhook", { type, uid, product_id });
+
+      if (type === "INITIAL_PURCHASE" || type === "RENEWAL" || type === "UNCANCELLATION") {
+        const expiresAt = expiration_at_ms
+          ? Timestamp.fromMillis(expiration_at_ms)
+          : Timestamp.fromDate(new Date(Date.now() + 366 * 24 * 60 * 60 * 1000));
+
+        await userRef.set(
+          {
+            subscription: {
+              tier: "pro",
+              expiresAt,
+              revenueCatId: uid,
+            },
+          },
+          { merge: true }
+        );
+        logger.info("revenueCatWebhook upgraded to pro", { uid, expiresAt: expiresAt.toDate() });
+      }
+
+      if (type === "EXPIRATION" || type === "CANCELLATION" || type === "SUBSCRIBER_ALIAS") {
+        if (type === "EXPIRATION" || type === "CANCELLATION") {
+          await userRef.set(
+            {
+              subscription: {
+                tier: "free",
+                expiresAt: null,
+                revenueCatId: null,
+              },
+            },
+            { merge: true }
+          );
+          logger.info("revenueCatWebhook downgraded to free", { uid });
+        }
+      }
+
+      res.status(200).json({ ok: true });
+    } catch (error) {
+      logger.error("revenueCatWebhook failed", { error });
+      res.status(500).json({ error: "Internal error." });
+    }
+  });
+
+// ─── One-time user migration ──────────────────────────────────────────────────
+
+export const migrateUsersToSubscriptionSchema = functionsV1
+  .region("us-central1")
+  .runWith({ maxInstances: 1, timeoutSeconds: 540 })
+  .https.onRequest(async (req, res) => {
+    // Protect with a simple admin check — only call this once from a trusted environment
+    if (req.headers["x-admin-secret"] !== process.env.ADMIN_MIGRATION_SECRET) {
+      res.status(401).json({ error: "Unauthorized." });
+      return;
+    }
+
+    const db = getFirestore();
+    const usersSnap = await db.collection("users").get();
+    const nextReset = Timestamp.fromDate(
+      new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1))
+    );
+
+    let migrated = 0;
+    const batch = db.batch();
+
+    for (const doc of usersSnap.docs) {
+      const data = doc.data();
+      if (data.subscription) continue; // already migrated
+
+      const itinerariesSnap = await doc.ref.collection("itineraries").count().get();
+      const totalGenerations = itinerariesSnap.data().count ?? 0;
+
+      batch.set(
+        doc.ref,
+        {
+          subscription: { tier: "free", expiresAt: null, revenueCatId: null },
+          usage: {
+            generationsThisMonth: 0,
+            usageResetAt: nextReset,
+            totalGenerations,
+            regenCount: 0,
+            regenResetAt: nextReset,
+          },
+        },
+        { merge: true }
+      );
+      migrated++;
+    }
+
+    await batch.commit();
+    logger.info("migrateUsersToSubscriptionSchema complete", { migrated });
+    res.status(200).json({ migrated });
   });

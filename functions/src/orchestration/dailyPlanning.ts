@@ -6,10 +6,10 @@ function formatClusters(clusters: PlaceCluster[]): string {
   return clusters
     .map((cluster, i) => {
       const placeList = cluster.places
-        .map(
-          (p) =>
-            `  • ${p.name} | ${p.category} | rating: ${p.rating}/5 (${p.reviewCount} reviews) | price: ${"$".repeat(Math.max(1, p.priceLevel))} | lat: ${p.coordinates.lat.toFixed(5)}, lng: ${p.coordinates.lng.toFixed(5)}`
-        )
+        .map((p) => {
+            const summary = p.editorialSummary ? ` | "${p.editorialSummary}"` : "";
+            return `  • ${p.name} | ${p.category} | rating: ${p.rating}/5 (${p.reviewCount} reviews) | price: ${"$".repeat(Math.max(1, p.priceLevel))} | lat: ${p.coordinates.lat.toFixed(5)}, lng: ${p.coordinates.lng.toFixed(5)}${summary}`;
+          })
         .join("\n");
 
       return `DAY ${i + 1} — ${cluster.neighborhood ?? "Exploration Area"} (center: ${cluster.centerLat.toFixed(4)}, ${cluster.centerLng.toFixed(4)}):\n${placeList}`;

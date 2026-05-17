@@ -53,8 +53,8 @@ export interface PlaceCandidate {
   priceLevel: number; // 0-4
   types: string[];
   category: PlaceCategory;
-  openNow?: boolean;
   neighborhood?: string;
+  editorialSummary?: string;
 }
 
 export interface RankedPlace extends PlaceCandidate {

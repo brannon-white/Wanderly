@@ -12,6 +12,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getAuth } from '@react-native-firebase/auth';
@@ -26,6 +27,9 @@ import { updateUserInfo } from '@/utils/updateUserInfo';
 import { useDemo } from '@/context/DemoContext';
 import { clearAllCache } from '@/utils/cache';
 import { styles } from '@/styles/profileScreenStyles';
+import { getUsageStatus, restorePurchases, type UsageStatus } from '@/services/purchases';
+import PaywallModal from '@/components/PaywallModal';
+import { FREE_MONTHLY_GENERATION_LIMIT, FREE_MONTHLY_REGEN_LIMIT } from '@/types/subscription';
 
 type ProfileData = {
   fullName?: string;
@@ -45,6 +49,8 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [usageStatus, setUsageStatus] = useState<UsageStatus | null>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
@@ -85,6 +91,11 @@ export default function ProfileScreen() {
   }, [isDemoMode]);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
+
+  useEffect(() => {
+    if (isDemoMode) return;
+    getUsageStatus().then(setUsageStatus).catch(() => {});
+  }, [isDemoMode]);
 
   const openEditModal = () => {
     if (!profile) return;
@@ -216,12 +227,69 @@ export default function ProfileScreen() {
           />
         </View>
 
+        {/* ── Subscription ── */}
+        {!isDemoMode && usageStatus && (
+          <View style={styles.section}>
+            {usageStatus.isPro ? (
+              <View style={subscriptionStyles.proRow}>
+                <View style={subscriptionStyles.proBadge}>
+                  <Ionicons name="star" size={14} color="#fff" />
+                  <Text style={subscriptionStyles.proBadgeText}>Pro</Text>
+                </View>
+                <Text style={subscriptionStyles.proLabel}>Wanderly Pro — Active</Text>
+                <TouchableOpacity
+                  onPress={async () => {
+                    const restored = await restorePurchases().catch(() => false);
+                    if (!restored) {
+                      Alert.alert('Subscription', 'Your Pro subscription is active. Manage it in your App Store / Google Play settings.');
+                    }
+                  }}
+                >
+                  <Text style={subscriptionStyles.manageText}>Manage</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <View style={subscriptionStyles.usageRow}>
+                  <Ionicons name="map-outline" size={18} color="#6A62B7" />
+                  <Text style={subscriptionStyles.usageLabel}>
+                    {usageStatus.generationsLeft} of {FREE_MONTHLY_GENERATION_LIMIT} trips remaining this month
+                  </Text>
+                </View>
+                <View style={[subscriptionStyles.usageRow, { marginTop: 8 }]}>
+                  <Ionicons name="refresh-outline" size={18} color="#6A62B7" />
+                  <Text style={subscriptionStyles.usageLabel}>
+                    {usageStatus.regensLeft} of {FREE_MONTHLY_REGEN_LIMIT} regenerations remaining
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={subscriptionStyles.upgradeBtn}
+                  onPress={() => setShowPaywall(true)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={subscriptionStyles.upgradeBtnText}>Upgrade to Pro — $4.99 / mo</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        )}
+
         {/* ── Sign Out ── */}
         <TouchableOpacity style={styles.signOutRow} onPress={handleSignOut} activeOpacity={0.7}>
           <Ionicons name="log-out-outline" size={22} color="#E53935" />
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <PaywallModal
+        visible={showPaywall}
+        reason="generation"
+        onDismiss={() => setShowPaywall(false)}
+        onSuccess={() => {
+          setShowPaywall(false);
+          getUsageStatus().then(setUsageStatus).catch(() => {});
+        }}
+      />
 
       {/* ── Edit Profile Modal ── */}
       <Modal visible={showEditModal} animationType="slide" transparent onRequestClose={() => setShowEditModal(false)}>
@@ -302,6 +370,62 @@ export default function ProfileScreen() {
     </SafeAreaView>
   );
 }
+
+const subscriptionStyles = StyleSheet.create({
+  proRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  proBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#6A62B7',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  proBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontFamily: 'SourceSans3-Regular',
+  },
+  proLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'SourceSans3-Regular',
+    color: '#1a1a2e',
+  },
+  manageText: {
+    fontSize: 13,
+    color: '#6A62B7',
+    fontFamily: 'SourceSans3-Regular',
+  },
+  usageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  usageLabel: {
+    fontSize: 14,
+    fontFamily: 'SourceSans3-Regular',
+    color: '#444',
+  },
+  upgradeBtn: {
+    marginTop: 16,
+    backgroundColor: '#6A62B7',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  upgradeBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontFamily: 'Merriweather_24pt-Bold',
+  },
+});
 
 function SettingsRow({
   icon,

@@ -21,6 +21,8 @@ import { useTripPlanning } from '@/context/TripPlanningContext';
 import { useMyTrips } from '@/context/MyTripsContext';
 import { generateItinerary } from '@/services/generateItinerary';
 import { requestPermissionAndSaveToken } from '@/services/notifications';
+import { getUsageStatus } from '@/services/purchases';
+import PaywallModal from '@/components/PaywallModal';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 
@@ -65,6 +67,7 @@ export default function TripReviewScreen() {
   const isEditing = !!editingTripId;
 
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
   const userNavigatedAway = React.useRef(false);
   const { addTrip, updateTrip, setPendingGeneration } = useMyTrips();
 
@@ -97,6 +100,14 @@ export default function TripReviewScreen() {
         'Trip details missing',
         'Destination, party, dates, and budget are required before generating an itinerary.'
       );
+      return;
+    }
+
+    // Check generation quota before starting (backend enforces this too, but checking
+    // client-side avoids a wasted full round-trip and shows the paywall earlier)
+    const usage = await getUsageStatus().catch(() => null);
+    if (usage && !usage.isPro && usage.generationsLeft <= 0) {
+      setShowPaywall(true);
       return;
     }
 
@@ -164,6 +175,10 @@ export default function TripReviewScreen() {
       setPendingGeneration(null);
       if (!userNavigatedAway.current) {
         setShowConfirmation(false);
+        if (error instanceof Error && /limit_reached/i.test(error.message)) {
+          setShowPaywall(true);
+          return;
+        }
         const message =
           error instanceof Error && /unauth/i.test(error.message)
             ? 'Your sign-in session was not attached to the request. Sign out, sign in again, and retry.'
@@ -299,6 +314,17 @@ export default function TripReviewScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      <PaywallModal
+        visible={showPaywall}
+        reason="generation"
+        onDismiss={() => setShowPaywall(false)}
+        onSuccess={() => {
+          setShowPaywall(false);
+          // Retry generation now that user has upgraded
+          handleBuild();
+        }}
+      />
 
       <Modal visible={showConfirmation} transparent animationType="fade">
         <View style={styles.modalOverlay}>

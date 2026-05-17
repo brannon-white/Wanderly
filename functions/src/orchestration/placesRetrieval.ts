@@ -1,7 +1,8 @@
 import * as logger from "firebase-functions/logger";
-import { type PlaceCandidate, type SearchQuery, type PlaceCategory } from "./types";
+import { type PlaceCandidate, type SearchQuery, type PlaceCategory, type PlaceCluster } from "./types";
 
-const PLACES_API_URL = "https://places.googleapis.com/v1/places:searchText";
+const TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
+const NEARBY_SEARCH_URL = "https://places.googleapis.com/v1/places:searchNearby";
 
 const FIELD_MASK = [
   "places.id",
@@ -12,7 +13,7 @@ const FIELD_MASK = [
   "places.userRatingCount",
   "places.priceLevel",
   "places.types",
-  "places.regularOpeningHours",
+  "places.editorialSummary",
 ].join(",");
 
 interface GooglePlaceResult {
@@ -24,7 +25,7 @@ interface GooglePlaceResult {
   userRatingCount?: number;
   priceLevel?: string;
   types?: string[];
-  regularOpeningHours?: { openNow?: boolean };
+  editorialSummary?: { text: string };
 }
 
 function priceLevelToNumber(priceLevel?: string): number {
@@ -38,57 +39,47 @@ function priceLevelToNumber(priceLevel?: string): number {
   return map[priceLevel ?? ""] ?? 2;
 }
 
-async function searchPlaces(
-  query: SearchQuery,
-  apiKey: string
-): Promise<PlaceCandidate[]> {
+function toPlaceCandidate(p: GooglePlaceResult, category: PlaceCategory, neighborhood?: string): PlaceCandidate {
+  return {
+    placeId: p.id,
+    name: p.displayName!.text,
+    address: p.formattedAddress ?? "",
+    coordinates: { lat: p.location!.latitude, lng: p.location!.longitude },
+    rating: p.rating ?? 0,
+    reviewCount: p.userRatingCount ?? 0,
+    priceLevel: priceLevelToNumber(p.priceLevel),
+    types: p.types ?? [],
+    category,
+    neighborhood,
+    editorialSummary: p.editorialSummary?.text,
+  };
+}
+
+async function searchPlaces(query: SearchQuery, apiKey: string): Promise<PlaceCandidate[]> {
   try {
-    const response = await fetch(PLACES_API_URL, {
+    const response = await fetch(TEXT_SEARCH_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": apiKey,
         "X-Goog-FieldMask": FIELD_MASK,
       },
-      body: JSON.stringify({
-        textQuery: query.query,
-        languageCode: "en",
-        maxResultCount: 10,
-      }),
+      body: JSON.stringify({ textQuery: query.query, languageCode: "en", maxResultCount: 10 }),
     });
 
     if (!response.ok) {
-      logger.warn("Google Places API non-OK response", {
-        status: response.status,
-        query: query.query,
-      });
+      logger.warn("Places text search non-OK", { status: response.status, query: query.query });
       return [];
     }
 
     const data = await response.json() as { places?: GooglePlaceResult[] };
-
     return (data.places ?? [])
       .filter((p): p is GooglePlaceResult & { location: NonNullable<GooglePlaceResult["location"]>; displayName: NonNullable<GooglePlaceResult["displayName"]> } =>
         Boolean(p.location && p.displayName)
       )
-      .map((p) => ({
-        placeId: p.id,
-        name: p.displayName.text,
-        address: p.formattedAddress ?? "",
-        coordinates: {
-          lat: p.location.latitude,
-          lng: p.location.longitude,
-        },
-        rating: p.rating ?? 0,
-        reviewCount: p.userRatingCount ?? 0,
-        priceLevel: priceLevelToNumber(p.priceLevel),
-        types: p.types ?? [],
-        category: query.category as PlaceCategory,
-        openNow: p.regularOpeningHours?.openNow,
-        neighborhood: query.neighborhood,
-      }));
+      .map((p) => toPlaceCandidate(p, query.category as PlaceCategory, query.neighborhood));
   } catch (error) {
-    logger.warn("Google Places search failed", { query: query.query, error });
+    logger.warn("Places text search failed", { query: query.query, error });
     return [];
   }
 }
@@ -100,12 +91,10 @@ export async function fetchRecommendations(
   const seen = new Set<string>();
   const allPlaces: PlaceCandidate[] = [];
 
-  // Batch searches 5 at a time to avoid overwhelming the API
   const batchSize = 5;
   for (let i = 0; i < queries.length; i += batchSize) {
     const batch = queries.slice(i, i + batchSize);
     const results = await Promise.all(batch.map((q) => searchPlaces(q, apiKey)));
-
     for (const places of results) {
       for (const place of places) {
         if (!seen.has(place.placeId)) {
@@ -116,10 +105,90 @@ export async function fetchRecommendations(
     }
   }
 
-  logger.info("Google Places retrieval complete", {
+  logger.info("Places text search complete", {
     queriesRun: queries.length,
     uniquePlacesFound: allPlaces.length,
   });
 
   return allPlaces;
 }
+
+// ─── Nearby search — supplements each cluster with geographically tight results ─
+
+async function searchNearby(
+  lat: number,
+  lng: number,
+  includedTypes: string[],
+  apiKey: string,
+  radiusMeters = 1500
+): Promise<PlaceCandidate[]> {
+  try {
+    const response = await fetch(NEARBY_SEARCH_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": FIELD_MASK,
+      },
+      body: JSON.stringify({
+        includedTypes,
+        maxResultCount: 10,
+        locationRestriction: {
+          circle: { center: { latitude: lat, longitude: lng }, radius: radiusMeters },
+        },
+        languageCode: "en",
+      }),
+    });
+
+    if (!response.ok) {
+      logger.warn("Places nearby search non-OK", { status: response.status, lat, lng });
+      return [];
+    }
+
+    const data = await response.json() as { places?: GooglePlaceResult[] };
+    return (data.places ?? [])
+      .filter((p): p is GooglePlaceResult & { location: NonNullable<GooglePlaceResult["location"]>; displayName: NonNullable<GooglePlaceResult["displayName"]> } =>
+        Boolean(p.location && p.displayName)
+      )
+      .map((p) => {
+        const category: PlaceCategory = p.types?.some((t) => t.includes("restaurant") || t.includes("cafe") || t.includes("food"))
+          ? "restaurant"
+          : "attraction";
+        return toPlaceCandidate(p, category);
+      });
+  } catch (error) {
+    logger.warn("Places nearby search failed", { lat, lng, error });
+    return [];
+  }
+}
+
+export async function fetchNearbyForClusters(
+  clusters: PlaceCluster[],
+  apiKey: string
+): Promise<PlaceCluster[]> {
+  const enriched = await Promise.all(
+    clusters.map(async (cluster) => {
+      const [foodResults, attractionResults] = await Promise.all([
+        searchNearby(cluster.centerLat, cluster.centerLng, ["restaurant", "cafe", "bakery"], apiKey),
+        searchNearby(cluster.centerLat, cluster.centerLng, ["tourist_attraction", "museum", "art_gallery", "park", "night_club"], apiKey),
+      ]);
+
+      const existingIds = new Set(cluster.places.map((p) => p.placeId));
+      const newPlaces = [...foodResults, ...attractionResults]
+        .filter((p) => !existingIds.has(p.placeId))
+        .map((p) => ({ ...p, score: 0, interestMatch: 0, budgetCompatible: true }));
+
+      return {
+        ...cluster,
+        places: [...cluster.places, ...newPlaces].slice(0, 16),
+      };
+    })
+  );
+
+  logger.info("Nearby search enrichment complete", {
+    clustersEnriched: enriched.length,
+  });
+
+  return enriched;
+}
+
