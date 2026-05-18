@@ -20,43 +20,79 @@ function formatClusters(clusters: PlaceCluster[]): string {
 function buildPersonalizationBlock(intent: TripIntent): string {
   const lines: string[] = [];
 
-  if (intent.tasteProfile || intent.derivedIntent || intent.tripPrompt) {
-    lines.push("\nPERSONALIZATION SIGNALS (apply these to shape the itinerary):");
+  // Use the blended effective profile when available
+  const tp = intent.effectiveTasteProfile ?? intent.tasteProfile;
+  const hasPromptIntent = !!(intent.derivedIntent && Object.keys(intent.derivedIntent).length > 0);
+
+  if (!tp && !hasPromptIntent && !intent.includeActivities?.length && !intent.avoidActivities?.length) {
+    return "";
   }
 
-  if (intent.tripPrompt) {
-    lines.push(`- User's trip description: "${intent.tripPrompt}"`);
-  }
+  lines.push("\nPERSONALIZATION (three-layer priority stack):");
 
-  if (intent.derivedIntent) {
-    const di = intent.derivedIntent;
-    if (di.tripMood) lines.push(`- Trip mood: ${di.tripMood}`);
-    if (di.themes?.length) lines.push(`- Trip themes: ${di.themes.join(", ")}`);
-    if (di.avoid?.length) lines.push(`- User wants to avoid: ${di.avoid.join(", ")}`);
-  }
-
-  if (intent.tasteProfile) {
-    const tp = intent.tasteProfile;
-    const activitiesPerDay = Math.round(3 + tp.pace * 3);
-    lines.push(
-      `- Pacing: ${tp.pace < 0.35 ? "relaxed — fewer activities, longer dwell times, unhurried feel" : tp.pace > 0.65 ? "packed — maximize activities, efficient transitions" : "balanced pacing"}`,
-      `- Venue style: ${tp.hiddenGems > 0.6 ? "STRONGLY prefer hidden gems, local favorites, niche spots — avoid obvious tourist traps" : tp.hiddenGems < 0.4 ? "prefer well-known iconic venues, top-rated attractions" : "mix of popular and local spots"}`,
-      `- Food focus: ${tp.foodie > 0.6 ? "food is central — make every meal special, seek local specialties" : tp.foodie < 0.4 ? "food is functional — quick, good, unpretentious" : "balanced food choices"}`,
-      `- Evening activities: ${tp.nightlife > 0.5 ? "include bars, live music, or nightlife" : "no nightlife — end evenings by 10pm"}`,
-      `- Activity type: ${tp.adventure > 0.6 ? "prioritize outdoor, physical, active experiences" : tp.adventure < 0.4 ? "prioritize cultural, museum, food experiences" : "mix of active and cultural"}`,
-      `- Recommended activities per day: ${activitiesPerDay}`,
-    );
-    if (tp.walkingTolerance < 0.35) {
-      lines.push(`- Minimize walking — cluster activities geographically, use transport often`);
+  // ── Layer 1: Hard constraints (always win) ──────────────────────────────
+  if (intent.includeActivities?.length || intent.avoidActivities?.length) {
+    lines.push("\n[1] HARD CONSTRAINTS — absolute rules, always override everything else:");
+    if (intent.includeActivities?.length) {
+      lines.push(`    MUST INCLUDE: ${intent.includeActivities.join(", ")}`);
+    }
+    if (intent.avoidActivities?.length) {
+      lines.push(`    NEVER INCLUDE: ${intent.avoidActivities.join(", ")}`);
     }
   }
 
-  if (intent.includeActivities?.length) {
-    lines.push(`- Must include these activity types: ${intent.includeActivities.join(", ")}`);
+  // ── Layer 2: Trip prompt — primary driver for this trip ─────────────────
+  if (intent.tripPrompt || hasPromptIntent) {
+    lines.push("\n[2] THIS TRIP'S INTENT — primary flavor driver (treat as the dominant signal):");
+    if (intent.tripPrompt) {
+      lines.push(`    User wrote: "${intent.tripPrompt}"`);
+    }
+    if (intent.derivedIntent) {
+      const di = intent.derivedIntent;
+      if (di.tripMood) lines.push(`    Mood: ${di.tripMood}`);
+      if (di.themes?.length) lines.push(`    Themes: ${di.themes.join(", ")}`);
+      if (di.pace) lines.push(`    Desired pace: ${di.pace}`);
+      if (di.avoid?.length) lines.push(`    Mentioned avoiding: ${di.avoid.join(", ")}`);
+    }
   }
 
-  if (intent.avoidActivities?.length) {
-    lines.push(`- EXCLUDE these activity types completely: ${intent.avoidActivities.join(", ")}`);
+  // ── Layer 3: Effective taste profile (blended) — refinement layer ───────
+  if (tp) {
+    const isOutdoorHeavy =
+      tp.adventure > 0.6 ||
+      tp.nature > 0.6 ||
+      intent.rankedInterests.some((i) =>
+        ["hiking", "nature", "parks", "adventure", "outdoors"].includes(i.toLowerCase())
+      ) ||
+      intent.includeActivities?.some((a) =>
+        ["hiking", "nature", "parks", "trails", "outdoors"].includes(a.toLowerCase())
+      );
+
+    const activitiesPerDay = isOutdoorHeavy
+      ? Math.round(2 + tp.pace * 2)
+      : Math.round(3 + tp.pace * 3);
+
+    const blendNote = hasPromptIntent
+      ? " (blended: 70% trip intent above + 30% long-term style — use for tie-breaking and subtle refinement)"
+      : " (long-term travel style — primary guide since no trip prompt given)";
+
+    lines.push(`\n[3] TRAVELER'S DEFAULT STYLE${blendNote}:`);
+    lines.push(
+      `    Pacing: ${tp.pace < 0.35 ? "relaxed — fewer activities, longer dwell times" : tp.pace > 0.65 ? "packed — maximize activities, efficient transitions" : "balanced"}`,
+      `    Venue style: ${tp.hiddenGems > 0.6 ? "prefers hidden gems and local spots over tourist traps" : tp.hiddenGems < 0.4 ? "prefers well-known iconic venues" : "mix of popular and local"}`,
+      `    Food: ${tp.foodie > 0.6 ? "food-first — every meal should be special" : tp.foodie < 0.4 ? "food as fuel — quick and easy" : "balanced food choices"}`,
+      `    Evenings: ${tp.nightlife > 0.5 ? "enjoys bars, live music, nightlife" : "ends evenings early, no nightlife"}`,
+      `    Activities: ${tp.adventure > 0.6 ? "outdoor and physical" : tp.adventure < 0.4 ? "cultural, museums, food" : "mixed"}`,
+      `    Suggested activities/day: ${activitiesPerDay}${isOutdoorHeavy ? " (outdoor trip — parks are half-day anchors)" : ""}`,
+    );
+    if (tp.walkingTolerance < 0.35) {
+      lines.push(`    Walking: minimize — cluster geographically, use transport`);
+    }
+    if (tp.luxury > 0.6) {
+      lines.push(`    Comfort: premium — upscale venues where possible`);
+    } else if (tp.luxury < 0.3) {
+      lines.push(`    Comfort: budget-friendly — local and authentic over polished`);
+    }
   }
 
   return lines.join("\n");
@@ -98,11 +134,16 @@ PLANNING RULES:
 4. SPECIFIC NAMED PLACES ONLY — no vague entries like "explore the neighborhood".
 5. TIME FEASIBILITY: if activity A ends at 10:00 AM and transit takes 20 min, activity B starts at 10:20 AM minimum.
 6. REALISTIC DURATIONS: Breakfast 45–60 min | Major attraction 2–3 hrs | Lunch 60–75 min | Mid attraction 1–1.5 hrs | Dinner 75–90 min | Evening 1–2 hrs.
+   STATE PARKS / NATIONAL PARKS / HIKING TRAILS / NATURE RESERVES: minimum 3 hours, typically 3–5 hrs. These are half-day anchors, never quick stops.
 7. DAY STRUCTURE: Start 8:00 AM, end by 11:00 PM. Times format: "09:00 AM - 10:30 AM".
 8. TRANSPORT: For each activity specify travel to the NEXT one (mode + realistic time). Last activity of day = empty transport array.
 9. No venue repeated across days.
 10. Google Maps URLs: https://www.google.com/maps/search/?api=1&query=Place+Name+City
-11. Day titles: catchy and thematic (e.g. "Temples & Street Food", "Art, Markets & Rooftops").
+11. OUTDOOR TIMING: Never schedule a state park, national park, hiking trail, or nature reserve to START after 3:00 PM. Schedule them in the morning (ideally 8–10 AM) or early afternoon at the latest. Trails close at dusk and late arrivals are unsafe and unrealistic.
+12. ONE MAJOR OUTDOOR AREA PER DAY: Maximum one state or national park / major hiking destination per day. After the park block, transition to a nearby town for lunch, local sights, or dinner — do not stack multiple parks back-to-back in the same day.
+13. TRAIL TIME ESTIMATION: When scheduling a hiking trail, be realistic about completion time. A moderate trail of 5 miles takes 3–4 hours. A strenuous trail of 8+ miles takes 5–7 hours. Always add 30–45 minutes for parking, gear prep, and rest stops on top of the hiking time. If you do not know the exact trail distance, assume 4 hours minimum. Never schedule a hiking trail for less than 3 hours.
+14. TRAILHEAD DRIVE TIME: State and national parks in the same region are often 30–90 minutes apart by car. If two outdoor destinations appear in the same day cluster, check whether driving between them is realistic given the time remaining after the first activity. When in doubt, keep only the better-rated one and fill the rest of the day with a nearby town or viewpoint that requires no hiking.
+13. Day titles: catchy and thematic (e.g. "Temples & Street Food", "Art, Markets & Rooftops").
 
 Day themes to follow: ${strategy.dayThemes.join(" | ")}`;
 

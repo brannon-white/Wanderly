@@ -17,6 +17,8 @@ export interface TripDerivedIntent {
   themes?: string[];
   avoid?: string[];
   energyLevel?: string;
+  // Dimension signals extracted from the prompt — only populated for dimensions the prompt explicitly addresses
+  dimensionSignals?: Partial<TasteProfile>;
 }
 
 export interface TripIntent {
@@ -31,6 +33,9 @@ export interface TripIntent {
   startDate?: string | null;
   endDate?: string | null;
   tasteProfile?: TasteProfile;
+  // Blended profile: 70% prompt signals + 30% taste profile for conflicting dimensions.
+  // Used for ranking and generation in place of raw tasteProfile when a prompt is present.
+  effectiveTasteProfile?: TasteProfile;
   tripPrompt?: string;
   derivedIntent?: TripDerivedIntent;
   includeActivities?: string[];

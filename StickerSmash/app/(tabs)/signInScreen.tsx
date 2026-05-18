@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { styles } from '@/styles/signInScreenStyles';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signInWithCredential, signOut as firebaseSignOut, GoogleAuthProvider } from '@react-native-firebase/auth';
 import { useDemo } from '@/context/DemoContext';
 import { userExists } from '@/hooks/useSaveUserProfile';
 import { getOnboardingStepData } from '@/utils/onboardingStorage';
-import { GoogleSignin, statusCodes, GoogleSigninButton } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '@/app/_layout'; // GoogleSignin.configure() is called in _layout.tsx
@@ -129,13 +129,15 @@ async function signInWithGoogle() {
             </View>
           ) : (
             <>
-              <GoogleSigninButton
+              <TouchableOpacity
                 style={styles.googleButton}
-                size={GoogleSigninButton.Size.Wide}
-                color={GoogleSigninButton.Color.Light}
                 onPress={signInWithGoogle}
                 disabled={loading}
-              />
+                activeOpacity={0.85}
+              >
+                <Image source={require('@/assets/images/google-logo.png')} style={styles.googleButtonIcon} />
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              </TouchableOpacity>
               {loading && <ActivityIndicator size="large" color="#0000ff" />}
               <View style={styles.dividerRow}>
                 <View style={styles.divider} />

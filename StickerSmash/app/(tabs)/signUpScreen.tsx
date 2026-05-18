@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { GoogleSignin, GoogleSigninButton, statusCodes } from '@react-native-google-signin/google-signin';
+import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { getAuth, createUserWithEmailAndPassword, signInWithCredential, GoogleAuthProvider } from '@react-native-firebase/auth';
 import { styles } from '@/styles/signUpStyles';
 import { useDemo } from '@/context/DemoContext';
@@ -113,13 +113,15 @@ async function signUpWithGoogle() {
           <View style={{ flex: 1 }} />
           <View style={styles.card}>
             <Text style={styles.subheading}>New{'\n'}Account</Text>
-            <GoogleSigninButton
+            <TouchableOpacity
               style={styles.googleButton}
-              size={GoogleSigninButton.Size.Wide}
-              color={GoogleSigninButton.Color.Light}
               onPress={signUpWithGoogle}
               disabled={loading}
-            />
+              activeOpacity={0.85}
+            >
+              <Image source={require('@/assets/images/google-logo.png')} style={styles.googleButtonIcon} />
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
+            </TouchableOpacity>
             <View style={styles.dividerRow}>
               <View style={styles.divider} />
               <Text style={styles.orText}>Or</Text>
