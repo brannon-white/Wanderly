@@ -150,6 +150,7 @@ export interface ItineraryCardSummary {
   budget?: TripBudget;
   durationLabel?: string;
   source: ItinerarySource;
+  tasteProfileTags?: Partial<TasteProfile>;
 }
 
 export type FirestoreTimestampValue =

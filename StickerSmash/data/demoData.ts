@@ -167,6 +167,7 @@ export const DEMO_ITINERARIES: DemoItinerarySummary[] = [
     dateLabel: '3 days',
     durationLabel: '3 days',
     source: 'demo',
+    tasteProfileTags: { pace: 0.25, foodie: 0.5, nature: 0.3, nightlife: 0.1, hiddenGems: 0.55, adventure: 0.2 },
     overview:
       'A relaxed Kyoto long weekend built around temples, tea houses, scenic walks, and evening food stops.',
     summary: [
@@ -189,6 +190,7 @@ export const DEMO_ITINERARIES: DemoItinerarySummary[] = [
     interests: ['adventure', 'beaches'],
     durationLabel: '1 day',
     source: 'demo',
+    tasteProfileTags: { pace: 0.55, foodie: 0.55, nature: 0.7, nightlife: 0.4, adventure: 0.7, luxury: 0.7 },
     summary: ['Hike the Path of the Gods', 'Boat tour of sea caves', 'Dinner in Positano'],
   },
   {
@@ -205,6 +207,7 @@ export const DEMO_ITINERARIES: DemoItinerarySummary[] = [
     budget: 'Luxury',
     interests: ['wildlife', 'adventure'],
     durationLabel: '1 day',
+    tasteProfileTags: { pace: 0.45, foodie: 0.35, nature: 0.9, nightlife: 0.15, adventure: 0.85, luxury: 0.8 },
     summary: ['Masai Mara game drive', 'Sundowner cocktails', 'Hot air balloon safari'],
   },
 ];
