@@ -207,9 +207,9 @@ export default function ProfileScreen() {
         {/* ── Preferences ── */}
         <View style={styles.section}>
           <SettingsRow
-            icon="compass-outline"
-            label="Travel Preferences"
-            subtitle={profile?.activityPreferences?.length ? profile.activityPreferences.slice(0, 3).join(', ') : undefined}
+            icon="heart-outline"
+            label="Travel Style"
+            subtitle={(profile as any)?.tasteProfile ? 'Your taste profile is set' : 'Complete to personalize your trips'}
             onPress={() => navigation.navigate('TravelPreferences', { fromSettings: true })}
           />
           <View style={styles.divider} />

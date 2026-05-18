@@ -17,6 +17,51 @@ function formatClusters(clusters: PlaceCluster[]): string {
     .join("\n\n");
 }
 
+function buildPersonalizationBlock(intent: TripIntent): string {
+  const lines: string[] = [];
+
+  if (intent.tasteProfile || intent.derivedIntent || intent.tripPrompt) {
+    lines.push("\nPERSONALIZATION SIGNALS (apply these to shape the itinerary):");
+  }
+
+  if (intent.tripPrompt) {
+    lines.push(`- User's trip description: "${intent.tripPrompt}"`);
+  }
+
+  if (intent.derivedIntent) {
+    const di = intent.derivedIntent;
+    if (di.tripMood) lines.push(`- Trip mood: ${di.tripMood}`);
+    if (di.themes?.length) lines.push(`- Trip themes: ${di.themes.join(", ")}`);
+    if (di.avoid?.length) lines.push(`- User wants to avoid: ${di.avoid.join(", ")}`);
+  }
+
+  if (intent.tasteProfile) {
+    const tp = intent.tasteProfile;
+    const activitiesPerDay = Math.round(3 + tp.pace * 3);
+    lines.push(
+      `- Pacing: ${tp.pace < 0.35 ? "relaxed — fewer activities, longer dwell times, unhurried feel" : tp.pace > 0.65 ? "packed — maximize activities, efficient transitions" : "balanced pacing"}`,
+      `- Venue style: ${tp.hiddenGems > 0.6 ? "STRONGLY prefer hidden gems, local favorites, niche spots — avoid obvious tourist traps" : tp.hiddenGems < 0.4 ? "prefer well-known iconic venues, top-rated attractions" : "mix of popular and local spots"}`,
+      `- Food focus: ${tp.foodie > 0.6 ? "food is central — make every meal special, seek local specialties" : tp.foodie < 0.4 ? "food is functional — quick, good, unpretentious" : "balanced food choices"}`,
+      `- Evening activities: ${tp.nightlife > 0.5 ? "include bars, live music, or nightlife" : "no nightlife — end evenings by 10pm"}`,
+      `- Activity type: ${tp.adventure > 0.6 ? "prioritize outdoor, physical, active experiences" : tp.adventure < 0.4 ? "prioritize cultural, museum, food experiences" : "mix of active and cultural"}`,
+      `- Recommended activities per day: ${activitiesPerDay}`,
+    );
+    if (tp.walkingTolerance < 0.35) {
+      lines.push(`- Minimize walking — cluster activities geographically, use transport often`);
+    }
+  }
+
+  if (intent.includeActivities?.length) {
+    lines.push(`- Must include these activity types: ${intent.includeActivities.join(", ")}`);
+  }
+
+  if (intent.avoidActivities?.length) {
+    lines.push(`- EXCLUDE these activity types completely: ${intent.avoidActivities.join(", ")}`);
+  }
+
+  return lines.join("\n");
+}
+
 export async function generateDailyPlans(
   clusters: PlaceCluster[],
   intent: TripIntent,
@@ -26,6 +71,7 @@ export async function generateDailyPlans(
 
   const candidateList = formatClusters(clusters);
   const hasClusters = clusters.some((c) => c.places.length > 0);
+  const personalizationBlock = buildPersonalizationBlock(intent);
 
   const prompt = `You are an expert travel planner building a detailed, realistic itinerary for a mobile travel app.
 
@@ -35,6 +81,7 @@ TRIP DETAILS:
 - Party: ${intent.party} | Budget: ${intent.budget} | Pace: ${intent.pace}
 - Interests: ${intent.rankedInterests.join(", ")}
 - Dates: ${intent.startDate ?? "flexible"} to ${intent.endDate ?? "flexible"}
+${personalizationBlock}
 
 ${hasClusters ? `CANDIDATE PLACES FROM GOOGLE PLACES (verified real venues with accurate coordinates):
 ${candidateList}

@@ -213,7 +213,7 @@ export default function TripDatesScreen() {
         <TouchableOpacity
           style={[shared.continueBtn, !canContinue && shared.continueBtnDisabled]}
           disabled={!canContinue}
-          onPress={() => navigation.navigate(flow === 'prebuilt' ? 'TripParty' : 'TripInterests')}
+          onPress={() => navigation.navigate(flow === 'prebuilt' ? 'TripParty' : 'TripPrompt')}
           activeOpacity={0.85}
         >
           <Text style={shared.continueBtnText}>Continue</Text>

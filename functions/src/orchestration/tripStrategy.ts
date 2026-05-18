@@ -63,6 +63,63 @@ const DEFAULT_BALANCE: TripStrategy["activityBalance"] = {
   wellness: 0.05,
 };
 
+function buildStrategyPrompt(intent: TripIntent): string {
+  const lines: string[] = [
+    `Generate a trip planning strategy for:`,
+    `Destination: ${intent.destination}${intent.country ? `, ${intent.country}` : ""}`,
+    `Duration: ${intent.durationDays} days | Party: ${intent.party} | Budget: ${intent.budget}`,
+    `Interests (ranked): ${intent.rankedInterests.join(", ")} | Pace: ${intent.pace}`,
+  ];
+
+  if (intent.tasteProfile) {
+    const tp = intent.tasteProfile;
+    const gemLevel = tp.hiddenGems > 0.6 ? "high" : tp.hiddenGems < 0.4 ? "low" : "medium";
+    const foodLevel = tp.foodie > 0.6 ? "food-focused" : tp.foodie < 0.4 ? "food as fuel" : "balanced food";
+    const adventureLevel = tp.adventure > 0.6 ? "outdoor/adventure emphasis" : tp.adventure < 0.4 ? "cultural/indoor emphasis" : "mixed activities";
+    lines.push(
+      `\nUser Travel Style:`,
+      `- Hidden gem preference: ${gemLevel} (${tp.hiddenGems.toFixed(2)}) — ${gemLevel === "high" ? "STRONGLY PREFER local, off-the-beaten-path, niche venues over tourist hotspots" : gemLevel === "low" ? "prefer well-known, top-rated, iconic venues" : "mix of popular and local spots"}`,
+      `- Food focus: ${foodLevel} (${tp.foodie.toFixed(2)})`,
+      `- Activity style: ${adventureLevel} (${tp.adventure.toFixed(2)})`,
+      `- Nightlife interest: ${tp.nightlife > 0.5 ? "include evening activities and nightlife" : "skip nightlife"} (${tp.nightlife.toFixed(2)})`,
+      `- Luxury level: ${tp.luxury > 0.6 ? "premium/upscale" : tp.luxury < 0.4 ? "budget-friendly/local" : "mid-range"} (${tp.luxury.toFixed(2)})`,
+    );
+    if (gemLevel === "high") {
+      lines.push(`- QUERY STRATEGY: Append "hidden gem", "local favorite", "off the beaten path", "locals only" to search queries`);
+    }
+  }
+
+  if (intent.derivedIntent) {
+    const di = intent.derivedIntent;
+    if (di.tripMood) lines.push(`\nTrip mood: ${di.tripMood}`);
+    if (di.themes?.length) lines.push(`Trip themes: ${di.themes.join(", ")}`);
+    if (di.avoid?.length) lines.push(`Trip avoids: ${di.avoid.join(", ")}`);
+  }
+
+  if (intent.includeActivities?.length) {
+    lines.push(`\nMust-include activities: ${intent.includeActivities.join(", ")} — prioritize search queries in these categories`);
+  }
+
+  if (intent.avoidActivities?.length) {
+    lines.push(`Activities to EXCLUDE entirely: ${intent.avoidActivities.join(", ")} — do NOT generate search queries for these categories`);
+  }
+
+  lines.push(
+    `\nRequirements:`,
+    `1. Identify the best neighborhoods/areas to focus on per day to minimize cross-city travel`,
+    `2. Create a catchy theme for each of the ${intent.durationDays} days`,
+    `3. Generate 12-18 specific Google Places search queries to find real venues. Include:`,
+    `   - Breakfast café searches (e.g. "best breakfast cafes in Shinjuku Tokyo")`,
+    `   - Lunch restaurant searches (e.g. "popular lunch spots in Harajuku Tokyo")`,
+    `   - Dinner restaurant searches matching budget (e.g. "best izakaya dinner Shibuya moderate price")`,
+    `   - Attraction searches per interest (e.g. "top art museums in Tokyo")`,
+    `   - Nightlife/shopping/wellness if relevant to interests`,
+    `   Make queries hyper-specific with neighborhood + city + category.`,
+  );
+
+  return lines.join("\n");
+}
+
 export async function generateTripStrategy(intent: TripIntent): Promise<TripStrategy> {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -77,21 +134,7 @@ export async function generateTripStrategy(intent: TripIntent): Promise<TripStra
     tool_choice: { type: "tool", name: "generate_strategy" },
     messages: [{
       role: "user",
-      content: `Generate a trip planning strategy for:
-Destination: ${intent.destination}${intent.country ? `, ${intent.country}` : ""}
-Duration: ${intent.durationDays} days | Party: ${intent.party} | Budget: ${intent.budget}
-Interests (ranked): ${intent.rankedInterests.join(", ")} | Pace: ${intent.pace}
-
-Requirements:
-1. Identify the best neighborhoods/areas to focus on per day to minimize cross-city travel
-2. Create a catchy theme for each of the ${intent.durationDays} days
-3. Generate 12-18 specific Google Places search queries to find real venues. Include:
-   - Breakfast café searches (e.g. "best breakfast cafes in Shinjuku Tokyo")
-   - Lunch restaurant searches (e.g. "popular lunch spots in Harajuku Tokyo")
-   - Dinner restaurant searches matching budget (e.g. "best izakaya dinner Shibuya moderate price")
-   - Attraction searches per interest (e.g. "top art museums in Tokyo")
-   - Nightlife/shopping/wellness if relevant to interests
-   Make queries hyper-specific with neighborhood + city + category.`,
+      content: buildStrategyPrompt(intent),
     }],
   });
 

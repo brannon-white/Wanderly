@@ -34,6 +34,7 @@ import AllDestinationsScreen from '@/components/AllDestinationsScreen';
 import DestinationScreen from '@/components/DestinationScreen';
 import TripPartyScreen from '@/components/tripPlanning/TripPartyScreen';
 import TripDatesScreen from '@/components/tripPlanning/TripDatesScreen';
+import TripPromptScreen from '@/components/tripPlanning/TripPromptScreen';
 import TripInterestsScreen from '@/components/tripPlanning/TripInterestsScreen';
 import TripBudgetScreen from '@/components/tripPlanning/TripBudgetScreen';
 import TripReviewScreen from '@/components/tripPlanning/TripReviewScreen';
@@ -61,6 +62,7 @@ export type RootStackParamList = {
   SearchScreen: undefined;
   TripParty: undefined;
   TripDates: undefined;
+  TripPrompt: undefined;
   TripInterests: undefined;
   TripBudget: undefined;
   TripReview: undefined;
@@ -161,7 +163,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     async function checkFlags() {
-      const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
+const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
 
       if (hasSeenOnboarding !== 'true') {
         setInitialRoute('OnboardingFirst');
@@ -262,6 +264,7 @@ export default function RootLayout() {
                 <Stack.Screen name="ArticleDetail" component={ArticleDetailScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripParty" component={TripPartyScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripDates" component={TripDatesScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="TripPrompt" component={TripPromptScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripInterests" component={TripInterestsScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripBudget" component={TripBudgetScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripReview" component={TripReviewScreen} options={{ headerShown: false }} />

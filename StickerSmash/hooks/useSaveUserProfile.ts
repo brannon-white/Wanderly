@@ -3,6 +3,7 @@ import { getAuth } from '@react-native-firebase/auth';
 import storage from '@react-native-firebase/storage';
 import { cacheGet, cacheSet } from '@/utils/cache';
 import { profileCacheKey } from '@/utils/getUserProfile';
+import type { TasteProfile } from '@/types/itinerary';
 
 export async function saveUserProfile({
   avatarBase64,
@@ -11,6 +12,7 @@ export async function saveUserProfile({
   phone,
   activityPreferences,
   foodPreferences,
+  tasteProfile,
 }: {
   avatarBase64: string | null;
   fullName: string;
@@ -18,6 +20,7 @@ export async function saveUserProfile({
   phone: string;
   activityPreferences: string[];
   foodPreferences: string[];
+  tasteProfile?: TasteProfile;
 }) {
   try {
     const user = getAuth().currentUser;
@@ -35,7 +38,7 @@ export async function saveUserProfile({
       }
     }
 
-    const profileData = {
+    const profileData: Record<string, any> = {
       uid: user.uid,
       fullName,
       country: typeof country?.name === 'string' ? country.name : '',
@@ -46,6 +49,10 @@ export async function saveUserProfile({
       activityPreferences,
       foodPreferences,
     };
+
+    if (tasteProfile) {
+      profileData.tasteProfile = tasteProfile;
+    }
 
     await firestore().collection('users').doc(user.uid).set({
       ...profileData,

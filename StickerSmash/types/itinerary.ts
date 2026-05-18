@@ -39,6 +39,27 @@ export type ItinerarySource =
   | 'manual'
   | 'demo';
 
+export interface TasteProfile {
+  pace: number;                // 0=relaxed, 1=packed
+  foodie: number;              // 0=fuel only, 1=food-first
+  nature: number;              // 0=urban, 1=nature-first
+  nightlife: number;           // 0=early nights, 1=evening scene
+  hiddenGems: number;          // 0=famous spots, 1=off the beaten path
+  touristTolerance: number;    // 0=avoids crowds, 1=fine with tourists
+  walkingTolerance: number;    // 0=minimize walking, 1=happy to walk
+  structurePreference: number; // 0=spontaneous, 1=fully planned
+  adventure: number;           // 0=cultural/dining, 1=outdoor/physical
+  luxury: number;              // 0=budget local, 1=premium comfort
+}
+
+export interface TripDerivedIntent {
+  tripMood?: string;
+  pace?: string;
+  themes?: string[];
+  avoid?: string[];
+  energyLevel?: string;
+}
+
 export interface GenerateItineraryRequest {
   destinationId: string;
   destinationName: string;
@@ -48,6 +69,11 @@ export interface GenerateItineraryRequest {
   endDate: string | null;
   interests: string[];
   budget: TripBudget;
+  tasteProfile?: TasteProfile;
+  tripPrompt?: string;
+  derivedIntent?: TripDerivedIntent;
+  includeActivities?: string[];
+  avoidActivities?: string[];
 }
 
 export interface ItineraryCoordinates {

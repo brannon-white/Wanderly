@@ -59,22 +59,65 @@ function popularityScore(place: PlaceCandidate): number {
   return Math.min(1, place.reviewCount / 5000);
 }
 
+const TOURIST_TYPES = ["tourist_attraction", "point_of_interest"];
+
+function isTouristHotspot(place: PlaceCandidate): boolean {
+  return place.types.some((t) => TOURIST_TYPES.includes(t)) && place.reviewCount > 3000;
+}
+
+function tasteProfileMultiplier(place: PlaceCandidate, intent: TripIntent): number {
+  if (!intent.tasteProfile) return 1;
+  const tp = intent.tasteProfile;
+  let multiplier = 1;
+
+  // Hidden gems preference: downweight tourist hotspots
+  if (isTouristHotspot(place)) {
+    multiplier *= 1 - (tp.hiddenGems - 0.5) * 0.6;
+  } else {
+    multiplier *= 1 + (tp.hiddenGems - 0.5) * 0.4;
+  }
+
+  return Math.max(0.1, multiplier);
+}
+
+function isAvoidedCategory(place: PlaceCandidate, avoidActivities?: string[]): boolean {
+  if (!avoidActivities || avoidActivities.length === 0) return false;
+  const avoidLower = avoidActivities.map((a) => a.toLowerCase());
+  return place.types.some((t) =>
+    avoidLower.some((a) => t.toLowerCase().includes(a) || a.includes(t.toLowerCase()))
+  );
+}
+
+function includeBoost(place: PlaceCandidate, includeActivities?: string[]): number {
+  if (!includeActivities || includeActivities.length === 0) return 1;
+  const includeLower = includeActivities.map((a) => a.toLowerCase());
+  const matches = place.types.some((t) =>
+    includeLower.some((a) => t.toLowerCase().includes(a) || a.includes(t.toLowerCase()))
+  );
+  return matches ? 1.5 : 1;
+}
+
 export function rankRecommendations(
   candidates: PlaceCandidate[],
   intent: TripIntent
 ): RankedPlace[] {
   return candidates
+    .filter((place) => !isAvoidedCategory(place, intent.avoidActivities))
     .map((place) => {
       const interestMatch = interestMatchScore(place, intent.rankedInterests);
       const rating = ratingScore(place);
       const budget = budgetScore(place, intent.budget);
       const popularity = popularityScore(place);
 
-      const score =
+      const baseScore =
         interestMatch * 0.35 +
         rating * 0.30 +
         budget * 0.20 +
         popularity * 0.15;
+
+      const score = baseScore
+        * tasteProfileMultiplier(place, intent)
+        * includeBoost(place, intent.includeActivities);
 
       return {
         ...place,

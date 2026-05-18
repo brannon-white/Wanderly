@@ -23,6 +23,7 @@ import { generateItinerary } from '@/services/generateItinerary';
 import { requestPermissionAndSaveToken } from '@/services/notifications';
 import { getUsageStatus } from '@/services/purchases';
 import PaywallModal from '@/components/PaywallModal';
+import { getUserProfile } from '@/utils/getUserProfile';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 
@@ -62,6 +63,9 @@ export default function TripReviewScreen() {
     endDate,
     interests,
     budget,
+    tripPrompt,
+    includeActivities,
+    avoidActivities,
     reset,
   } = useTripPlanning();
   const isEditing = !!editingTripId;
@@ -114,6 +118,10 @@ export default function TripReviewScreen() {
     // Request notification permission so we can alert them when it's ready
     await requestPermissionAndSaveToken().catch(() => {});
 
+    // Load user taste profile to include in generation request
+    const uid = currentUser.uid;
+    const userProfile = await getUserProfile(uid).catch(() => null);
+
     // Capture values now — they'll be valid in the closure even after navigation
     const genPayload = {
       destinationId,
@@ -122,8 +130,12 @@ export default function TripReviewScreen() {
       party,
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
-      interests: [...interests],
+      interests: includeActivities.length > 0 ? [...includeActivities] : [...interests],
       budget,
+      tasteProfile: (userProfile as any)?.tasteProfile,
+      tripPrompt: tripPrompt || undefined,
+      includeActivities: includeActivities.length > 0 ? [...includeActivities] : undefined,
+      avoidActivities: avoidActivities.length > 0 ? [...avoidActivities] : undefined,
     };
     const savedHeroImage = templateHeroImage;
     const savedParty = party;
@@ -268,24 +280,58 @@ export default function TripReviewScreen() {
 
         <SectionDivider />
 
+        {tripPrompt ? (
+          <>
+            <SectionDivider />
+            <View style={styles.section}>
+              <View style={styles.sectionRow}>
+                <View style={styles.sectionIcon}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={18} color={TEXT_GRAY} />
+                </View>
+                <Text style={styles.sectionLabel}>Trip Vibe</Text>
+                <View style={{ flex: 1 }} />
+                <EditIcon onPress={() => navigation.navigate('TripPrompt')} />
+              </View>
+              <Text style={[styles.sectionValue, { fontStyle: 'italic' }]}>"{tripPrompt}"</Text>
+            </View>
+          </>
+        ) : null}
+
+        <SectionDivider />
+
         <View style={styles.section}>
           <View style={styles.sectionRow}>
             <View style={styles.sectionIcon}>
-              <Ionicons name="star-outline" size={18} color={TEXT_GRAY} />
+              <Ionicons name="options-outline" size={18} color={TEXT_GRAY} />
             </View>
-            <Text style={styles.sectionLabel}>
-              {interests.length} {interests.length === 1 ? 'Interest' : 'Interests'}
-            </Text>
+            <Text style={styles.sectionLabel}>Trip Constraints</Text>
             <View style={{ flex: 1 }} />
             <EditIcon onPress={() => navigation.navigate('TripInterests')} />
           </View>
-          <View style={styles.pillsRow}>
-            {interests.map(i => (
-              <View key={i} style={styles.pill}>
-                <Text style={styles.pillText}>{i}</Text>
-              </View>
-            ))}
-          </View>
+          {includeActivities.length === 0 && avoidActivities.length === 0 ? (
+            <Text style={[styles.sectionValue, { color: TEXT_GRAY }]}>None set</Text>
+          ) : (
+            <>
+              {includeActivities.length > 0 && (
+                <View style={styles.pillsRow}>
+                  {includeActivities.map(i => (
+                    <View key={i} style={[styles.pill, { borderColor: '#22A67A', backgroundColor: '#EDFAF5' }]}>
+                      <Text style={[styles.pillText, { color: '#22A67A' }]}>{i}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {avoidActivities.length > 0 && (
+                <View style={[styles.pillsRow, includeActivities.length > 0 ? { marginTop: 8 } : {}]}>
+                  {avoidActivities.map(a => (
+                    <View key={a} style={[styles.pill, { borderColor: '#E04B4B', backgroundColor: '#FFF0F0' }]}>
+                      <Text style={[styles.pillText, { color: '#E04B4B' }]}>✕ {a}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </>
+          )}
         </View>
 
         <SectionDivider />

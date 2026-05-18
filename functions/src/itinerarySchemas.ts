@@ -1,5 +1,26 @@
 import { z } from "zod";
 
+const tasteProfileSchema = z.object({
+  pace: z.number().min(0).max(1),
+  foodie: z.number().min(0).max(1),
+  nature: z.number().min(0).max(1),
+  nightlife: z.number().min(0).max(1),
+  hiddenGems: z.number().min(0).max(1),
+  touristTolerance: z.number().min(0).max(1),
+  walkingTolerance: z.number().min(0).max(1),
+  structurePreference: z.number().min(0).max(1),
+  adventure: z.number().min(0).max(1),
+  luxury: z.number().min(0).max(1),
+}).optional();
+
+const tripDerivedIntentSchema = z.object({
+  tripMood: z.string().optional(),
+  pace: z.string().optional(),
+  themes: z.array(z.string()).optional(),
+  avoid: z.array(z.string()).optional(),
+  energyLevel: z.string().optional(),
+}).optional();
+
 export const generateItineraryRequestSchema = z.object({
   destinationId: z.string().min(1),
   destinationName: z.string().min(1),
@@ -9,7 +30,15 @@ export const generateItineraryRequestSchema = z.object({
   endDate: z.string().nullable(),
   interests: z.array(z.string()).default([]),
   budget: z.string().min(1),
+  tasteProfile: tasteProfileSchema,
+  tripPrompt: z.string().optional(),
+  derivedIntent: tripDerivedIntentSchema,
+  includeActivities: z.array(z.string()).optional(),
+  avoidActivities: z.array(z.string()).optional(),
 });
+
+export type TasteProfile = NonNullable<z.infer<typeof tasteProfileSchema>>;
+export type TripDerivedIntent = NonNullable<z.infer<typeof tripDerivedIntentSchema>>;
 
 export const itineraryTransportOptionSchema = z.object({
   mode: z.string().min(1),

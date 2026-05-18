@@ -46,6 +46,7 @@ import SmartBanner from './SmartBanner';
 import DayOptimizeBar from './DayOptimizeBar';
 import { editItineraryWithLanguage } from '@/services/regenerateItinerary';
 import { analyzeDay, type ActivityInsight } from '@/utils/itineraryInsights';
+import ItineraryRefinementBar from './ItineraryRefinementBar';
 
 let MapsModule:
   | {
@@ -834,6 +835,14 @@ export default function ItineraryScreen() {
             committedTrip={committedTrip}
           />
         </View>
+      )}
+
+      {!isBrowsing && id && (
+        <ItineraryRefinementBar
+          itineraryId={id}
+          onUpdated={(updated) => setRemoteItinerary(updated)}
+          onPaywallNeeded={() => setShowRegenPaywall(true)}
+        />
       )}
 
       {!isBrowsing && (

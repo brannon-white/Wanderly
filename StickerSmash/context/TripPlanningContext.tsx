@@ -23,6 +23,9 @@ interface TripPlanningState {
   endDate: Date | null;
   interests: string[];
   budget: string;
+  tripPrompt: string;
+  includeActivities: string[];
+  avoidActivities: string[];
 }
 
 interface TripPlanningContextType extends TripPlanningState {
@@ -38,6 +41,9 @@ interface TripPlanningContextType extends TripPlanningState {
   setEndDate: (date: Date | null) => void;
   setInterests: (interests: string[]) => void;
   setBudget: (budget: string) => void;
+  setTripPrompt: (prompt: string) => void;
+  setIncludeActivities: (activities: string[]) => void;
+  setAvoidActivities: (activities: string[]) => void;
   reset: () => void;
 }
 
@@ -54,6 +60,9 @@ const defaultState: TripPlanningState = {
   endDate: null,
   interests: [],
   budget: '',
+  tripPrompt: '',
+  includeActivities: [],
+  avoidActivities: [],
 };
 
 const TripPlanningContext = createContext<TripPlanningContextType>({
@@ -70,6 +79,9 @@ const TripPlanningContext = createContext<TripPlanningContextType>({
   setEndDate: () => {},
   setInterests: () => {},
   setBudget: () => {},
+  setTripPrompt: () => {},
+  setIncludeActivities: () => {},
+  setAvoidActivities: () => {},
   reset: () => {},
 });
 
@@ -86,8 +98,11 @@ export function TripPlanningProvider({ children }: { children: React.ReactNode }
   const setParty = (party: string) => setState(s => ({ ...s, party }));
   const setStartDate = (startDate: Date | null) => setState(s => ({ ...s, startDate }));
   const setEndDate = (endDate: Date | null) => setState(s => ({ ...s, endDate }));
-  const setInterests = (interests: string[]) => setState(s => ({ ...s, interests }));
+  const setInterests = (interests: string[]) => setState(s => ({ ...s, interests, includeActivities: interests }));
   const setBudget = (budget: string) => setState(s => ({ ...s, budget }));
+  const setTripPrompt = (tripPrompt: string) => setState(s => ({ ...s, tripPrompt }));
+  const setIncludeActivities = (includeActivities: string[]) => setState(s => ({ ...s, includeActivities, interests: includeActivities }));
+  const setAvoidActivities = (avoidActivities: string[]) => setState(s => ({ ...s, avoidActivities }));
   const reset = () => setState(defaultState);
 
   return (
@@ -95,7 +110,9 @@ export function TripPlanningProvider({ children }: { children: React.ReactNode }
       value={{
         ...state,
         setFlow, setEditingTripId, setDestinationId, setDestination, setTemplateId, setTemplateTitle, setTemplateHeroImage,
-        setParty, setStartDate, setEndDate, setInterests, setBudget, reset,
+        setParty, setStartDate, setEndDate, setInterests, setBudget,
+        setTripPrompt, setIncludeActivities, setAvoidActivities,
+        reset,
       }}
     >
       {children}
