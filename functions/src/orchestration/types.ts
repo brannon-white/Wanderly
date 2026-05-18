@@ -1,3 +1,24 @@
+export interface TasteProfile {
+  pace: number;
+  foodie: number;
+  nature: number;
+  nightlife: number;
+  hiddenGems: number;
+  touristTolerance: number;
+  walkingTolerance: number;
+  structurePreference: number;
+  adventure: number;
+  luxury: number;
+}
+
+export interface TripDerivedIntent {
+  tripMood?: string;
+  pace?: string;
+  themes?: string[];
+  avoid?: string[];
+  energyLevel?: string;
+}
+
 export interface TripIntent {
   destination: string;
   country?: string;
@@ -9,6 +30,11 @@ export interface TripIntent {
   pace: "relaxed" | "balanced" | "packed";
   startDate?: string | null;
   endDate?: string | null;
+  tasteProfile?: TasteProfile;
+  tripPrompt?: string;
+  derivedIntent?: TripDerivedIntent;
+  includeActivities?: string[];
+  avoidActivities?: string[];
 }
 
 export interface TripStrategy {

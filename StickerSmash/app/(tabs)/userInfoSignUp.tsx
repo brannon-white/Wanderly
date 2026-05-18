@@ -154,16 +154,20 @@ onPress={async () => {
     return;
   }
 
-  const activityPreferences = await getOnboardingStepData('travel');
+  const travelData = await getOnboardingStepData('travel');
   const foodPreferences = await getOnboardingStepData('food');
+
+  // travelData is now a TasteProfile object from swipe onboarding
+  const tasteProfile = travelData && !Array.isArray(travelData) ? travelData : undefined;
 
   const profile = {
     avatarBase64,
     fullName,
     country,
     phone,
-    activityPreferences: activityPreferences || [],
+    activityPreferences: [],
     foodPreferences: foodPreferences || [],
+    tasteProfile,
   };
 
   await saveUserProfile(profile);
