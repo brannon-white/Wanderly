@@ -5,8 +5,8 @@ const PURPLE = '#6A62B7';
 export const ICON_COLOR = '#6A62B7';
 export const ICON_COLOR_DIMMED = '#ccc';
 
-export const makeScrollContentStyle = (bottomInset: number, hasCta = false) => ({
-  paddingBottom: bottomInset + (hasCta ? 110 : 24),
+export const makeScrollContentStyle = (bottomInset: number, hasCta = false, hasAiBar = false) => ({
+  paddingBottom: bottomInset + (hasCta ? 110 : hasAiBar ? 80 : 24),
 });
 
 export const styles = StyleSheet.create({
@@ -243,42 +243,17 @@ export const styles = StyleSheet.create({
     gap: 8,
   },
 
-  fab: {
+  actionsBtn: {
     position: 'absolute',
-    right: 20,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#6A62B7',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-
-  fabDone: {
-    backgroundColor: '#3D9970',
-  },
-
-  replaceBtn: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#6A62B7',
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(30,20,60,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
   },
 
   // ── Plan This Trip CTA bar ────────────────────────────────────────────
@@ -310,6 +285,15 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 20,
     paddingHorizontal: 16,
+  },
+
+  activityRowDragging: {
+    opacity: 0.85,
+    shadowColor: '#6A62B7',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 10,
   },
 
   timelineCol: {
@@ -409,5 +393,49 @@ export const styles = StyleSheet.create({
   infoIcon: {
     marginRight: 8,
     fontSize: 16,
+  },
+
+  // ── AI Assistant Bar ──────────────────────────────────────────────────
+  aiBarWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  aiBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#EDE9F5',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  aiBarInput: {
+    flex: 1,
+    height: 40,
+    backgroundColor: '#F5F3FF',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    fontSize: 14,
+    color: '#1A1A2E',
+    fontFamily: 'SourceSans3-Regular',
+  },
+  aiBarSend: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#6A62B7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiBarSendDisabled: {
+    backgroundColor: '#C4BFDF',
   },
 });

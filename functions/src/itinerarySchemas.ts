@@ -35,6 +35,7 @@ export const itineraryActivitySchema = z.object({
   mapUrl: z.string().optional(),
   coordinates: itineraryCoordinatesSchema.optional(),
   transport: z.array(itineraryTransportOptionSchema).default([]),
+  locked: z.boolean().optional(),
 });
 
 export const itineraryDaySchema = z.object({
@@ -122,3 +123,34 @@ export type RegenerateActivityRequest = z.infer<
   typeof regenerateActivityRequestSchema
 >;
 export type RegenerateDayRequest = z.infer<typeof regenerateDayRequestSchema>;
+
+export const getSuggestedReplacementsRequestSchema = z.object({
+  itineraryId: z.string().min(1),
+  dayIndex: z.number().int().nonnegative(),
+  activityIndex: z.number().int().nonnegative(),
+  reason: z.string().optional(),
+  count: z.number().int().min(1).max(4).default(3),
+});
+
+export const confirmActivityReplacementRequestSchema = z.object({
+  itineraryId: z.string().min(1),
+  dayIndex: z.number().int().nonnegative(),
+  activityIndex: z.number().int().nonnegative(),
+  candidateActivity: itineraryActivitySchema,
+});
+
+export const editItineraryWithLanguageRequestSchema = z.object({
+  itineraryId: z.string().min(1),
+  message: z.string().min(1).max(500),
+});
+
+export const optimizeDayRequestSchema = z.object({
+  itineraryId: z.string().min(1),
+  dayIndex: z.number().int().nonnegative(),
+  mode: z.enum(["minimize_walking", "minimize_cost", "relax_mode", "maximize_sightseeing", "foodie_mode"]),
+});
+
+export type GetSuggestedReplacementsRequest = z.infer<typeof getSuggestedReplacementsRequestSchema>;
+export type ConfirmActivityReplacementRequest = z.infer<typeof confirmActivityReplacementRequestSchema>;
+export type EditItineraryWithLanguageRequest = z.infer<typeof editItineraryWithLanguageRequestSchema>;
+export type OptimizeDayRequest = z.infer<typeof optimizeDayRequestSchema>;

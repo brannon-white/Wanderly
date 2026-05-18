@@ -162,6 +162,44 @@ async function searchNearby(
   }
 }
 
+const CATEGORY_TYPES: Record<string, string[]> = {
+  food:       ["restaurant", "cafe", "bakery", "bar"],
+  restaurant: ["restaurant", "cafe", "bakery", "bar"],
+  culture:    ["museum", "art_gallery", "cultural_center", "church", "hindu_temple", "mosque", "synagogue"],
+  landmark:   ["tourist_attraction", "historical_landmark", "monument"],
+  nature:     ["park", "national_park", "botanical_garden", "beach"],
+  shopping:   ["shopping_mall", "market", "store", "department_store"],
+  nightlife:  ["night_club", "bar", "casino"],
+  wellness:   ["spa", "fitness_center", "yoga_studio"],
+  adventure:  ["tourist_attraction", "outdoor_activity", "amusement_park"],
+  hotel:      ["lodging", "hotel"],
+};
+
+const GENERAL_TYPES = [
+  "tourist_attraction", "restaurant", "cafe", "museum", "park",
+  "art_gallery", "night_club", "spa", "shopping_mall",
+];
+
+export async function searchNearbyForActivity(
+  lat: number,
+  lng: number,
+  category: string,
+  apiKey: string,
+  options: { hiddenGemMode?: boolean; radiusMeters?: number } = {}
+): Promise<PlaceCandidate[]> {
+  const { hiddenGemMode = false, radiusMeters = 1500 } = options;
+  const types = hiddenGemMode ? GENERAL_TYPES : (CATEGORY_TYPES[category.toLowerCase()] ?? GENERAL_TYPES);
+  const places = await searchNearby(lat, lng, types, apiKey, radiusMeters);
+
+  if (hiddenGemMode) {
+    return places
+      .filter((p) => p.reviewCount < 800 && p.rating >= 4.0)
+      .sort((a, b) => b.rating - a.rating);
+  }
+
+  return places.sort((a, b) => b.rating - a.rating);
+}
+
 export async function fetchNearbyForClusters(
   clusters: PlaceCluster[],
   apiKey: string

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,11 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
+  TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
+import BottomSheet from '@gorhom/bottom-sheet';
+import DraggableFlatList, { type RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { Image } from 'expo-image';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -33,10 +37,15 @@ import type { GeneratedItinerary, ItineraryActivity, ItineraryDay } from '@/type
 import { getAuth } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { searchPhoto } from '@/services/unsplash';
-import { regenerateActivity } from '@/services/regenerateItinerary';
 import ShareCard from './ShareCard';
 import { getUsageStatus } from '@/services/purchases';
 import PaywallModal from './PaywallModal';
+import ReplaceSuggestionsSheet, { type ActivityAction, type SheetTarget } from './ReplaceSuggestionsSheet';
+import ActivityActionsSheet from './ActivityActionsSheet';
+import SmartBanner from './SmartBanner';
+import DayOptimizeBar from './DayOptimizeBar';
+import { editItineraryWithLanguage } from '@/services/regenerateItinerary';
+import { analyzeDay, type ActivityInsight } from '@/utils/itineraryInsights';
 
 let MapsModule:
   | {
@@ -114,6 +123,7 @@ function StarRow({ rating }: { rating: number }) {
   );
 }
 
+
 interface ActivityCardProps {
   activity: ItineraryActivity;
   isLast: boolean;
@@ -124,12 +134,13 @@ interface ActivityCardProps {
   checkin?: string;
   checkout?: string;
   adults?: number;
-  showReplaceButton?: boolean;
-  onReplace?: () => void;
-  isReplacing?: boolean;
+  showActions?: boolean;
+  onShowActions?: () => void;
+  onLongPress?: () => void;
+  isDragging?: boolean;
 }
 
-function ActivityCard({ activity, isLast, nextActivity, imageUri, destinationName, country, checkin = '', checkout = '', adults = 2, showReplaceButton, onReplace, isReplacing }: ActivityCardProps) {
+function ActivityCard({ activity, isLast, nextActivity, imageUri, destinationName, country, checkin = '', checkout = '', adults = 2, showActions, onShowActions, onLongPress, isDragging }: ActivityCardProps) {
   const transportOptions = Array.isArray(activity.transport) ? activity.transport : [];
   const catKey = (activity.category ?? '').toLowerCase();
   const catIcon = CATEGORY_ICONS[catKey] ?? 'location-outline';
@@ -140,8 +151,15 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, destinationNam
     );
   };
 
+
   return (
-    <View style={styles.activityRow}>
+    <TouchableOpacity
+      style={[styles.activityRow, isDragging && styles.activityRowDragging]}
+      onLongPress={onLongPress}
+      delayLongPress={300}
+      activeOpacity={onLongPress ? 0.9 : 1}
+      disabled={!onLongPress}
+    >
       {/* Timeline column */}
       <View style={styles.timelineCol}>
         <View style={styles.timelineIconCircle}>
@@ -161,6 +179,15 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, destinationNam
             contentFit="cover"
             transition={200}
           />
+          {showActions && (
+            <TouchableOpacity
+              style={styles.actionsBtn}
+              onPress={onShowActions}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="ellipsis-horizontal" size={14} color="#fff" />
+            </TouchableOpacity>
+          )}
 
           <View style={styles.itemDetails}>
             <Text style={styles.itemTitle}>{activity.name}</Text>
@@ -225,17 +252,6 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, destinationNam
             })() : null}
           </View>
         </View>
-          {showReplaceButton && (
-            <TouchableOpacity
-              style={styles.replaceBtn}
-              onPress={onReplace}
-              disabled={isReplacing}
-            >
-              {isReplacing
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Ionicons name="refresh-outline" size={16} color="#fff" />}
-            </TouchableOpacity>
-          )}
         </View>
 
         {/* Transport strip — tappable to open directions to the next activity */}
@@ -270,7 +286,7 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, destinationNam
           </View>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -322,9 +338,12 @@ export default function ItineraryScreen() {
   const [sharing, setSharing] = useState(false);
   const [activityImages, setActivityImages] = useState<Record<string, string>>({});
   const loadedImageIds = useRef(new Set<string>());
-  const [replacingActivityId, setReplacingActivityId] = useState<string | null>(null);
-  const [editMode, setEditMode] = useState(false);
   const [showRegenPaywall, setShowRegenPaywall] = useState(false);
+  const [sheetTarget, setSheetTarget] = useState<SheetTarget | null>(null);
+  const sheetRef = useRef<BottomSheet>(null);
+  const [actionsSheetActivity, setActionsSheetActivity] = useState<{ activity: ItineraryActivity; dayIndex: number; activityIndex: number } | null>(null);
+  const [aiBarMessage, setAiBarMessage] = useState('');
+  const [aiBarLoading, setAiBarLoading] = useState(false);
   const shareCardRef = useRef<View>(null);
   const activities = itinerary?.days[selectedDay]?.activities ?? [];
   const MapView = MapsModule?.default;
@@ -434,8 +453,6 @@ export default function ItineraryScreen() {
     return () => { cancelled = true; };
   }, [itinerary?.id, selectedDay]);
 
-  useEffect(() => { setEditMode(false); }, [selectedDay]);
-
   // Resolve hero image — fetch from Unsplash if Gemini generated a placeholder
   useEffect(() => {
     if (!itinerary) return;
@@ -467,15 +484,43 @@ export default function ItineraryScreen() {
     navigation.navigate('TripDates');
   };
 
-  const handleToggleEditMode = () => setEditMode((prev) => !prev);
-
   const handleDeleteTrip = () => {
     if (committedTripId) removeTrip(committedTripId);
     navigation.navigate('Index' as any, { screen: 'MyTrips' } as any);
   };
 
-  const handleReplaceActivity = async (dayIndex: number, activityIndex: number, activityId: string) => {
-    if (!itinerary || !id || replacingActivityId) return;
+  const handleRemoveActivity = useCallback(async (dayIndex: number, activityIndex: number) => {
+    if (!itinerary || !id) return;
+    const uid = getAuth().currentUser?.uid;
+    if (!uid) return;
+    const updatedDays = itinerary.days.map((d, di) => {
+      if (di !== dayIndex) return d;
+      return { ...d, activities: d.activities.filter((_, ai) => ai !== activityIndex) };
+    });
+    setRemoteItinerary({ ...itinerary, days: updatedDays });
+    try {
+      await firestore()
+        .collection('users').doc(uid)
+        .collection('itineraries').doc(id)
+        .update({ days: updatedDays, updatedAt: firestore.FieldValue.serverTimestamp() });
+    } catch (err) {
+      setRemoteItinerary(itinerary);
+      Alert.alert('Could not remove activity', err instanceof Error ? err.message : 'Please try again.');
+    }
+  }, [itinerary, id]);
+
+  const handleAction = useCallback(async (dayIndex: number, activityIndex: number, activity: ItineraryActivity, action: ActivityAction) => {
+    if (action === 'remove') {
+      Alert.alert(
+        'Remove Activity',
+        `Remove "${activity.name}" from your itinerary?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Remove', style: 'destructive', onPress: () => handleRemoveActivity(dayIndex, activityIndex) },
+        ]
+      );
+      return;
+    }
 
     const usage = await getUsageStatus().catch(() => null);
     if (usage && !usage.isPro && usage.regensLeft <= 0) {
@@ -483,20 +528,54 @@ export default function ItineraryScreen() {
       return;
     }
 
-    setReplacingActivityId(activityId);
+    setSheetTarget({ dayIndex, activityIndex, activityName: activity.name, action });
+    sheetRef.current?.expand();
+  }, [handleRemoveActivity]);
+
+  const handleConfirmed = useCallback((updatedItinerary: GeneratedItinerary) => {
+    setRemoteItinerary(updatedItinerary);
+    setSheetTarget(null);
+  }, []);
+
+  const handleDragEnd = useCallback(async ({ data }: { data: ItineraryActivity[] }) => {
+    if (!itinerary || !id) return;
+    const uid = getAuth().currentUser?.uid;
+    if (!uid) return;
+    const updatedDays = itinerary.days.map((d, di) => di === selectedDay ? { ...d, activities: data } : d);
+    setRemoteItinerary({ ...itinerary, days: updatedDays });
     try {
-      const result = await regenerateActivity({ itineraryId: id, dayIndex, activityIndex });
-      setRemoteItinerary(result.itinerary as GeneratedItinerary);
+      await firestore()
+        .collection('users').doc(uid)
+        .collection('itineraries').doc(id)
+        .update({ days: updatedDays, updatedAt: firestore.FieldValue.serverTimestamp() });
+    } catch {
+      setRemoteItinerary(itinerary);
+    }
+  }, [itinerary, id, selectedDay]);
+
+  const handleAiBarSubmit = useCallback(async () => {
+    const message = aiBarMessage.trim();
+    if (!message || !id || aiBarLoading) return;
+    const usage = await getUsageStatus().catch(() => null);
+    if (usage && !usage.isPro && usage.regensLeft <= 0) {
+      setShowRegenPaywall(true);
+      return;
+    }
+    setAiBarLoading(true);
+    setAiBarMessage('');
+    try {
+      const { itinerary: updated } = await editItineraryWithLanguage({ itineraryId: id, message });
+      setRemoteItinerary(updated);
     } catch (err) {
       if (err instanceof Error && /regen_limit_reached/i.test(err.message)) {
         setShowRegenPaywall(true);
-        return;
+      } else {
+        Alert.alert('Could not apply changes', err instanceof Error ? err.message : 'Please try again.');
       }
-      Alert.alert('Could not replace activity', err instanceof Error ? err.message : 'Please try again.');
     } finally {
-      setReplacingActivityId(null);
+      setAiBarLoading(false);
     }
-  };
+  }, [aiBarMessage, id, aiBarLoading]);
 
   const handleShare = async () => {
     if (!itinerary || sharing) return;
@@ -513,6 +592,11 @@ export default function ItineraryScreen() {
       setSharing(false);
     }
   };
+
+  const dayInsights = useMemo((): ActivityInsight[] => {
+    if (isBrowsing || !activities.length) return [];
+    return analyzeDay(activities);
+  }, [activities, isBrowsing]);
 
   const mapRegion = useMemo(() => {
     const coords = activities
@@ -569,7 +653,7 @@ export default function ItineraryScreen() {
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
       <ScrollView
         style={styles.itineraryContainer}
-        contentContainerStyle={makeScrollContentStyle(insets.bottom, isBrowsing)}
+        contentContainerStyle={makeScrollContentStyle(insets.bottom, isBrowsing, !isBrowsing)}
         showsVerticalScrollIndicator={false}
       >
         {/* Hero */}
@@ -666,36 +750,71 @@ export default function ItineraryScreen() {
           <Text style={styles.dayTitle}>{itinerary.days[selectedDay].title}</Text>
         ) : null}
 
+        {/* Smart insights (info-level shown at top of day) */}
+        {dayInsights.filter((ins) => ins.afterIndex === -1).map((ins, i) => (
+          <SmartBanner
+            key={`top-insight-${i}`}
+            insight={ins}
+            onAction={(actionType) => {
+              if (actionType === 'reduce_walking' && id) {
+                handleAction(selectedDay, 0, activities[0], 'replace');
+              }
+            }}
+          />
+        ))}
+
+        {/* Day optimize bar */}
+        {!isBrowsing && id && (
+          <DayOptimizeBar
+            itineraryId={id}
+            dayIndex={selectedDay}
+            onOptimized={(updated) => setRemoteItinerary(updated)}
+            onPaywallNeeded={() => setShowRegenPaywall(true)}
+          />
+        )}
+
         {/* Activities */}
         <View style={styles.itineraryItems}>
-          {activities.map((activity, idx) => (
-            <ActivityCard
-              key={activity.id}
-              activity={activity}
-              isLast={idx === activities.length - 1}
-              nextActivity={activities[idx + 1]}
-              imageUri={activityImages[activity.id]}
-              destinationName={itinerary?.destinationName}
-              country={itinerary?.country}
-              checkin={committedTrip ? new Date(committedTrip.startDate).toISOString().slice(0, 10) : ''}
-              checkout={committedTrip ? new Date(committedTrip.endDate).toISOString().slice(0, 10) : ''}
-              adults={partyToAdults(committedTrip?.party ?? itinerary?.travelerType)}
-              showReplaceButton={editMode && !isBrowsing}
-              onReplace={!isBrowsing ? () => handleReplaceActivity(selectedDay, idx, activity.id) : undefined}
-              isReplacing={replacingActivityId === activity.id}
-            />
-          ))}
+          <DraggableFlatList
+            data={activities}
+            keyExtractor={(item) => item.id}
+            scrollEnabled={false}
+            onDragEnd={!isBrowsing ? handleDragEnd : undefined}
+            activationDistance={!isBrowsing ? 20 : 999}
+            renderItem={({ item, getIndex, drag, isActive }: RenderItemParams<ItineraryActivity>) => {
+              const idx = getIndex() ?? 0;
+              const locked = item.locked;
+              const betweenInsights = dayInsights.filter((ins) => ins.afterIndex === idx);
+              return (
+                <ScaleDecorator activeScale={1.02}>
+                  <ActivityCard
+                    activity={item}
+                    isLast={idx === activities.length - 1}
+                    nextActivity={activities[idx + 1]}
+                    imageUri={activityImages[item.id]}
+                    destinationName={itinerary?.destinationName}
+                    country={itinerary?.country}
+                    checkin={committedTrip ? new Date(committedTrip.startDate).toISOString().slice(0, 10) : ''}
+                    checkout={committedTrip ? new Date(committedTrip.endDate).toISOString().slice(0, 10) : ''}
+                    adults={partyToAdults(committedTrip?.party ?? itinerary?.travelerType)}
+                    showActions={!isBrowsing}
+                    onShowActions={() => setActionsSheetActivity({ activity: item, dayIndex: selectedDay, activityIndex: idx })}
+                    onLongPress={!isBrowsing && !locked ? drag : undefined}
+                    isDragging={isActive}
+                  />
+                  {betweenInsights.map((ins, i) => (
+                    <SmartBanner
+                      key={`insight-${idx}-${i}`}
+                      insight={ins}
+                      onAction={() => {}}
+                    />
+                  ))}
+                </ScaleDecorator>
+              );
+            }}
+          />
         </View>
       </ScrollView>
-
-      {!isBrowsing && (
-        <TouchableOpacity
-          style={[styles.fab, editMode && styles.fabDone, { bottom: insets.bottom + 24 }]}
-          onPress={handleToggleEditMode}
-        >
-          <Ionicons name={editMode ? 'checkmark' : 'pencil'} size={22} color="#fff" />
-        </TouchableOpacity>
-      )}
 
       {isBrowsing && (
         <View style={[styles.ctaBar, { paddingBottom: insets.bottom + 16 }]}>
@@ -717,12 +836,63 @@ export default function ItineraryScreen() {
         </View>
       )}
 
+      {!isBrowsing && (
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.aiBarWrapper}
+        >
+          <View style={[styles.aiBar, { paddingBottom: insets.bottom > 0 ? insets.bottom : 12 }]}>
+            <TextInput
+              style={styles.aiBarInput}
+              placeholder="Ask Wanderly..."
+              placeholderTextColor="#AAA"
+              value={aiBarMessage}
+              onChangeText={setAiBarMessage}
+              onSubmitEditing={handleAiBarSubmit}
+              returnKeyType="send"
+              editable={!aiBarLoading}
+            />
+            <TouchableOpacity
+              style={[styles.aiBarSend, (!aiBarMessage.trim() || aiBarLoading) && styles.aiBarSendDisabled]}
+              onPress={handleAiBarSubmit}
+              disabled={!aiBarMessage.trim() || aiBarLoading}
+            >
+              {aiBarLoading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Ionicons name="arrow-up" size={18} color="#fff" />}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      )}
+
+      <ActivityActionsSheet
+        activity={actionsSheetActivity?.activity ?? null}
+        visible={actionsSheetActivity !== null}
+        onAction={(action) => {
+          if (!actionsSheetActivity) return;
+          handleAction(actionsSheetActivity.dayIndex, actionsSheetActivity.activityIndex, actionsSheetActivity.activity, action);
+          setActionsSheetActivity(null);
+        }}
+        onDismiss={() => setActionsSheetActivity(null)}
+      />
+
       <PaywallModal
         visible={showRegenPaywall}
         reason="regen"
         onDismiss={() => setShowRegenPaywall(false)}
         onSuccess={() => setShowRegenPaywall(false)}
       />
+
+      {!isBrowsing && id && (
+        <ReplaceSuggestionsSheet
+          itineraryId={id}
+          target={sheetTarget}
+          onConfirmed={handleConfirmed}
+          onDismiss={() => setSheetTarget(null)}
+          sheetRef={sheetRef}
+          onPaywallNeeded={() => setShowRegenPaywall(true)}
+        />
+      )}
     </View>
   );
 }
