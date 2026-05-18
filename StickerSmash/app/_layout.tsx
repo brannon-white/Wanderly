@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, View, Text } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import messaging from '@react-native-firebase/messaging';
 import { useNavigationContainerRef } from 'expo-router';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -216,6 +217,7 @@ export default function RootLayout() {
   }
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <DemoProvider>
       <SavedProvider>
         <MyTripsProvider>
@@ -270,5 +272,6 @@ export default function RootLayout() {
         </MyTripsProvider>
       </SavedProvider>
     </DemoProvider>
+    </GestureHandlerRootView>
   );
 }

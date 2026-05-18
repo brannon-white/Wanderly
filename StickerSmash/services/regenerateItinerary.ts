@@ -1,5 +1,5 @@
 import { getAuth, getIdToken } from '@react-native-firebase/auth';
-import type { FirestoreItineraryDocument } from '@/types/itinerary';
+import type { FirestoreItineraryDocument, GeneratedItinerary, ItineraryActivity } from '@/types/itinerary';
 
 const BASE_URL = 'https://us-central1-wanderly-dff52.cloudfunctions.net';
 
@@ -56,4 +56,54 @@ export async function regenerateDay(params: {
   };
 }): Promise<RegenerateDayResponse> {
   return callEndpoint<RegenerateDayResponse>('regenerateDayHttp', params);
+}
+
+export interface GetSuggestedReplacementsResponse {
+  candidates: ItineraryActivity[];
+}
+
+export async function getSuggestedReplacements(params: {
+  itineraryId: string;
+  dayIndex: number;
+  activityIndex: number;
+  reason?: string;
+  count?: number;
+}): Promise<GetSuggestedReplacementsResponse> {
+  return callEndpoint<GetSuggestedReplacementsResponse>('getSuggestedReplacementsHttp', params);
+}
+
+export interface ConfirmActivityReplacementResponse {
+  itinerary: GeneratedItinerary;
+}
+
+export async function confirmActivityReplacement(params: {
+  itineraryId: string;
+  dayIndex: number;
+  activityIndex: number;
+  candidateActivity: ItineraryActivity;
+}): Promise<ConfirmActivityReplacementResponse> {
+  return callEndpoint<ConfirmActivityReplacementResponse>('confirmActivityReplacementHttp', params);
+}
+
+export interface EditItineraryWithLanguageResponse {
+  itinerary: GeneratedItinerary;
+}
+
+export async function editItineraryWithLanguage(params: {
+  itineraryId: string;
+  message: string;
+}): Promise<EditItineraryWithLanguageResponse> {
+  return callEndpoint<EditItineraryWithLanguageResponse>('editItineraryWithLanguageHttp', params);
+}
+
+export interface OptimizeDayResponse {
+  itinerary: GeneratedItinerary;
+}
+
+export async function optimizeDay(params: {
+  itineraryId: string;
+  dayIndex: number;
+  mode: 'minimize_walking' | 'minimize_cost' | 'relax_mode' | 'maximize_sightseeing' | 'foodie_mode';
+}): Promise<OptimizeDayResponse> {
+  return callEndpoint<OptimizeDayResponse>('optimizeDayHttp', params);
 }

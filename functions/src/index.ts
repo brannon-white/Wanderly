@@ -92,6 +92,9 @@ import {
   generateItineraryFlow,
   regenerateActivity,
   regenerateDay,
+  getSuggestedReplacements,
+  editItineraryWithLanguage,
+  optimizeDay,
   MODEL_NAME,
   PROMPT_VERSION,
 } from "./itineraryGeneration";
@@ -100,6 +103,10 @@ import {
   callableGenerateItineraryResponseSchema,
   regenerateActivityRequestSchema,
   regenerateDayRequestSchema,
+  getSuggestedReplacementsRequestSchema,
+  confirmActivityReplacementRequestSchema,
+  editItineraryWithLanguageRequestSchema,
+  optimizeDayRequestSchema,
   type CallableGenerateItineraryResponse,
 } from "./itinerarySchemas";
 
@@ -753,4 +760,146 @@ export const migrateUsersToSubscriptionSchema = functionsV1
     await batch.commit();
     logger.info("migrateUsersToSubscriptionSchema complete", { migrated });
     res.status(200).json({ migrated });
+  });
+
+// ─── Get suggested replacements for an activity ──────────────────────────────
+
+function corsHandler(req: any, res: any): boolean {
+  if (req.method === "OPTIONS") {
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.status(204).send("");
+    return true;
+  }
+  res.set("Access-Control-Allow-Origin", "*");
+  return false;
+}
+
+function extractBearer(req: any): string | null {
+  const match = (req.headers.authorization ?? "").match(/^Bearer (.+)$/i);
+  return match ? match[1] : null;
+}
+
+export const getSuggestedReplacementsHttp = functionsV1
+  .region("us-central1")
+  .runWith({ maxInstances: 10, timeoutSeconds: 120, secrets: [anthropicApiKey, googlePlacesApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
+  .https.onRequest(async (req, res) => {
+    if (corsHandler(req, res)) return;
+    if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed." }); return; }
+    const token = extractBearer(req);
+    if (!token) { res.status(401).json({ error: "Missing bearer token." }); return; }
+    try {
+      const decodedToken = await getAuth().verifyIdToken(token);
+      const uid = decodedToken.uid;
+      const parsed = getSuggestedReplacementsRequestSchema.safeParse(req.body);
+      if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.message }); return; }
+      const { itineraryId, dayIndex, activityIndex, reason, count } = parsed.data;
+      await checkAndConsumeRegenCredit(uid);
+      const snap = await getFirestore().collection("users").doc(uid).collection("itineraries").doc(itineraryId).get();
+      if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
+      logger.info("getSuggestedReplacementsHttp", { uid, itineraryId, dayIndex, activityIndex, reason });
+      const candidates = await getSuggestedReplacements({ itinerary: snap.data() as any, dayIndex, activityIndex, reason, count, googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY });
+      res.status(200).json({ candidates });
+    } catch (error) {
+      const e = classifyHttpError(error);
+      logger.error("getSuggestedReplacementsHttp failed", { ...e, rawError: error });
+      res.status(e.status).json(e);
+    }
+  });
+
+// ─── Confirm activity replacement (write chosen candidate) ───────────────────
+
+export const confirmActivityReplacementHttp = functionsV1
+  .region("us-central1")
+  .runWith({ maxInstances: 10, timeoutSeconds: 30, serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
+  .https.onRequest(async (req, res) => {
+    if (corsHandler(req, res)) return;
+    if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed." }); return; }
+    const token = extractBearer(req);
+    if (!token) { res.status(401).json({ error: "Missing bearer token." }); return; }
+    try {
+      const decodedToken = await getAuth().verifyIdToken(token);
+      const uid = decodedToken.uid;
+      const parsed = confirmActivityReplacementRequestSchema.safeParse(req.body);
+      if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.message }); return; }
+      const { itineraryId, dayIndex, activityIndex, candidateActivity } = parsed.data;
+      const itineraryRef = getFirestore().collection("users").doc(uid).collection("itineraries").doc(itineraryId);
+      const snap = await itineraryRef.get();
+      if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
+      const current = snap.data() as any;
+      const updatedDays = current.days.map((d: any, di: number) => {
+        if (di !== dayIndex) return d;
+        return { ...d, activities: d.activities.map((a: any, ai: number) => ai === activityIndex ? candidateActivity : a) };
+      });
+      await itineraryRef.update({ days: updatedDays, updatedAt: FieldValue.serverTimestamp() });
+      logger.info("confirmActivityReplacementHttp", { uid, itineraryId, dayIndex, activityIndex });
+      res.status(200).json({ itinerary: { ...current, days: updatedDays } });
+    } catch (error) {
+      const e = classifyHttpError(error);
+      logger.error("confirmActivityReplacementHttp failed", { ...e, rawError: error });
+      res.status(e.status).json(e);
+    }
+  });
+
+// ─── Edit itinerary with natural language ────────────────────────────────────
+
+export const editItineraryWithLanguageHttp = functionsV1
+  .region("us-central1")
+  .runWith({ maxInstances: 10, timeoutSeconds: 120, secrets: [anthropicApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
+  .https.onRequest(async (req, res) => {
+    if (corsHandler(req, res)) return;
+    if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed." }); return; }
+    const token = extractBearer(req);
+    if (!token) { res.status(401).json({ error: "Missing bearer token." }); return; }
+    try {
+      const decodedToken = await getAuth().verifyIdToken(token);
+      const uid = decodedToken.uid;
+      const parsed = editItineraryWithLanguageRequestSchema.safeParse(req.body);
+      if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.message }); return; }
+      const { itineraryId, message } = parsed.data;
+      await checkAndConsumeRegenCredit(uid);
+      const itineraryRef = getFirestore().collection("users").doc(uid).collection("itineraries").doc(itineraryId);
+      const snap = await itineraryRef.get();
+      if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
+      logger.info("editItineraryWithLanguageHttp", { uid, itineraryId, message });
+      const updated = await editItineraryWithLanguage({ itinerary: snap.data() as any, message });
+      await itineraryRef.update({ days: updated.days, updatedAt: FieldValue.serverTimestamp() });
+      res.status(200).json({ itinerary: updated });
+    } catch (error) {
+      const e = classifyHttpError(error);
+      logger.error("editItineraryWithLanguageHttp failed", { ...e, rawError: error });
+      res.status(e.status).json(e);
+    }
+  });
+
+// ─── Optimize a day ──────────────────────────────────────────────────────────
+
+export const optimizeDayHttp = functionsV1
+  .region("us-central1")
+  .runWith({ maxInstances: 10, timeoutSeconds: 120, secrets: [anthropicApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
+  .https.onRequest(async (req, res) => {
+    if (corsHandler(req, res)) return;
+    if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed." }); return; }
+    const token = extractBearer(req);
+    if (!token) { res.status(401).json({ error: "Missing bearer token." }); return; }
+    try {
+      const decodedToken = await getAuth().verifyIdToken(token);
+      const uid = decodedToken.uid;
+      const parsed = optimizeDayRequestSchema.safeParse(req.body);
+      if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.message }); return; }
+      const { itineraryId, dayIndex, mode } = parsed.data;
+      await checkAndConsumeRegenCredit(uid);
+      const itineraryRef = getFirestore().collection("users").doc(uid).collection("itineraries").doc(itineraryId);
+      const snap = await itineraryRef.get();
+      if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
+      logger.info("optimizeDayHttp", { uid, itineraryId, dayIndex, mode });
+      const updated = await optimizeDay({ itinerary: snap.data() as any, dayIndex, mode });
+      await itineraryRef.update({ days: updated.days, updatedAt: FieldValue.serverTimestamp() });
+      res.status(200).json({ itinerary: updated });
+    } catch (error) {
+      const e = classifyHttpError(error);
+      logger.error("optimizeDayHttp failed", { ...e, rawError: error });
+      res.status(e.status).json(e);
+    }
   });

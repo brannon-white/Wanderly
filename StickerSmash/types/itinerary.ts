@@ -74,6 +74,7 @@ export interface ItineraryActivity {
   mapUrl?: string;
   coordinates?: ItineraryCoordinates;
   transport: ItineraryTransportOption[];
+  locked?: boolean;
 }
 
 export interface ItineraryDay {
