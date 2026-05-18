@@ -66,8 +66,9 @@ function isTouristHotspot(place: PlaceCandidate): boolean {
 }
 
 function tasteProfileMultiplier(place: PlaceCandidate, intent: TripIntent): number {
-  if (!intent.tasteProfile) return 1;
-  const tp = intent.tasteProfile;
+  // Use effectiveTasteProfile (blended) when available so ranking reflects the current trip intent
+  const tp = intent.effectiveTasteProfile ?? intent.tasteProfile;
+  if (!tp) return 1;
   let multiplier = 1;
 
   // Hidden gems preference: downweight tourist hotspots
@@ -111,12 +112,12 @@ export function rankRecommendations(
 
       const baseScore =
         interestMatch * 0.35 +
-        rating * 0.30 +
-        budget * 0.20 +
-        popularity * 0.15;
+        rating       * 0.30 +
+        budget       * 0.20 +
+        popularity   * 0.15;
 
       const score = baseScore
-        * tasteProfileMultiplier(place, intent)
+        * tasteProfileMultiplier(place, intent)   // uses blended effectiveTasteProfile
         * includeBoost(place, intent.includeActivities);
 
       return {

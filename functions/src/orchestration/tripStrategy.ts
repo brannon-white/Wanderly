@@ -71,29 +71,33 @@ function buildStrategyPrompt(intent: TripIntent): string {
     `Interests (ranked): ${intent.rankedInterests.join(", ")} | Pace: ${intent.pace}`,
   ];
 
-  if (intent.tasteProfile) {
-    const tp = intent.tasteProfile;
-    const gemLevel = tp.hiddenGems > 0.6 ? "high" : tp.hiddenGems < 0.4 ? "low" : "medium";
-    const foodLevel = tp.foodie > 0.6 ? "food-focused" : tp.foodie < 0.4 ? "food as fuel" : "balanced food";
-    const adventureLevel = tp.adventure > 0.6 ? "outdoor/adventure emphasis" : tp.adventure < 0.4 ? "cultural/indoor emphasis" : "mixed activities";
-    lines.push(
-      `\nUser Travel Style:`,
-      `- Hidden gem preference: ${gemLevel} (${tp.hiddenGems.toFixed(2)}) — ${gemLevel === "high" ? "STRONGLY PREFER local, off-the-beaten-path, niche venues over tourist hotspots" : gemLevel === "low" ? "prefer well-known, top-rated, iconic venues" : "mix of popular and local spots"}`,
-      `- Food focus: ${foodLevel} (${tp.foodie.toFixed(2)})`,
-      `- Activity style: ${adventureLevel} (${tp.adventure.toFixed(2)})`,
-      `- Nightlife interest: ${tp.nightlife > 0.5 ? "include evening activities and nightlife" : "skip nightlife"} (${tp.nightlife.toFixed(2)})`,
-      `- Luxury level: ${tp.luxury > 0.6 ? "premium/upscale" : tp.luxury < 0.4 ? "budget-friendly/local" : "mid-range"} (${tp.luxury.toFixed(2)})`,
-    );
-    if (gemLevel === "high") {
-      lines.push(`- QUERY STRATEGY: Append "hidden gem", "local favorite", "off the beaten path", "locals only" to search queries`);
-    }
+  // Use the blended effective profile — already 70% prompt / 30% taste profile
+  const tp = intent.effectiveTasteProfile ?? intent.tasteProfile;
+  const hasPromptIntent = !!(intent.derivedIntent && Object.keys(intent.derivedIntent).length > 0);
+
+  if (intent.derivedIntent && hasPromptIntent) {
+    const di = intent.derivedIntent;
+    lines.push(`\n[PRIMARY] This trip's intent — dominant signal for strategy and search queries:`);
+    if (intent.tripPrompt) lines.push(`- User wrote: "${intent.tripPrompt}"`);
+    if (di.tripMood) lines.push(`- Mood: ${di.tripMood}`);
+    if (di.themes?.length) lines.push(`- Themes: ${di.themes.join(", ")}`);
+    if (di.pace) lines.push(`- Desired pace: ${di.pace}`);
+    if (di.avoid?.length) lines.push(`- Avoid: ${di.avoid.join(", ")}`);
   }
 
-  if (intent.derivedIntent) {
-    const di = intent.derivedIntent;
-    if (di.tripMood) lines.push(`\nTrip mood: ${di.tripMood}`);
-    if (di.themes?.length) lines.push(`Trip themes: ${di.themes.join(", ")}`);
-    if (di.avoid?.length) lines.push(`Trip avoids: ${di.avoid.join(", ")}`);
+  if (tp) {
+    const gemLevel = tp.hiddenGems > 0.6 ? "high" : tp.hiddenGems < 0.4 ? "low" : "medium";
+    const blendNote = hasPromptIntent
+      ? "(blended 70% trip intent + 30% long-term style — use for refining search query flavor, not overriding trip direction)"
+      : "(long-term travel style — primary guide)";
+    lines.push(
+      `\n[REFINEMENT] Traveler's default style ${blendNote}:`,
+      `- Hidden gem preference: ${gemLevel} (${tp.hiddenGems.toFixed(2)}) — ${gemLevel === "high" ? "append 'hidden gem', 'local favorite', 'locals only' to search queries" : gemLevel === "low" ? "prefer well-known, top-rated, iconic venues" : "mix of popular and local"}`,
+      `- Food focus: ${tp.foodie > 0.6 ? "food-focused" : tp.foodie < 0.4 ? "food as fuel" : "balanced"} (${tp.foodie.toFixed(2)})`,
+      `- Activity style: ${tp.adventure > 0.6 ? "outdoor/adventure" : tp.adventure < 0.4 ? "cultural/indoor" : "mixed"} (${tp.adventure.toFixed(2)})`,
+      `- Nightlife: ${tp.nightlife > 0.5 ? "include evening activities" : "skip nightlife"} (${tp.nightlife.toFixed(2)})`,
+      `- Luxury: ${tp.luxury > 0.6 ? "premium/upscale" : tp.luxury < 0.4 ? "budget-friendly/local" : "mid-range"} (${tp.luxury.toFixed(2)})`,
+    );
   }
 
   if (intent.includeActivities?.length) {

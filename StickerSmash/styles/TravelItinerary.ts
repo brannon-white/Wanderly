@@ -6,7 +6,7 @@ export const ICON_COLOR = '#6A62B7';
 export const ICON_COLOR_DIMMED = '#ccc';
 
 export const makeScrollContentStyle = (bottomInset: number, hasCta = false, hasAiBar = false) => ({
-  paddingBottom: bottomInset + (hasCta ? 110 : hasAiBar ? 80 : 24),
+  paddingBottom: bottomInset + (hasCta ? 80 : hasAiBar ? 60 : 24),
 });
 
 export const styles = StyleSheet.create({

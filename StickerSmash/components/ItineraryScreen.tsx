@@ -807,7 +807,32 @@ export default function ItineraryScreen() {
                     <SmartBanner
                       key={`insight-${idx}-${i}`}
                       insight={ins}
-                      onAction={() => {}}
+                      onAction={async (actionType) => {
+                        if (!id || aiBarLoading) return;
+                        const usage = await getUsageStatus().catch(() => null);
+                        if (usage && !usage.isPro && usage.regensLeft <= 0) {
+                          setShowRegenPaywall(true);
+                          return;
+                        }
+                        const curr = activities[idx];
+                        const next = activities[idx + 1];
+                        let message = '';
+                        if (actionType === 'rework_schedule' && curr && next) {
+                          message = `Fix the tight schedule conflict between "${curr.name}" and "${next.name}". Adjust the times so there is enough buffer for travel between them, or remove the less important activity.`;
+                        } else if (actionType === 'reduce_walking' && curr && next) {
+                          message = `Reduce the walking distance between "${curr.name}" and "${next.name}" by suggesting a closer alternative for one of them, or adding a transport step.`;
+                        }
+                        if (!message) return;
+                        setAiBarLoading(true);
+                        try {
+                          const { itinerary: updated } = await editItineraryWithLanguage({ itineraryId: id, message });
+                          setRemoteItinerary(updated);
+                        } catch {
+                          Alert.alert('Could not apply changes', 'Please try again.');
+                        } finally {
+                          setAiBarLoading(false);
+                        }
+                      }}
                     />
                   ))}
                 </ScaleDecorator>
