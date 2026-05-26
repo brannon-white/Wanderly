@@ -101,3 +101,14 @@ export interface PlaceCluster {
   centerLng: number;
   neighborhood?: string;
 }
+
+export interface OsmHike {
+  id: string;
+  name: string;
+  distanceMiles: number;
+  estimatedDurationHours: number;
+  difficulty: "easy" | "moderate" | "hard";
+  category: "walk" | "moderate_hike" | "major_hike";
+  centerLat: number;
+  centerLng: number;
+}

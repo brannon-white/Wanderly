@@ -24,9 +24,6 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
 import { styles, ICON_COLOR, makeScrollContentStyle } from '../styles/TravelItinerary';
 import {
-  buildHotelSearchUrl,
-  buildOpenTableUrl,
-  buildExperienceUrl,
   buildDirectionsUrl,
   partyToAdults,
 } from '@/services/bookingService';
@@ -41,7 +38,7 @@ import ShareCard from './ShareCard';
 import { getUsageStatus } from '@/services/purchases';
 import PaywallModal from './PaywallModal';
 import ReplaceSuggestionsSheet, { type ActivityAction, type SheetTarget } from './ReplaceSuggestionsSheet';
-import ActivityActionsSheet from './ActivityActionsSheet';
+import ActivityDetailSheet from './ActivityDetailSheet';
 import SmartBanner from './SmartBanner';
 import DayOptimizeBar from './DayOptimizeBar';
 import { editItineraryWithLanguage } from '@/services/regenerateItinerary';
@@ -97,31 +94,48 @@ const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   wellness: 'fitness-outline',
 };
 
+const CATEGORY_LABELS: Record<string, string> = {
+  food: 'Restaurant',
+  restaurant: 'Restaurant',
+  culture: 'Culture',
+  attraction: 'Attraction',
+  landmark: 'Landmark',
+  nature: 'Nature',
+  shopping: 'Shopping',
+  art: 'Art',
+  science: 'Museum',
+  adventure: 'Adventure',
+  hotel: 'Hotel',
+  nightlife: 'Nightlife',
+  wellness: 'Wellness',
+};
+
+function parseDuration(timeStr: string): string {
+  const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)\s*-\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!match) return '';
+  const toMin = (h: number, m: number, p: string) => {
+    let hrs = h;
+    if (p.toUpperCase() === 'PM' && h !== 12) hrs += 12;
+    if (p.toUpperCase() === 'AM' && h === 12) hrs = 0;
+    return hrs * 60 + m;
+  };
+  const mins = toMin(+match[4], +match[5], match[6]) - toMin(+match[1], +match[2], match[3]);
+  if (mins <= 0) return '';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+function parseStartTime(timeStr: string): string {
+  const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!match) return timeStr.split(' - ')[0] ?? timeStr;
+  return `${match[1]}:${match[2]} ${match[3].toUpperCase()}`;
+}
+
 function isPlaceholder(url?: string) {
   return !url || url.includes('placeholder.com') || url.includes('via.placeholder');
-}
-
-function formatCount(n: number | string | undefined): string {
-  const num = typeof n === 'string' ? parseFloat(n) : (n ?? 0);
-  return isNaN(num) ? '0' : num.toLocaleString();
-}
-
-function StarRow({ rating }: { rating: number }) {
-  const full = Math.floor(rating);
-  const half = rating - full >= 0.5;
-  return (
-    <View style={styles.starRow}>
-      {[1, 2, 3, 4, 5].map((i) => (
-        <Ionicons
-          key={i}
-          name={i <= full ? 'star' : half && i === full + 1 ? 'star-half' : 'star-outline'}
-          size={13}
-          color="#FFB800"
-          style={styles.starIcon}
-        />
-      ))}
-    </View>
-  );
 }
 
 
@@ -130,38 +144,61 @@ interface ActivityCardProps {
   isLast: boolean;
   nextActivity?: ItineraryActivity;
   imageUri?: string;
-  destinationName?: string;
-  country?: string;
-  checkin?: string;
-  checkout?: string;
-  adults?: number;
-  showActions?: boolean;
-  onShowActions?: () => void;
+  onPress?: () => void;
   onLongPress?: () => void;
   isDragging?: boolean;
 }
 
-function ActivityCard({ activity, isLast, nextActivity, imageUri, destinationName, country, checkin = '', checkout = '', adults = 2, showActions, onShowActions, onLongPress, isDragging }: ActivityCardProps) {
+function ActivityCard({ activity, isLast, nextActivity, imageUri, onPress, onLongPress, isDragging }: ActivityCardProps) {
   const transportOptions = Array.isArray(activity.transport) ? activity.transport : [];
   const catKey = (activity.category ?? '').toLowerCase();
   const catIcon = CATEGORY_ICONS[catKey] ?? 'location-outline';
+  const startTime = parseStartTime(activity.time);
 
-  const openMaps = () => {
-    Linking.openURL(
-      activity.mapUrl || `https://maps.google.com/?q=${encodeURIComponent(activity.name)}`
-    );
-  };
+  const isOutdoorCategory = catKey === 'adventure' || catKey === 'nature';
 
+  // Detect trail by name keywords, but only for outdoor-category activities.
+  // Gating on category prevents "Canyon Coffee" (food) from triggering the boot emoji.
+  const isTrailByName =
+    isOutdoorCategory &&
+    /\b(trail|loop|hike|trek|summit|ridge|peak|canyon|gorge|falls|narrows|landing|arch|mesa|butte|slot)\b/i.test(activity.name);
+
+  const difficultyLabel =
+    activity.trailDifficulty === 'easy' ? 'Easy' :
+    activity.trailDifficulty === 'moderate' ? 'Moderate' :
+    activity.trailDifficulty === 'hard' ? 'Hard' : null;
+
+  // Meta line priority:
+  // 1. OSM-verified stats — only shown when our orchestration actually matched the trail
+  // 2. Trail keyword in name (adventure/nature category) → generic trail label
+  // 3. Everything else → Category · ★rating · duration
+  let metaLine: string;
+  if (activity.trailDistanceMiles != null) {
+    const parts = [`${activity.trailDistanceMiles} mi`];
+    if (difficultyLabel) parts.push(difficultyLabel);
+    if (activity.trailDurationHours != null) parts.push(`~${activity.trailDurationHours}h`);
+    metaLine = `🥾 ${parts.join(' · ')}`;
+  } else if (isTrailByName) {
+    metaLine = '🥾 Trail';
+  } else {
+    const catLabel = CATEGORY_LABELS[catKey] ?? activity.category ?? '';
+    const duration = parseDuration(activity.time);
+    const parts: string[] = [];
+    if (catLabel) parts.push(catLabel);
+    if (typeof activity.rating === 'number') parts.push(`★ ${activity.rating.toFixed(1)}`);
+    if (duration) parts.push(duration);
+    metaLine = parts.join(' · ');
+  }
 
   return (
     <TouchableOpacity
       style={[styles.activityRow, isDragging && styles.activityRowDragging]}
+      onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={300}
-      activeOpacity={onLongPress ? 0.9 : 1}
-      disabled={!onLongPress}
+      activeOpacity={0.82}
     >
-      {/* Timeline column */}
+      {/* Timeline spine */}
       <View style={styles.timelineCol}>
         <View style={styles.timelineIconCircle}>
           <Ionicons name={catIcon} size={15} color={CAT_COLOR} />
@@ -169,101 +206,34 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, destinationNam
         {!isLast && <View style={styles.timelineLine} />}
       </View>
 
-      {/* Card + transport strip stacked */}
+      {/* Compact card + transport strip */}
       <View style={{ flex: 1 }}>
-        <View style={{ position: 'relative' }}>
-        <View style={styles.itineraryItem}>
+        <View style={styles.compactCard}>
+          {/* Banner image */}
           <Image
             source={imageUri ? { uri: imageUri } : undefined}
-            style={[styles.itemImage, !imageUri && { backgroundColor: '#f0eeff' }]}
+            style={[styles.compactImage, !imageUri && { backgroundColor: '#F0EEFF' }]}
             cachePolicy="memory-disk"
             contentFit="cover"
             transition={200}
           />
-          {showActions && (
-            <TouchableOpacity
-              style={styles.actionsBtn}
-              onPress={onShowActions}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="ellipsis-horizontal" size={14} color="#fff" />
-            </TouchableOpacity>
-          )}
 
-          <View style={styles.itemDetails}>
-            <Text style={styles.itemTitle}>{activity.name}</Text>
-
-            {typeof activity.rating === 'number' && (
-              <View style={styles.ratingRow}>
-                <StarRow rating={activity.rating} />
-                <Text style={styles.ratingText}>
-                  {'  '}{activity.rating.toFixed(1)} ({formatCount(activity.reviewCount)} reviews)
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.infoRow}>
-              <Ionicons name="time-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
-              <Text style={styles.infoText}>{activity.time}</Text>
-            </View>
-
-            {activity.cost ? (
-              <View style={styles.infoRow}>
-                <Ionicons name="cash-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
-                <Text style={styles.infoText}>{activity.cost}</Text>
-              </View>
-            ) : null}
-
-            <View style={styles.infoRow}>
-              <Ionicons name="location-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
-              <TouchableOpacity onPress={openMaps}>
-                <Text style={styles.mapsLink}>View on Google Maps</Text>
-              </TouchableOpacity>
-            </View>
-
-            {destinationName ? (() => {
-              const cat = (activity.category ?? '').toLowerCase();
-              if (cat === 'hotel') return (
-                <View style={styles.infoRow}>
-                  <Ionicons name="bed-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
-                  <TouchableOpacity onPress={() => Linking.openURL(buildHotelSearchUrl(destinationName, country, checkin, checkout, adults))}>
-                    <Text style={styles.mapsLink}>Book on Booking.com</Text>
-                  </TouchableOpacity>
-                </View>
-              );
-              if (cat === 'food' || cat === 'restaurant') return (
-                <View style={styles.infoRow}>
-                  <Ionicons name="restaurant-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
-                  {/* Phase 2: replace with OpenTable API for in-app confirmation # */}
-                  <TouchableOpacity onPress={() => Linking.openURL(buildOpenTableUrl(activity.name, destinationName, checkin, adults, activity.coordinates))}>
-                    <Text style={styles.mapsLink}>Reserve on OpenTable</Text>
-                  </TouchableOpacity>
-                </View>
-              );
-              if (['adventure', 'culture', 'nature', 'wellness', 'nightlife'].includes(cat)) return (
-                <View style={styles.infoRow}>
-                  <Ionicons name="compass-outline" size={15} color="#6A62B7" style={styles.infoIconEl} />
-                  {/* Phase 2: replace with Viator Partner API for in-app confirmation # */}
-                  <TouchableOpacity onPress={() => Linking.openURL(buildExperienceUrl(activity.name, destinationName))}>
-                    <Text style={styles.mapsLink}>Find Experiences</Text>
-                  </TouchableOpacity>
-                </View>
-              );
-              return null;
-            })() : null}
+          {/* Text content */}
+          <View style={styles.compactBody}>
+            <Text style={styles.compactTitle} numberOfLines={2}>{activity.name}</Text>
+            <Text style={styles.compactMeta} numberOfLines={1}>{metaLine}</Text>
+            <Text style={styles.compactTime}>{startTime}</Text>
           </View>
         </View>
-        </View>
 
-        {/* Transport strip — tappable to open directions to the next activity */}
+        {/* Transport strip */}
         {!isLast && transportOptions.length > 0 && (
           <View style={styles.transportStrip}>
             {transportOptions.map((t, idx) => {
-              const canOpenDirections = !!nextActivity;
-              const onPress = canOpenDirections
+              const onPressDir = nextActivity
                 ? () => Linking.openURL(buildDirectionsUrl(
                     { name: activity.name, coordinates: activity.coordinates },
-                    { name: nextActivity!.name, coordinates: nextActivity!.coordinates },
+                    { name: nextActivity.name, coordinates: nextActivity.coordinates },
                     t.mode ?? 'walk',
                   ))
                 : undefined;
@@ -271,9 +241,9 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, destinationNam
                 <TouchableOpacity
                   key={idx}
                   style={styles.transportStripItem}
-                  onPress={onPress}
-                  disabled={!canOpenDirections}
-                  activeOpacity={canOpenDirections ? 0.6 : 1}
+                  onPress={onPressDir}
+                  disabled={!nextActivity}
+                  activeOpacity={nextActivity ? 0.6 : 1}
                 >
                   <Ionicons
                     name={TRANSPORT_ICONS[t.mode?.toLowerCase() ?? ''] ?? 'navigate-outline'}
@@ -339,10 +309,12 @@ export default function ItineraryScreen() {
   const [sharing, setSharing] = useState(false);
   const [activityImages, setActivityImages] = useState<Record<string, string>>({});
   const loadedImageIds = useRef(new Set<string>());
+  const imageRetryCount = useRef(0);
+  const [imageRetryTick, setImageRetryTick] = useState(0);
   const [showRegenPaywall, setShowRegenPaywall] = useState(false);
   const [sheetTarget, setSheetTarget] = useState<SheetTarget | null>(null);
   const sheetRef = useRef<BottomSheet>(null);
-  const [actionsSheetActivity, setActionsSheetActivity] = useState<{ activity: ItineraryActivity; dayIndex: number; activityIndex: number } | null>(null);
+  const [detailActivity, setDetailActivity] = useState<{ activity: ItineraryActivity; dayIndex: number; activityIndex: number } | null>(null);
   const [aiBarMessage, setAiBarMessage] = useState('');
   const [aiBarLoading, setAiBarLoading] = useState(false);
   const shareCardRef = useRef<View>(null);
@@ -427,32 +399,48 @@ export default function ItineraryScreen() {
   // Reset image cache when itinerary changes
   useEffect(() => {
     loadedImageIds.current = new Set();
+    imageRetryCount.current = 0;
     setActivityImages({});
+    setImageRetryTick(0);
   }, [itinerary?.id]);
 
-  // Load images for the selected day only, updating state as each resolves
+  // Load images for the selected day sequentially to avoid Unsplash rate limits.
+  // Parallel fire-and-forget hits rate limits; sequential + retry ensures all images load.
   useEffect(() => {
     if (!itinerary) return;
     let cancelled = false;
     const dayActivities = itinerary.days[selectedDay]?.activities ?? [];
 
-    for (const a of dayActivities) {
-      if (loadedImageIds.current.has(a.id)) continue;
-      loadedImageIds.current.add(a.id);
+    async function loadSequentially() {
+      let anyFailed = false;
+      for (const a of dayActivities) {
+        if (cancelled) return;
+        if (loadedImageIds.current.has(a.id)) continue;
+        loadedImageIds.current.add(a.id);
 
-      (async () => {
         const url = isPlaceholder(a.image) ? await searchPhoto(a.name) : a.image;
         if (cancelled) return;
         if (url) {
           setActivityImages((prev) => ({ ...prev, [a.id]: url }));
         } else {
           loadedImageIds.current.delete(a.id);
+          anyFailed = true;
         }
-      })();
+      }
+
+      // If some images failed (rate limit / network), retry up to 3 times with backoff
+      if (anyFailed && !cancelled && imageRetryCount.current < 3) {
+        imageRetryCount.current += 1;
+        const delay = 1500 * imageRetryCount.current;
+        setTimeout(() => {
+          if (!cancelled) setImageRetryTick((t) => t + 1);
+        }, delay);
+      }
     }
 
+    loadSequentially();
     return () => { cancelled = true; };
-  }, [itinerary?.id, selectedDay]);
+  }, [itinerary?.id, selectedDay, imageRetryTick]);
 
   // Resolve hero image — fetch from Unsplash if Gemini generated a placeholder
   useEffect(() => {
@@ -793,13 +781,7 @@ export default function ItineraryScreen() {
                     isLast={idx === activities.length - 1}
                     nextActivity={activities[idx + 1]}
                     imageUri={activityImages[item.id]}
-                    destinationName={itinerary?.destinationName}
-                    country={itinerary?.country}
-                    checkin={committedTrip ? new Date(committedTrip.startDate).toISOString().slice(0, 10) : ''}
-                    checkout={committedTrip ? new Date(committedTrip.endDate).toISOString().slice(0, 10) : ''}
-                    adults={partyToAdults(committedTrip?.party ?? itinerary?.travelerType)}
-                    showActions={!isBrowsing}
-                    onShowActions={() => setActionsSheetActivity({ activity: item, dayIndex: selectedDay, activityIndex: idx })}
+                    onPress={() => setDetailActivity({ activity: item, dayIndex: selectedDay, activityIndex: idx })}
                     onLongPress={!isBrowsing && !locked ? drag : undefined}
                     isDragging={isActive}
                   />
@@ -899,15 +881,21 @@ export default function ItineraryScreen() {
         </KeyboardAvoidingView>
       )}
 
-      <ActivityActionsSheet
-        activity={actionsSheetActivity?.activity ?? null}
-        visible={actionsSheetActivity !== null}
+      <ActivityDetailSheet
+        activity={detailActivity?.activity ?? null}
+        visible={detailActivity !== null}
+        onDismiss={() => setDetailActivity(null)}
+        imageUri={detailActivity ? activityImages[detailActivity.activity.id] : undefined}
+        destinationName={itinerary?.destinationName}
+        country={itinerary?.country}
+        checkin={committedTrip ? new Date(committedTrip.startDate).toISOString().slice(0, 10) : ''}
+        checkout={committedTrip ? new Date(committedTrip.endDate).toISOString().slice(0, 10) : ''}
+        adults={partyToAdults(committedTrip?.party ?? itinerary?.travelerType)}
+        isBrowsing={isBrowsing}
         onAction={(action) => {
-          if (!actionsSheetActivity) return;
-          handleAction(actionsSheetActivity.dayIndex, actionsSheetActivity.activityIndex, actionsSheetActivity.activity, action);
-          setActionsSheetActivity(null);
+          if (!detailActivity) return;
+          handleAction(detailActivity.dayIndex, detailActivity.activityIndex, detailActivity.activity, action);
         }}
-        onDismiss={() => setActionsSheetActivity(null)}
       />
 
       <PaywallModal

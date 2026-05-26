@@ -17,8 +17,60 @@ import { clusterRecommendations } from "./orchestration/clustering";
 import { generateDailyPlans } from "./orchestration/dailyPlanning";
 import { validateItinerary } from "./orchestration/validation";
 import { buildCacheKey, getCachedPlaces, setCachedPlaces } from "./orchestration/placesCache";
+import { fetchHikingTrails } from "./orchestration/trailDiscovery";
 
 export { MODEL_NAME, PROMPT_VERSION };
+
+// ─── Stamp OSM trail data onto matched hiking activities ─────────────────────
+
+function normalizeForMatch(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\b(trail|path|loop|route|hike|trek|walk|national park|state park)\b/g, "")
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function stampOsmTrailData(
+  itinerary: GeneratedItinerary,
+  osmHikes: import("./orchestration/types").OsmHike[]
+): GeneratedItinerary {
+  if (osmHikes.length === 0) return itinerary;
+
+  const days = itinerary.days.map((day) => {
+    const activities = day.activities.map((activity) => {
+      const cat = (activity.category ?? "").toLowerCase();
+      if (cat !== "adventure" && cat !== "nature") return activity;
+
+      const normActivity = normalizeForMatch(activity.name);
+      if (normActivity.length < 4) return activity;
+
+      const match = osmHikes.find((hike) => {
+        const normHike = normalizeForMatch(hike.name);
+        return (
+          normHike.length >= 4 &&
+          (normActivity === normHike ||
+            normActivity.includes(normHike) ||
+            normHike.includes(normActivity))
+        );
+      });
+
+      if (!match) return activity;
+
+      return {
+        ...activity,
+        name: match.name,
+        trailDistanceMiles: match.distanceMiles,
+        trailDifficulty: match.difficulty,
+        trailDurationHours: match.estimatedDurationHours,
+      };
+    });
+    return { ...day, activities };
+  });
+
+  return { ...itinerary, days };
+}
 
 // ─── Merge real Google Places data into Claude-generated output ──────────────
 
@@ -102,9 +154,27 @@ export async function generateItineraryFlow(
     clusters = await fetchNearbyForClusters(clusters, googlePlacesApiKey);
   }
 
+  // Step 5c: Fetch verified hiking trails (always attempt — cheap read, returns [] on miss)
+  const clusterCenterLat = clusters.length > 0
+    ? clusters.reduce((s, c) => s + c.centerLat, 0) / clusters.length
+    : undefined;
+  const clusterCenterLng = clusters.length > 0
+    ? clusters.reduce((s, c) => s + c.centerLng, 0) / clusters.length
+    : undefined;
+
+  const osmHikes = clusterCenterLat !== undefined && clusterCenterLng !== undefined
+    ? await fetchHikingTrails(clusterCenterLat, clusterCenterLng)
+    : [];
+
+  logger.info("Pipeline: trail fetch", {
+    clusterCenterLat,
+    clusterCenterLng,
+    trailsFound: osmHikes.length,
+  });
+
   // Step 6: Generate structured daily plans using real place data + opening hours
   logger.info("Pipeline: generating daily plans");
-  const rawItinerary = await generateDailyPlans(clusters, intent, strategy);
+  const rawItinerary = await generateDailyPlans(clusters, intent, strategy, osmHikes);
 
   // Step 7: Parse
   const parsed = generatedItinerarySchema.parse({
@@ -135,7 +205,10 @@ export async function generateItineraryFlow(
     logger.info("Pipeline: validation issues", { issues: result.issues, repaired: result.repaired });
   }
 
-  return validated;
+  // Step 9: Stamp verified OSM trail data onto matched hiking activities
+  const withTrailData = stampOsmTrailData(validated, osmHikes);
+
+  return withTrailData;
 }
 
 // ─── Partial regeneration: single activity ──────────────────────────────────

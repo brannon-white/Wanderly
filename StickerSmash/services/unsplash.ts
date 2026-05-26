@@ -13,6 +13,7 @@ export async function searchPhoto(query: string): Promise<string | null> {
     const res = await fetch(
       `${BASE}?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape&client_id=${ACCESS_KEY}`
     );
+    if (!res.ok) return null; // Rate limit (429) or other error — skip silently
     const data = await res.json();
     const url: string | undefined = data.results?.[0]?.urls?.regular;
     if (url) await cacheSet(key, url, PHOTO_TTL_DAYS);

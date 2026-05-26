@@ -65,6 +65,9 @@ export const itineraryActivitySchema = z.object({
   coordinates: itineraryCoordinatesSchema.optional(),
   transport: z.array(itineraryTransportOptionSchema).default([]),
   locked: z.boolean().optional(),
+  trailDistanceMiles: z.number().optional(),
+  trailDifficulty: z.enum(['easy', 'moderate', 'hard']).optional(),
+  trailDurationHours: z.number().optional(),
 });
 
 export const itineraryDaySchema = z.object({
