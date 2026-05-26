@@ -632,6 +632,7 @@ export const revenueCatWebhook = functionsV1
   .runWith({
     maxInstances: 5,
     secrets: [revenueCatWebhookSecret],
+    serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
   })
   .https.onRequest(async (req, res) => {
     res.set("Access-Control-Allow-Origin", "*");

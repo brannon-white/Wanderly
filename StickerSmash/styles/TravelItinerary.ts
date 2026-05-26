@@ -372,6 +372,51 @@ export const styles = StyleSheet.create({
     fontFamily: 'Merriweather_24pt-Bold',
   },
 
+  // ── Compact activity card ─────────────────────────────────────────────
+  compactCard: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+
+  compactImage: {
+    width: '100%',
+    height: 100,
+  },
+
+  compactBody: {
+    padding: 12,
+    paddingTop: 10,
+  },
+
+  compactTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1A1A2E',
+    fontFamily: 'Merriweather_36pt-Bold',
+    marginBottom: 3,
+    lineHeight: 20,
+  },
+
+  compactMeta: {
+    fontSize: 12,
+    color: '#999',
+    fontFamily: 'SourceSans3-Regular',
+    marginBottom: 3,
+  },
+
+  compactTime: {
+    fontSize: 12,
+    color: PURPLE,
+    fontFamily: 'SourceSans3-Regular',
+    fontWeight: '600',
+  },
+
   // ── Legacy keys kept so other files don't break ───────────────────────
   heroOverlay: {
     position: 'absolute',

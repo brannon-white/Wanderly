@@ -26,7 +26,11 @@ ios/Pods/
 # Firebase/Google config (if you have these)
 google-services.json
 serviceAccountKey.json
+scripts/serviceAccount.json
 seedFirestore.js
+# Firebase service account keys (NEVER commit these)
+*firebase-adminsdk*.json
+*serviceAccount*.json
 # VSCode settings
 .vscode/
 
@@ -36,3 +40,8 @@ seedFirestore.js
 # Expo
 web-build/
 dist/
+
+# Large map data files (exceed GitHub's 100MB limit)
+*.pbf
+*.osm
+*.osm.pbf

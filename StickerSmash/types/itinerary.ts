@@ -101,6 +101,9 @@ export interface ItineraryActivity {
   coordinates?: ItineraryCoordinates;
   transport: ItineraryTransportOption[];
   locked?: boolean;
+  trailDistanceMiles?: number;
+  trailDifficulty?: 'easy' | 'moderate' | 'hard';
+  trailDurationHours?: number;
 }
 
 export interface ItineraryDay {

@@ -1,6 +1,23 @@
 import * as logger from "firebase-functions/logger";
 import { type GeneratedItinerary } from "../itinerarySchemas";
 
+// ~1.5 km ≈ 18-minute walk — anything beyond this is not reasonably walkable
+const MAX_WALK_KM = 1.5;
+
+function haversineKm(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number
+): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export interface ValidationResult {
   isValid: boolean;
   issues: string[];
@@ -49,8 +66,35 @@ export function validateItinerary(
   const days = itinerary.days.map((day, dayIndex) => {
     const dayLabel = `Day ${dayIndex + 1}`;
 
+    // Fix unrealistic walking legs: if the AI recommended walking but the
+    // two coordinates are more than MAX_WALK_KM apart, switch to rideshare.
+    const activitiesWithFixedTransport = day.activities.map((activity, i) => {
+      if (i === day.activities.length - 1) return activity;
+      const next = day.activities[i + 1];
+      if (!activity.coordinates || !next.coordinates) return activity;
+
+      const distKm = haversineKm(
+        activity.coordinates.latitude, activity.coordinates.longitude,
+        next.coordinates.latitude, next.coordinates.longitude,
+      );
+
+      if (distKm <= MAX_WALK_KM) return activity;
+
+      const transport = (activity.transport ?? []).map((t) => {
+        if (t.mode?.toLowerCase() !== "walk") return t;
+        const walkMins = Math.round(distKm * 12); // ~12 min/km walking pace
+        issues.push(
+          `${dayLabel}: replaced ${walkMins}-min walk between "${activity.name}" and "${next.name}" (${distKm.toFixed(1)} km) with rideshare`
+        );
+        repaired = true;
+        return { ...t, mode: "rideshare", time: `${Math.round(distKm * 3)} min` };
+      });
+
+      return { ...activity, transport };
+    });
+
     // Remove duplicate venues across all days
-    const activities = day.activities.filter((activity) => {
+    const activities = activitiesWithFixedTransport.filter((activity) => {
       const key = activity.name.toLowerCase().trim();
       if (seenVenues.has(key)) {
         issues.push(`${dayLabel}: removed duplicate venue "${activity.name}"`);
@@ -102,6 +146,33 @@ export function validateItinerary(
     }
     if (activities.length > 10) {
       issues.push(`${dayLabel}: ${activities.length} activities may be unrealistic`);
+    }
+
+    // Hiking feasibility checks
+    const hikingActivities = activities.filter(
+      (a) => a.category === "adventure" || a.category === "nature"
+    );
+
+    const majorHikeCount = hikingActivities.filter((a) => {
+      const t = parseActivityTime(a.time);
+      return t !== null && t.endMinutes - t.startMinutes >= 4 * 60;
+    }).length;
+
+    if (majorHikeCount > 1) {
+      issues.push(
+        `${dayLabel}: ${majorHikeCount} major hikes (4+ hrs each) scheduled — only one allowed per day`
+      );
+    }
+
+    const totalHikingMinutes = hikingActivities.reduce((sum, a) => {
+      const t = parseActivityTime(a.time);
+      return sum + (t ? t.endMinutes - t.startMinutes : 0);
+    }, 0);
+
+    if (totalHikingMinutes > 6 * 60) {
+      issues.push(
+        `${dayLabel}: ${Math.round(totalHikingMinutes / 60)}h of hiking exceeds the 6-hour daily cap`
+      );
     }
 
     return { ...day, activities };

@@ -122,21 +122,27 @@ export async function getUsageStatus(): Promise<UsageStatus> {
     const subscription = data.subscription as UserSubscription | undefined;
     const usage = data.usage as UserUsage | undefined;
 
-    const isProTier =
-      subscription?.tier === 'pro' &&
-      subscription.expiresAt !== null &&
-      new Date(subscription.expiresAt) > new Date();
+    // Firestore Timestamps arrive as objects with .toDate(); handle both that and plain strings/null
+    const toDate = (val: unknown): Date | null => {
+      if (!val) return null;
+      if (typeof (val as any).toDate === 'function') return (val as any).toDate();
+      const d = new Date(val as string);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
+    const expiresAt = toDate(subscription?.expiresAt);
+    const isProTier = subscription?.tier === 'pro' && expiresAt !== null && expiresAt > new Date();
 
     if (isProTier) {
       return { isPro: true, generationsLeft: -1, regensLeft: -1 };
     }
 
     const now = new Date();
-    const resetAt = usage?.usageResetAt ? new Date(usage.usageResetAt) : new Date(0);
+    const resetAt = toDate(usage?.usageResetAt) ?? new Date(0);
     const isNewMonth = resetAt <= now;
     const generationsUsed = isNewMonth ? 0 : (usage?.generationsThisMonth ?? 0);
 
-    const regenResetAt = usage?.regenResetAt ? new Date(usage.regenResetAt) : new Date(0);
+    const regenResetAt = toDate(usage?.regenResetAt) ?? new Date(0);
     const isRegenNewMonth = regenResetAt <= now;
     const regensUsed = isRegenNewMonth ? 0 : (usage?.regenCount ?? 0);
 

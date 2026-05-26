@@ -56,6 +56,42 @@
 
 ---
 
+## Hiking Trail Ingestion (OSM via GitHub Actions)
+
+Trail data comes from OpenStreetMap via a GitHub Actions scheduled worker — no paid APIs needed.
+Firebase functions read from Firestore `trails/` and queue cache misses to `trailIngestionQueue/`.
+GitHub Actions runs every 30 min, picks up the queue, calls Overpass, and writes results to Firestore.
+
+### One-time setup
+
+- [ ] Create a Firebase service account with Firestore read/write access:
+  - Firebase Console → Project Settings → Service accounts → Generate new private key
+  - Save as `scripts/serviceAccount.json` (already in `.gitignore`)
+- [ ] Add it as a GitHub repo secret (base64-encoded):
+  ```
+  cat scripts/serviceAccount.json | base64 | pbcopy
+  ```
+  Then: GitHub → repo Settings → Secrets → Actions → New secret → `FIREBASE_SERVICE_ACCOUNT_JSON`
+- [ ] The GitHub Actions workflow (`.github/workflows/trail-ingestion.yml`) runs automatically every 30 min
+- [ ] **Manual trigger**: GitHub → Actions → "Trail Ingestion Worker" → Run workflow
+- [ ] **Manual single-destination ingest** (from your Mac, no GCP IP restriction):
+  ```
+  node scripts/ingestTrails.js --destination yosemite-us --lat 37.8651 --lng -119.5383
+  ```
+
+### How it works
+
+1. User generates an itinerary for a hiking destination → Firebase function checks `trails/{destinationId}`
+2. Cache miss → function writes to `trailIngestionQueue/{destinationId}` (status: pending)
+3. GitHub Actions runs within ~30 min, calls Overpass (works from GitHub's IPs), writes to `trails/`
+4. Next generation for that destination gets real trail data with distances, difficulty, and duration
+
+### Pre-seeded destinations
+
+- `zion-us` — 19 trails already in Firestore
+
+---
+
 ## Backend & Infrastructure
 
 - [ ] Add **Firebase App Check** to protect Cloud Functions from abuse (especially `generateItineraryHttp` which calls paid APIs)
@@ -96,3 +132,11 @@
 - [ ] Add **in-app review prompt** (using `expo-store-review`) after a user successfully generates their first itinerary — timing is perfect there
 - [ ] Improve the **Places cache key** to include destination + interests, so repeat searches for the same destination in the same interest category hit cache and reduce cost
 - [ ] Handle the case where generation fails mid-flight but credit was already decremented — add a refund path or only decrement on success (currently decrements before generation starts)
+
+## Itinerary Generation
+- [ ] Fix activity pills, some of them dont make sense
+- [ ] Itinerary is sometimes reccomending random stores 
+- [ ] Do we want to make activity cards clickable to get more info?
+- [ ] Itinerary sometimes has activities halfway across the country if the city name is the same
+- [ ] Make cards draggable so they can reorder if they want
+- [ ] Images do not load on itinerary page sometimes
