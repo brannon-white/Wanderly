@@ -32,7 +32,7 @@ export default function DestinationCard({
     <TouchableOpacity
       style={styles.destinationCard}
       onPress={() => navigation.navigate('DestinationScreen', {
-        searchedDestination: { id, name: title, country: country ?? '', flag: flag ?? '', imageUrl, gallery: [] },
+        searchedDestination: { id, name: title, country: country ?? '', flag: flag ?? '', imageUrl, gallery: [], destinationType: 'city' as const },
       })}
       activeOpacity={0.9}
     >

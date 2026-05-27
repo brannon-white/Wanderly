@@ -202,13 +202,18 @@ export async function searchNearbyForActivity(
 
 export async function fetchNearbyForClusters(
   clusters: PlaceCluster[],
-  apiKey: string
+  apiKey: string,
+  destinationType: 'city' | 'national_park' = 'city'
 ): Promise<PlaceCluster[]> {
+  // National parks: gateway towns for restaurants are 6–15 km from park cluster centers,
+  // so we widen the radius to 15 km. City trips keep the original 1.5 km.
+  const nearbyRadius = destinationType === 'national_park' ? 15000 : 1500;
+
   const enriched = await Promise.all(
     clusters.map(async (cluster) => {
       const [foodResults, attractionResults] = await Promise.all([
-        searchNearby(cluster.centerLat, cluster.centerLng, ["restaurant", "cafe", "bakery"], apiKey),
-        searchNearby(cluster.centerLat, cluster.centerLng, ["tourist_attraction", "museum", "art_gallery", "park", "night_club"], apiKey),
+        searchNearby(cluster.centerLat, cluster.centerLng, ["restaurant", "cafe", "bakery"], apiKey, nearbyRadius),
+        searchNearby(cluster.centerLat, cluster.centerLng, ["tourist_attraction", "museum", "art_gallery", "park", "night_club"], apiKey, nearbyRadius),
       ]);
 
       const existingIds = new Set(cluster.places.map((p) => p.placeId));

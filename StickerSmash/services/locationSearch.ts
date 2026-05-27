@@ -7,6 +7,7 @@ export interface LocationResult {
   countryCode: string;
   flag: string;
   imageUrl: string | null;
+  destinationType: 'city' | 'national_park';
 }
 
 export interface SearchedDestination {
@@ -16,6 +17,7 @@ export interface SearchedDestination {
   flag: string;
   imageUrl: string;
   gallery: string[];
+  destinationType: 'city' | 'national_park';
 }
 
 function toFlag(countryCode: string): string {
@@ -48,17 +50,28 @@ async function fetchLocations(query: string): Promise<LocationResult[]> {
     const addr = item.address;
     if (!addr?.country || !addr?.country_code) continue;
 
+    const isNationalPark =
+      (item.class === 'boundary' && item.type === 'national_park') ||
+      (item.class === 'leisure' && item.type === 'nature_reserve' && Number(item.importance ?? 0) > 0.4);
+
     const isPlace = item.class === 'place' && PLACE_TYPES.has(item.type);
-    const isBoundary = item.class === 'boundary' && item.type === 'administrative';
-    if (!isPlace && !isBoundary) continue;
+    const isBoundary = item.class === 'boundary' &&
+      (item.type === 'administrative' || item.type === 'national_park');
+    const isLeisurePark = item.class === 'leisure' && item.type === 'nature_reserve';
+
+    if (!isPlace && !isBoundary && !isLeisurePark) continue;
 
     const cityName =
       addr.city || addr.town || addr.village || addr.municipality || item.name;
     if (!cityName) continue;
 
-    const key = `${cityName.toLowerCase()}-${addr.country_code.toLowerCase()}`;
+    // Replace spaces with hyphens so multi-word park names produce valid slugs
+    const key = `${cityName.toLowerCase().replace(/\s+/g, '-')}-${addr.country_code.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
+
+    const destinationType: 'city' | 'national_park' =
+      (isNationalPark || isLeisurePark) ? 'national_park' : 'city';
 
     results.push({
       id: key,
@@ -67,6 +80,7 @@ async function fetchLocations(query: string): Promise<LocationResult[]> {
       countryCode: addr.country_code.toUpperCase(),
       flag: toFlag(addr.country_code),
       imageUrl: null,
+      destinationType,
     });
 
     if (results.length === 6) break;

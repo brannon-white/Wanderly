@@ -108,18 +108,39 @@ function buildStrategyPrompt(intent: TripIntent): string {
     lines.push(`Activities to EXCLUDE entirely: ${intent.avoidActivities.join(", ")} — do NOT generate search queries for these categories`);
   }
 
-  lines.push(
-    `\nRequirements:`,
-    `1. Identify the best neighborhoods/areas to focus on per day to minimize cross-city travel`,
-    `2. Create a catchy theme for each of the ${intent.durationDays} days`,
-    `3. Generate 12-18 specific Google Places search queries to find real venues. Include:`,
-    `   - Breakfast café searches (e.g. "best breakfast cafes in Shinjuku Tokyo")`,
-    `   - Lunch restaurant searches (e.g. "popular lunch spots in Harajuku Tokyo")`,
-    `   - Dinner restaurant searches matching budget (e.g. "best izakaya dinner Shibuya moderate price")`,
-    `   - Attraction searches per interest (e.g. "top art museums in Tokyo")`,
-    `   - Nightlife/shopping/wellness if relevant to interests`,
-    `   Make queries hyper-specific with neighborhood + city + category.`,
-  );
+  if (intent.destinationType === 'national_park') {
+    lines.push(
+      `\nRequirements:`,
+      `1. "primaryNeighborhoods" must be named park zones/areas + gateway towns IMMEDIATELY outside the park (NOT abstract districts).`,
+      `   Examples: Zion NP → ["Zion Canyon", "Kolob Canyons Area", "Springdale UT", "Kanab UT"]`,
+      `             Great Smoky Mtns → ["Cades Cove", "Newfound Gap", "Gatlinburg TN", "Cherokee NC"]`,
+      `             Yellowstone → ["Old Faithful Area", "Lamar Valley", "West Yellowstone MT", "Gardiner MT"]`,
+      `2. Create a catchy theme for each of the ${intent.durationDays} days, each covering ONE park zone + its gateway town.`,
+      `3. Generate 12-18 specific Google Places search queries. For national parks, queries MUST include:`,
+      `   - Named trailhead/scenic area searches (e.g. "Angels Landing trailhead Zion National Park")`,
+      `   - Visitor center area searches (e.g. "Zion Canyon Visitor Center area")`,
+      `   - Scenic drives/overlooks (e.g. "Zion-Mount Carmel Highway overlooks")`,
+      `   - Gateway town breakfast cafes (e.g. "best breakfast cafes Springdale Utah")`,
+      `   - Gateway town lunch spots (e.g. "popular lunch restaurants Springdale Utah")`,
+      `   - Gateway town dinner restaurants matching budget (e.g. "best dinner restaurants Springdale Utah moderate")`,
+      `   - Outdoor equipment/gear if adventure interest (e.g. "outdoor gear rental Springdale Utah")`,
+      `4. DO NOT generate museum, nightlife, or shopping queries for the park itself. Those go to gateway towns only.`,
+      `5. Make queries hyper-specific: named trail + park name, or restaurant type + gateway town name + state.`,
+    );
+  } else {
+    lines.push(
+      `\nRequirements:`,
+      `1. Identify the best neighborhoods/areas to focus on per day to minimize cross-city travel`,
+      `2. Create a catchy theme for each of the ${intent.durationDays} days`,
+      `3. Generate 12-18 specific Google Places search queries to find real venues. Include:`,
+      `   - Breakfast café searches (e.g. "best breakfast cafes in Shinjuku Tokyo")`,
+      `   - Lunch restaurant searches (e.g. "popular lunch spots in Harajuku Tokyo")`,
+      `   - Dinner restaurant searches matching budget (e.g. "best izakaya dinner Shibuya moderate price")`,
+      `   - Attraction searches per interest (e.g. "top art museums in Tokyo")`,
+      `   - Nightlife/shopping/wellness if relevant to interests`,
+      `   Make queries hyper-specific with neighborhood + city + category.`,
+    );
+  }
 
   return lines.join("\n");
 }

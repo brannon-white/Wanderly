@@ -74,6 +74,7 @@ export interface GenerateItineraryRequest {
   derivedIntent?: TripDerivedIntent;
   includeActivities?: string[];
   avoidActivities?: string[];
+  destinationType?: 'city' | 'national_park';
 }
 
 export interface ItineraryCoordinates {
