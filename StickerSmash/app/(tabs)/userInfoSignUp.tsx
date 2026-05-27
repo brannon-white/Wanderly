@@ -11,6 +11,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { RootStackParamList } from '@/app/_layout';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
+import { Pencil } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useDemo } from '@/context/DemoContext';
 
@@ -72,7 +73,7 @@ const pickImage = async () => {
     >
       <View style={styles.container}>
         <Text style={styles.heading}>
-          Add a personal touch <Text style={styles.headingEmoji}>🧑‍💼</Text>
+          Add a personal touch
         </Text>
         <Text style={styles.subheading}>
           To enhance your travel journey, we'd love to know more about you.
@@ -89,7 +90,7 @@ const pickImage = async () => {
             style={styles.avatar}
           />
           <TouchableOpacity style={styles.editIcon} onPress={pickImage}>
-            <Text style={{ color: '#fff', fontSize: 16 }}>✏️</Text>
+            <Pencil size={14} color="#fff" />
           </TouchableOpacity>
         </View>
 

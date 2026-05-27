@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Users, Footprints, Sunrise } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -11,10 +13,10 @@ import { INTERESTS } from '@/constants/interests';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 
-const AVOID_ONLY = [
-  { label: 'Crowds', emoji: '👥' },
-  { label: 'Long Hikes', emoji: '🥾' },
-  { label: 'Early Mornings', emoji: '🌅' },
+const AVOID_ONLY: { label: string; icon: LucideIcon }[] = [
+  { label: 'Crowds', icon: Users },
+  { label: 'Long Hikes', icon: Footprints },
+  { label: 'Early Mornings', icon: Sunrise },
 ];
 
 const ALL_PILLS = [...INTERESTS, ...AVOID_ONLY];
@@ -86,7 +88,7 @@ export default function TripInterestsScreen() {
               <Pill
                 key={item.label}
                 label={item.label}
-                emoji={item.emoji}
+                icon={item.icon}
                 state={included ? 'include' : 'neutral'}
                 onPress={() => toggleInclude(item.label)}
               />
@@ -109,7 +111,7 @@ export default function TripInterestsScreen() {
               <Pill
                 key={item.label}
                 label={item.label}
-                emoji={item.emoji}
+                icon={item.icon}
                 state={avoided ? 'avoid' : 'neutral'}
                 onPress={() => toggleAvoid(item.label)}
               />
@@ -155,15 +157,16 @@ function SectionLabel({
 
 function Pill({
   label,
-  emoji,
+  icon: Icon,
   state,
   onPress,
 }: {
   label: string;
-  emoji: string;
+  icon: LucideIcon;
   state: 'include' | 'avoid' | 'neutral';
   onPress: () => void;
 }) {
+  const iconColor = state === 'include' ? '#22A67A' : state === 'avoid' ? '#E04B4B' : TEXT_DARK;
   return (
     <TouchableOpacity
       style={[
@@ -183,7 +186,7 @@ function Pill({
       >
         {label}
       </Text>
-      <Text style={styles.pillEmoji}>{emoji}</Text>
+      <Icon size={14} color={iconColor} style={{ marginLeft: 5 }} />
     </TouchableOpacity>
   );
 }
@@ -253,9 +256,5 @@ const styles = StyleSheet.create({
   },
   pillTextAvoid: {
     color: '#E04B4B',
-  },
-  pillEmoji: {
-    fontSize: 14,
-    marginLeft: 5,
   },
 });

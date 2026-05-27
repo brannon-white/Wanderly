@@ -18,6 +18,7 @@ import { Image } from 'expo-image';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
+import { Footprints } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -173,13 +174,16 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, onPress, onLon
   // 2. Trail keyword in name (adventure/nature category) → generic trail label
   // 3. Everything else → Category · ★rating · duration
   let metaLine: string;
+  let isTrail = false;
   if (activity.trailDistanceMiles != null) {
     const parts = [`${activity.trailDistanceMiles} mi`];
     if (difficultyLabel) parts.push(difficultyLabel);
     if (activity.trailDurationHours != null) parts.push(`~${activity.trailDurationHours}h`);
-    metaLine = `🥾 ${parts.join(' · ')}`;
+    metaLine = parts.join(' · ');
+    isTrail = true;
   } else if (isTrailByName) {
-    metaLine = '🥾 Trail';
+    metaLine = 'Trail';
+    isTrail = true;
   } else {
     const catLabel = CATEGORY_LABELS[catKey] ?? activity.category ?? '';
     const duration = parseDuration(activity.time);
@@ -221,7 +225,10 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, onPress, onLon
           {/* Text content */}
           <View style={styles.compactBody}>
             <Text style={styles.compactTitle} numberOfLines={2}>{activity.name}</Text>
-            <Text style={styles.compactMeta} numberOfLines={1}>{metaLine}</Text>
+            <View style={styles.compactMetaRow}>
+              {isTrail && <Footprints size={11} color="#888" style={{ marginRight: 3 }} />}
+              <Text style={styles.compactMeta} numberOfLines={1}>{metaLine}</Text>
+            </View>
             <Text style={styles.compactTime}>{startTime}</Text>
           </View>
         </View>
