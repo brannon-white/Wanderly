@@ -15,7 +15,7 @@ function SavedCard({ item }: { item: SavedItem }) {
   const handlePress = () => {
     if (item.type === 'destination') {
       navigation.navigate('DestinationScreen', {
-        searchedDestination: { id: item.id, name: item.title, country: item.country ?? '', flag: item.flag ?? '', imageUrl: item.imageUrl, gallery: [] },
+        searchedDestination: { id: item.id, name: item.title, country: item.country ?? '', flag: item.flag ?? '', imageUrl: item.imageUrl, gallery: [], destinationType: 'city' as const },
       });
     } else {
       navigation.navigate('ItineraryScreen', { id: item.id, source: 'browse' });

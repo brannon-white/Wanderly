@@ -20,13 +20,12 @@ import { searchPhoto, searchPhotos } from '@/services/unsplash';
 
 type NavProp = StackNavigationProp<RootStackParamList, 'SearchScreen'>;
 
-const POPULAR: Array<{
-  id: string;
-  name: string;
-  country: string;
-  flag: string;
-  imageUrl: string;
-}> = [
+// Subset used by ResultRow and POPULAR list — destinationType is optional (defaults to 'city')
+type SearchItem = Pick<LocationResult, 'id' | 'name' | 'country' | 'flag' | 'imageUrl'> & {
+  destinationType?: 'city' | 'national_park';
+};
+
+const POPULAR: Array<SearchItem> = [
   {
     id: 'new-york-city-us',
     name: 'New York City',
@@ -104,7 +103,7 @@ function ResultRow({
   onPress,
   isLoading,
 }: {
-  item: { id: string; name: string; country: string; flag: string; imageUrl: string | null };
+  item: SearchItem;
   onPress: () => void;
   isLoading: boolean;
 }) {
@@ -186,7 +185,7 @@ export default function SearchScreen() {
   }, [query]);
 
   const handleSelect = useCallback(
-    async (item: { id: string; name: string; country: string; flag: string; imageUrl: string | null }) => {
+    async (item: SearchItem) => {
       if (selectingId) return;
       setSelectingId(item.id);
       try {
@@ -202,6 +201,7 @@ export default function SearchScreen() {
             flag: item.flag,
             imageUrl: heroImage,
             gallery,
+            destinationType: item.destinationType ?? 'city',
           },
         });
       } finally {

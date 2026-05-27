@@ -151,7 +151,7 @@ export async function generateItineraryFlow(
   // Step 5b: Nearby search — enrich each cluster with geographically tight results
   if (googlePlacesApiKey && clusters.length > 0) {
     logger.info("Pipeline: nearby search enrichment");
-    clusters = await fetchNearbyForClusters(clusters, googlePlacesApiKey);
+    clusters = await fetchNearbyForClusters(clusters, googlePlacesApiKey, input.destinationType ?? 'city');
   }
 
   // Step 5c: Fetch verified hiking trails (always attempt — cheap read, returns [] on miss)

@@ -28,7 +28,7 @@ function DestinationGridCard({ item }: { item: any }) {
       style={styles.card}
       activeOpacity={0.9}
       onPress={() => navigation.navigate('DestinationScreen', {
-        searchedDestination: { id: item.id, name: item.name, country: item.country ?? '', flag: item.flag ?? '', imageUrl: item.imageUrl, gallery: [] },
+        searchedDestination: { id: item.id, name: item.name, country: item.country ?? '', flag: item.flag ?? '', imageUrl: item.imageUrl, gallery: [], destinationType: 'city' as const },
       })}
     >
       <Image source={{ uri: item.imageUrl }} style={styles.cardImage} resizeMode="cover" />

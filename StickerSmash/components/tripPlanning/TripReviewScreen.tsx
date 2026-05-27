@@ -136,6 +136,7 @@ export default function TripReviewScreen() {
       tripPrompt: tripPrompt || undefined,
       includeActivities: includeActivities.length > 0 ? [...includeActivities] : undefined,
       avoidActivities: avoidActivities.length > 0 ? [...avoidActivities] : undefined,
+      destinationType: destinationSnapshot?.destinationType ?? 'city',
     };
     const savedHeroImage = templateHeroImage;
     const savedParty = party;
@@ -236,7 +237,7 @@ export default function TripReviewScreen() {
             </View>
             <Text style={styles.sectionLabel}>Destination</Text>
             <View style={{ flex: 1 }} />
-            <EditIcon onPress={() => navigation.navigate('DestinationScreen', { searchedDestination: { id: destination.id, name: destination.name, country: destination.country, flag: destination.flag, imageUrl: destination.imageUrl, gallery: [] } })} />
+            <EditIcon onPress={() => navigation.navigate('DestinationScreen', { searchedDestination: { id: destination.id, name: destination.name, country: destination.country, flag: destination.flag, imageUrl: destination.imageUrl, gallery: [], destinationType: destinationSnapshot?.destinationType ?? 'city' } })} />
           </View>
           <View style={styles.destinationContent}>
             <Image source={{ uri: destination.imageUrl }} style={styles.destinationImage} />

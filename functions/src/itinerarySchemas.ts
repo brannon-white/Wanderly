@@ -35,6 +35,7 @@ export const generateItineraryRequestSchema = z.object({
   derivedIntent: tripDerivedIntentSchema,
   includeActivities: z.array(z.string()).optional(),
   avoidActivities: z.array(z.string()).optional(),
+  destinationType: z.enum(['city', 'national_park']).optional(),
 });
 
 export type TasteProfile = NonNullable<z.infer<typeof tasteProfileSchema>>;

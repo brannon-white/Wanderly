@@ -205,5 +205,6 @@ Infer pace: budget travelers often pack more in; luxury travelers prefer relaxed
     derivedIntent: hasDerivedIntent ? derivedIntent : undefined,
     includeActivities: input.includeActivities,
     avoidActivities: input.avoidActivities,
+    destinationType: input.destinationType ?? 'city',
   };
 }

@@ -8,6 +8,7 @@ export interface DestinationSnapshot {
   country: string;
   flag: string;
   imageUrl: string;
+  destinationType: 'city' | 'national_park';
 }
 
 interface TripPlanningState {

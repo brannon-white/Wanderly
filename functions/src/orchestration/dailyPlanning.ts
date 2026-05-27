@@ -127,6 +127,16 @@ ${formatOsmHikes(osmHikes)}
   Use the listed durations exactly. Do not compress them.\n`
     : "";
 
+  const parkContextBlock = intent.destinationType === 'national_park'
+    ? `\nDESTINATION TYPE: NATIONAL PARK
+${intent.destination} is a national park. Apply these planning rules in addition to the standard rules below:
+- IN-PARK ANCHORS: Named hiking trails, scenic overlooks, visitor centers, and scenic drives are the primary activity anchors for each day. Schedule them in the MORNING.
+- GATEWAY TOWNS for meals: All meals (breakfast, lunch, dinner) and evening activities should be in nearby gateway towns (${strategy.primaryNeighborhoods.join(', ')}). Gateway town dining is NOT "leaving the destination" — it is the normal and expected infrastructure for a park trip.
+- ONE ZONE PER DAY: Commit to a single park zone each day (e.g. Zion Canyon one day, Kolob Canyons another). Do not try to cover the whole park in a single day — parks span dozens of miles.
+- GATEWAY TRANSITION: After the morning/midday trail, transition to the nearest gateway town for lunch and dinner. Restaurants and cafes in gateway towns are 5–20 minutes from most park trailheads.
+- OUT-OF-PARK ACTIVITIES: Activities outside the park boundary are EXPECTED and ALLOWED as long as they are geographically close to that day's park zone. Do not treat gateway town restaurants as "off-topic".\n`
+    : "";
+
   const prompt = `You are an expert travel planner building a detailed, realistic itinerary for a mobile travel app.
 
 TRIP DETAILS:
@@ -136,7 +146,7 @@ TRIP DETAILS:
 - Interests: ${intent.rankedInterests.join(", ")}
 - Dates: ${intent.startDate ?? "flexible"} to ${intent.endDate ?? "flexible"}
 ${personalizationBlock}
-
+${parkContextBlock}
 ${hasClusters ? `CANDIDATE PLACES FROM GOOGLE PLACES (verified real venues with accurate coordinates):
 ${candidateList}
 ` : ""}${osmHikeBlock}PLANNING RULES:
