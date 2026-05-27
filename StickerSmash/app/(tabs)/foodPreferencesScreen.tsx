@@ -7,6 +7,7 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
 import { saveOnboardingStep, getOnboardingStepData } from '@/utils/onboardingStorage';
 import { Ionicons } from '@expo/vector-icons';
+import { Search } from 'lucide-react-native';
 import { getStaticFoodPreferences } from '@/utils/getStaticFoodPreferences';
 import { useDemo } from '@/context/DemoContext';
 import { DEMO_FOOD_PREFERENCES } from '@/data/demoData';
@@ -104,7 +105,7 @@ export default function FoodPreferencesScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.heading}>
-          Food preferences <Text style={styles.headingEmoji}>🍽️</Text>
+          Food preferences
         </Text>
         <Text style={styles.subheading}>
           {fromSettings
@@ -112,7 +113,7 @@ export default function FoodPreferencesScreen() {
             : "Tell us your food preferences, and we'll tailor recommendations to your taste. You can always change it later in the settings."}
         </Text>
         <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Search size={18} color="#bdbdbd" style={{ marginRight: 10 }} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search food preferences"
@@ -135,7 +136,6 @@ export default function FoodPreferencesScreen() {
                 <Text style={[styles.prefText, selected.includes(p.label) && styles.prefTextSelected]}>
                   {p.label}
                 </Text>
-                <Text style={styles.prefEmoji}>{p.emoji}</Text>
               </TouchableOpacity>
             ))}
           </View>

@@ -403,11 +403,16 @@ export const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
+  compactMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 3,
+  },
+
   compactMeta: {
     fontSize: 12,
     color: '#999',
     fontFamily: 'SourceSans3-Regular',
-    marginBottom: 3,
   },
 
   compactTime: {

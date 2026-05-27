@@ -1,22 +1,24 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { PersonStanding, Heart, UsersRound, Users, Briefcase } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
-import { shared } from '@/styles/tripPlanningStyles';
+import { shared, PRIMARY, TEXT_DARK } from '@/styles/tripPlanningStyles';
 import { useTripPlanning } from '@/context/TripPlanningContext';
 import { useMyTrips } from '@/context/MyTripsContext';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 
-const PARTY_OPTIONS = [
-  { id: 'Only Me', emoji: '🚶', description: 'Traveling solo, just you.' },
-  { id: 'A Couple', emoji: '❤️', description: 'A romantic getaway for two.' },
-  { id: 'Family', emoji: '👨‍👩‍👧‍👦', description: 'Quality time with your loved ones.' },
-  { id: 'Friends', emoji: '⭐', description: 'Adventure with your closest pals.' },
-  { id: 'Work', emoji: '💼', description: 'Business or corporate travel.' },
+const PARTY_OPTIONS: { id: string; icon: LucideIcon; description: string }[] = [
+  { id: 'Only Me', icon: PersonStanding, description: 'Traveling solo, just you.' },
+  { id: 'A Couple', icon: Heart, description: 'A romantic getaway for two.' },
+  { id: 'Family', icon: UsersRound, description: 'Quality time with your loved ones.' },
+  { id: 'Friends', icon: Users, description: 'Adventure with your closest pals.' },
+  { id: 'Work', icon: Briefcase, description: 'Business or corporate travel.' },
 ];
 
 export default function TripPartyScreen() {
@@ -66,7 +68,7 @@ export default function TripPartyScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={shared.heading}>
-          {isPrebuilt ? "Who's coming along? 🧳" : 'Who is going? 🧳'}
+          {isPrebuilt ? "Who's coming along?" : 'Who is going?'}
         </Text>
         <Text style={shared.subheading}>
           {isPrebuilt
@@ -76,6 +78,7 @@ export default function TripPartyScreen() {
 
         {PARTY_OPTIONS.map((option) => {
           const selected = party === option.id;
+          const OptionIcon = option.icon;
           return (
             <TouchableOpacity
               key={option.id}
@@ -83,9 +86,12 @@ export default function TripPartyScreen() {
               onPress={() => setParty(option.id)}
               activeOpacity={0.7}
             >
-              <Text style={[shared.optionTitle, selected && shared.optionTitleSelected]}>
-                {option.id} {option.emoji}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <OptionIcon size={18} color={selected ? PRIMARY : TEXT_DARK} />
+                <Text style={[shared.optionTitle, selected && shared.optionTitleSelected, { marginBottom: 0 }]}>
+                  {option.id}
+                </Text>
+              </View>
               <Text style={shared.optionSubtitle}>{option.description}</Text>
             </TouchableOpacity>
           );

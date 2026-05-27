@@ -171,7 +171,7 @@ export default function TripDatesScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={[shared.heading, { paddingHorizontal: 4 }]}>
-          When will your adventure begin and end? 📅
+          When will your adventure begin and end?
         </Text>
         <Text style={[shared.subheading, { paddingHorizontal: 4 }]}>
           Choose the dates for your trip. This helps us plan the perfect itinerary for your travel period.

@@ -7,25 +7,27 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
+import { Utensils, Car, Map, Coffee, Leaf, Music2, Mountain, DollarSign } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { editItineraryWithLanguage } from '@/services/regenerateItinerary';
 import type { GeneratedItinerary } from '@/types/itinerary';
 import { getUsageStatus } from '@/services/purchases';
 
 interface RefinementPill {
   label: string;
-  emoji: string;
+  icon: LucideIcon;
   message: string;
 }
 
 const PILLS: RefinementPill[] = [
-  { label: 'More Food', emoji: '🍜', message: 'Add more food and dining experiences throughout the itinerary, include interesting local restaurants and cafes' },
-  { label: 'Less Walking', emoji: '🚕', message: 'Reduce walking between activities by clustering them geographically, use transport more often' },
-  { label: 'Hidden Gems', emoji: '🗺️', message: 'Replace tourist hotspots with local hidden gem alternatives and off-the-beaten-path venues' },
-  { label: 'More Relaxed', emoji: '☕', message: 'Make the pace more relaxed with fewer activities per day and longer time at each place' },
-  { label: 'More Nature', emoji: '🌿', message: 'Add more nature, parks, and outdoor experiences to the itinerary' },
-  { label: 'More Nightlife', emoji: '🎶', message: 'Add more evening activities, bars, music venues, and nightlife options' },
-  { label: 'More Adventure', emoji: '🏔️', message: 'Add more outdoor adventure activities, hiking, and physical experiences' },
-  { label: 'Budget Friendly', emoji: '💰', message: 'Replace expensive venues with more affordable local alternatives' },
+  { label: 'More Food', icon: Utensils, message: 'Add more food and dining experiences throughout the itinerary, include interesting local restaurants and cafes' },
+  { label: 'Less Walking', icon: Car, message: 'Reduce walking between activities by clustering them geographically, use transport more often' },
+  { label: 'Hidden Gems', icon: Map, message: 'Replace tourist hotspots with local hidden gem alternatives and off-the-beaten-path venues' },
+  { label: 'More Relaxed', icon: Coffee, message: 'Make the pace more relaxed with fewer activities per day and longer time at each place' },
+  { label: 'More Nature', icon: Leaf, message: 'Add more nature, parks, and outdoor experiences to the itinerary' },
+  { label: 'More Nightlife', icon: Music2, message: 'Add more evening activities, bars, music venues, and nightlife options' },
+  { label: 'More Adventure', icon: Mountain, message: 'Add more outdoor adventure activities, hiking, and physical experiences' },
+  { label: 'Budget Friendly', icon: DollarSign, message: 'Replace expensive venues with more affordable local alternatives' },
 ];
 
 interface Props {
@@ -82,7 +84,7 @@ export default function ItineraryRefinementBar({ itineraryId, onUpdated, onPaywa
               {isLoading ? (
                 <ActivityIndicator size="small" color="#6A62B7" style={{ marginRight: 6 }} />
               ) : (
-                <Text style={styles.pillEmoji}>{pill.emoji}</Text>
+                <pill.icon size={14} color="#6A62B7" style={{ marginRight: 2 }} />
               )}
               <Text style={[styles.pillText, isLoading && styles.pillTextLoading]}>
                 {pill.label}
@@ -133,9 +135,6 @@ const styles = StyleSheet.create({
   },
   pillDimmed: {
     opacity: 0.4,
-  },
-  pillEmoji: {
-    fontSize: 14,
   },
   pillText: {
     fontSize: 13.5,

@@ -13,6 +13,12 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '@/app/_layout';
 import { Ionicons } from '@expo/vector-icons';
+import {
+  Coffee, Zap, Map, Star, Leaf, Building2, Landmark, Mountain,
+  UtensilsCrossed, Utensils, Moon, Music2, Waves, ClipboardList,
+  Backpack, Sparkles, Car, Footprints,
+} from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { saveOnboardingStep } from '@/utils/onboardingStorage';
 import { isOnboardingComplete } from '@/utils/isOnboardingComplete';
 import { getAuth } from '@react-native-firebase/auth';
@@ -27,8 +33,8 @@ const { width, height } = Dimensions.get('window');
 
 interface SwipeCard {
   question: string;
-  optionA: { headline: string; bullets: string[]; emoji: string; color: string };
-  optionB: { headline: string; bullets: string[]; emoji: string; color: string };
+  optionA: { headline: string; bullets: string[]; icon: LucideIcon; color: string };
+  optionB: { headline: string; bullets: string[]; icon: LucideIcon; color: string };
   dimensionsA: Partial<TasteProfile>;
   dimensionsB: Partial<TasteProfile>;
 }
@@ -39,13 +45,13 @@ const CARDS: SwipeCard[] = [
     optionA: {
       headline: 'Slow & Cozy',
       bullets: ['Hidden cafes', 'Lazy mornings', 'Scenic strolls', 'No rush'],
-      emoji: '☕',
+      icon: Coffee,
       color: '#FFF8F0',
     },
     optionB: {
       headline: 'Full & Packed',
       bullets: ['Famous highlights', 'Packed schedule', 'See everything', 'Every minute counts'],
-      emoji: '⚡',
+      icon: Zap,
       color: '#F0F4FF',
     },
     dimensionsA: { pace: 0.2 },
@@ -56,13 +62,13 @@ const CARDS: SwipeCard[] = [
     optionA: {
       headline: 'Off the Grid',
       bullets: ['Locals-only spots', 'Hidden streets', 'Unexpected finds', 'No tourist traps'],
-      emoji: '🗺️',
+      icon: Map,
       color: '#F0FFF4',
     },
     optionB: {
       headline: 'Classic Picks',
       bullets: ['Iconic attractions', 'Top-rated spots', 'Famous sights', 'Tried & true'],
-      emoji: '⭐',
+      icon: Star,
       color: '#FFFBF0',
     },
     dimensionsA: { hiddenGems: 0.8, touristTolerance: 0.2 },
@@ -73,13 +79,13 @@ const CARDS: SwipeCard[] = [
     optionA: {
       headline: 'In Nature',
       bullets: ['Forests & mountains', 'Scenic viewpoints', 'Fresh air', 'Wide open spaces'],
-      emoji: '🌿',
+      icon: Leaf,
       color: '#F0FFF4',
     },
     optionB: {
       headline: 'In the City',
       bullets: ['Urban culture', 'City streets', 'Architecture', 'The buzz of a city'],
-      emoji: '🏙️',
+      icon: Building2,
       color: '#F0F4FF',
     },
     dimensionsA: { nature: 0.8 },
@@ -90,13 +96,13 @@ const CARDS: SwipeCard[] = [
     optionA: {
       headline: 'Culture & Food',
       bullets: ['Museums', 'Local cuisine', 'Art & history', 'Slow experiences'],
-      emoji: '🏛️',
+      icon: Landmark,
       color: '#FFF8F0',
     },
     optionB: {
       headline: 'Outdoor Adventure',
       bullets: ['Hiking', 'Physical challenges', 'Outdoor sports', 'Heart-pumping activities'],
-      emoji: '🏔️',
+      icon: Mountain,
       color: '#F0FFF4',
     },
     dimensionsA: { adventure: 0.2 },
@@ -107,13 +113,13 @@ const CARDS: SwipeCard[] = [
     optionA: {
       headline: 'Just Fuel',
       bullets: ['Eat to keep going', 'Quick & easy', 'Food is not the focus', 'Grab and go'],
-      emoji: '🥙',
+      icon: UtensilsCrossed,
       color: '#F5F5F5',
     },
     optionB: {
       headline: 'Food First',
       bullets: ['Every meal matters', 'Local specialties', 'Restaurant hunting', 'Food is the trip'],
-      emoji: '🍜',
+      icon: Utensils,
       color: '#FFF0F3',
     },
     dimensionsA: { foodie: 0.2 },
@@ -124,13 +130,13 @@ const CARDS: SwipeCard[] = [
     optionA: {
       headline: 'Early Nights',
       bullets: ['Rest up for tomorrow', 'Quiet dinners', 'Back at the hotel', 'Recharge mode'],
-      emoji: '🌙',
+      icon: Moon,
       color: '#F0F4FF',
     },
     optionB: {
       headline: 'Out All Night',
       bullets: ['Bars & live music', 'Evening scene', 'Meet locals', 'Night is young'],
-      emoji: '🎶',
+      icon: Music2,
       color: '#FFF0F3',
     },
     dimensionsA: { nightlife: 0.2 },
@@ -141,13 +147,13 @@ const CARDS: SwipeCard[] = [
     optionA: {
       headline: 'Go With the Flow',
       bullets: ['Open schedule', 'Follow your mood', 'Spontaneous detours', 'No plan needed'],
-      emoji: '🌊',
+      icon: Waves,
       color: '#F0F8FF',
     },
     optionB: {
       headline: 'Plan Everything',
       bullets: ['Detailed itinerary', 'Know what\'s next', 'Booked in advance', 'No surprises'],
-      emoji: '📋',
+      icon: ClipboardList,
       color: '#F5F0FF',
     },
     dimensionsA: { structurePreference: 0.2 },
@@ -158,13 +164,13 @@ const CARDS: SwipeCard[] = [
     optionA: {
       headline: 'Budget & Local',
       bullets: ['Street food', 'Hostels & guesthouses', 'Local markets', 'Authentic & affordable'],
-      emoji: '🎒',
+      icon: Backpack,
       color: '#FFF8F0',
     },
     optionB: {
       headline: 'Comfort & Style',
       bullets: ['Nice hotels', 'Fine dining', 'Spa & wellness', 'Premium experiences'],
-      emoji: '✨',
+      icon: Sparkles,
       color: '#F5F0FF',
     },
     dimensionsA: { luxury: 0.2 },
@@ -175,13 +181,13 @@ const CARDS: SwipeCard[] = [
     optionA: {
       headline: 'Minimize It',
       bullets: ['Prefer transit', 'Taxis & rideshares', 'Save my energy', 'Less walking = better'],
-      emoji: '🚕',
+      icon: Car,
       color: '#F0F4FF',
     },
     optionB: {
       headline: 'Walk Everywhere',
       bullets: ['Explore on foot', 'Stumble upon things', 'Happy to walk miles', 'Best way to see a city'],
-      emoji: '👟',
+      icon: Footprints,
       color: '#F0FFF4',
     },
     dimensionsA: { walkingTolerance: 0.2 },
@@ -378,15 +384,15 @@ function derivePersonalityLabel(p: TasteProfile): string {
   return [pace, discovery].filter(Boolean).join(' ');
 }
 
-function deriveTags(p: TasteProfile): { emoji: string; label: string }[] {
-  const tags: { emoji: string; label: string }[] = [];
-  if (p.foodie > 0.6) tags.push({ emoji: '🍜', label: 'Foodie' });
-  if (p.nightlife > 0.6) tags.push({ emoji: '🎶', label: 'Night Owl' });
-  if (p.nature > 0.6) tags.push({ emoji: '🌿', label: 'Nature Lover' });
-  if (p.adventure > 0.6) tags.push({ emoji: '🏔️', label: 'Adventurer' });
-  if (p.luxury > 0.6) tags.push({ emoji: '✨', label: 'Comfort Seeker' });
-  if (p.walkingTolerance > 0.6) tags.push({ emoji: '👟', label: 'Walker' });
-  if (p.structurePreference > 0.6) tags.push({ emoji: '📋', label: 'Planner' });
+function deriveTags(p: TasteProfile): { icon: LucideIcon; label: string }[] {
+  const tags: { icon: LucideIcon; label: string }[] = [];
+  if (p.foodie > 0.6) tags.push({ icon: Utensils, label: 'Foodie' });
+  if (p.nightlife > 0.6) tags.push({ icon: Music2, label: 'Night Owl' });
+  if (p.nature > 0.6) tags.push({ icon: Leaf, label: 'Nature Lover' });
+  if (p.adventure > 0.6) tags.push({ icon: Mountain, label: 'Adventurer' });
+  if (p.luxury > 0.6) tags.push({ icon: Sparkles, label: 'Comfort Seeker' });
+  if (p.walkingTolerance > 0.6) tags.push({ icon: Footprints, label: 'Walker' });
+  if (p.structurePreference > 0.6) tags.push({ icon: ClipboardList, label: 'Planner' });
   return tags;
 }
 
@@ -443,11 +449,15 @@ function TravelStyleSummary({
           <Text style={summaryStyles.personalityLabel}>{label}</Text>
           {tags.length > 0 && (
             <View style={summaryStyles.tagsRow}>
-              {tags.map(t => (
-                <View key={t.label} style={summaryStyles.tag}>
-                  <Text style={summaryStyles.tagText}>{t.emoji} {t.label}</Text>
-                </View>
-              ))}
+              {tags.map(t => {
+                const TagIcon = t.icon;
+                return (
+                  <View key={t.label} style={summaryStyles.tag}>
+                    <TagIcon size={12} color="#6A62B7" />
+                    <Text style={summaryStyles.tagText}>{t.label}</Text>
+                  </View>
+                );
+              })}
             </View>
           )}
         </View>
@@ -568,6 +578,9 @@ const summaryStyles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   tagText: {
     fontSize: 13,
@@ -687,6 +700,7 @@ function OptionPanel({
   chosen: boolean;
   dimmed: boolean;
 }) {
+  const PanelIcon = option.icon;
   return (
     <TouchableOpacity
       style={[
@@ -698,7 +712,9 @@ function OptionPanel({
       onPress={onPress}
       activeOpacity={0.85}
     >
-      <Text style={styles.panelEmoji}>{option.emoji}</Text>
+      <View style={styles.panelIconWrapper}>
+        <PanelIcon size={32} color={chosen ? '#6A62B7' : '#444'} />
+      </View>
       <Text style={[styles.panelHeadline, chosen && styles.panelHeadlineChosen]}>
         {option.headline}
       </Text>
@@ -810,8 +826,7 @@ const styles = StyleSheet.create({
   panelDimmed: {
     opacity: 0.45,
   },
-  panelEmoji: {
-    fontSize: 36,
+  panelIconWrapper: {
     marginBottom: 12,
   },
   panelHeadline: {
