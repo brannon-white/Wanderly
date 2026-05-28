@@ -383,18 +383,59 @@ export const styles = StyleSheet.create({
     paddingTop: 2,
   },
 
-  stopHeader: {
+  stopCard: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginTop: 10,
+    marginBottom: 14,
+    borderRadius: 14,
+    backgroundColor: '#F5F2FE',
+    overflow: 'hidden',
+  },
+
+  stopCardAccent: {
+    width: 4,
+    backgroundColor: '#6A62B7',
+  },
+
+  stopCardBody: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+
+  stopCardLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 56,
-    paddingTop: 8,
-    paddingBottom: 2,
+    marginBottom: 4,
   },
 
-  stopHeaderText: {
-    fontSize: 12,
+  stopCardLocation: {
+    fontSize: 11,
     color: '#6A62B7',
+    fontFamily: 'SourceSans3-SemiBold',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+
+  stopCardTitle: {
+    fontSize: 15,
+    color: '#1A1A2E',
+    fontFamily: 'SourceSans3-SemiBold',
+    lineHeight: 21,
+  },
+
+  stopCardOvernightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 6,
+  },
+
+  stopCardOvernight: {
+    fontSize: 12,
+    color: '#9890C8',
     fontFamily: 'SourceSans3-Regular',
     fontStyle: 'italic',
   },
@@ -444,6 +485,21 @@ export const styles = StyleSheet.create({
   compactImage: {
     width: '100%',
     height: 140,
+  },
+
+  compactImageFallback: {
+    backgroundColor: '#EDEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+
+  compactImageFallbackHalo: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#F5F2FE',
   },
 
   compactBody: {
