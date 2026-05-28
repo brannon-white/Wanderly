@@ -1,20 +1,34 @@
-export const PROMPT_VERSION = "v6";
+export const PROMPT_VERSION = "v7";
 export const MODEL_NAME = "claude-sonnet-4-6";
 export const FAST_MODEL_NAME = "claude-haiku-4-5-20251001";
+
+// Minimum activities per day, by trip style. Drive/departure days are exempt
+// and validated separately.
+export const MIN_ACTIVITIES_BY_STYLE: Record<"relaxed" | "balanced" | "packed", number> = {
+  relaxed: 5,
+  balanced: 6,
+  packed: 7,
+};
 
 // JSON Schema for a single activity — shared between generation and partial regeneration
 export const ACTIVITY_TOOL_INPUT_SCHEMA = {
   type: "object" as const,
-  required: ["id", "name", "time", "transport"],
+  required: ["id", "name", "category", "description", "time", "coordinates", "transport"],
   properties: {
     id: { type: "string" },
-    name: { type: "string" },
+    name: { type: "string", description: "Specific named venue, trail, or attraction — never vague" },
     category: {
       type: "string",
       enum: ["food", "attraction", "culture", "nature", "shopping", "art", "science", "adventure", "hotel", "nightlife", "wellness"],
     },
-    description: { type: "string" },
-    time: { type: "string", description: "e.g. '09:00 AM - 11:00 AM'" },
+    description: {
+      type: "string",
+      description: "2–3 sentences. What it is, why it fits this day, one specific detail (signature dish, named view, etc.).",
+    },
+    time: {
+      type: "string",
+      description: "Time window in the form '09:00 AM - 11:00 AM'. Durations must be realistic for the activity type.",
+    },
     cost: { type: "string" },
     rating: { type: "number" },
     reviewCount: { type: "number" },
@@ -30,6 +44,7 @@ export const ACTIVITY_TOOL_INPUT_SCHEMA = {
     },
     transport: {
       type: "array",
+      description: "How to get from THIS activity to the NEXT one. Empty array for the last activity of the day.",
       items: {
         type: "object",
         required: ["mode", "time"],
@@ -45,13 +60,17 @@ export const ACTIVITY_TOOL_INPUT_SCHEMA = {
 
 const DAY_SCHEMA = {
   type: "object" as const,
-  required: ["label", "activities"],
+  required: ["label", "title", "activities"],
   properties: {
     label: { type: "string", description: "e.g. 'Day 1'" },
     title: { type: "string", description: "Catchy day theme, e.g. 'Temples & Street Food'" },
     isDriveDay: { type: "boolean", description: "true if this is a travel/departure day between stops" },
     activities: {
       type: "array",
+      // Hard floor: every non-drive day must have at least 5 activities (breakfast,
+      // lunch, dinner, plus 2 non-meal items). The prompt asks for more based on
+      // tripStyle, and the validator enforces the style-specific minimum.
+      minItems: 5,
       items: ACTIVITY_TOOL_INPUT_SCHEMA,
     },
   },

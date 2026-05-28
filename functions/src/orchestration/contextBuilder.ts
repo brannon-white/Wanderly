@@ -1,5 +1,5 @@
 import * as logger from "firebase-functions/logger";
-import { type PlaceCandidate, type PlaceCategory, type TripArchetype, type DayContext, type OsmHike } from "./types";
+import { type PlaceCandidate, type PlaceCategory, type TripArchetype, type DayContext, type DaySupportingPlaces, type OsmHike } from "./types";
 
 const TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
 const NEARBY_SEARCH_URL = "https://places.googleapis.com/v1/places:searchNearby";
@@ -161,37 +161,86 @@ async function expandAroundAnchor(
   anchorLng: number,
   apiKey: string,
   isNationalPark: boolean
-): Promise<DayContext["supporting"]> {
-  // National parks: meals are in gateway towns, which can be 15-25km from the trailhead.
+): Promise<DaySupportingPlaces> {
+  // National parks: meals/activities are in gateway towns, which can be 15-25km from the trailhead.
   // Cities: everything should be walkable or a short ride.
-  const mealRadius = isNationalPark ? 20000 : 2000;
-  const activityRadius = isNationalPark ? 5000 : 2000;
+  const mealRadius = isNationalPark ? 20000 : 2500;
+  const activityRadius = isNationalPark ? 8000 : 2500;
+  // Evening/nightlife is usually town-based even for park trips
+  const eveningRadius = isNationalPark ? 25000 : 3000;
 
-  const [breakfast, lunch, dinner, secondary] = await Promise.all([
-    searchNearby(anchorLat, anchorLng, ["cafe", "bakery", "breakfast_restaurant"], apiKey, mealRadius, "cafe"),
-    searchNearby(anchorLat, anchorLng, ["restaurant", "cafe"], apiKey, mealRadius, "restaurant"),
-    searchNearby(anchorLat, anchorLng, ["restaurant"], apiKey, mealRadius, "restaurant"),
+  const [
+    breakfast,
+    lunch,
+    dinner,
+    morning,
+    afternoon,
+    lateAfternoon,
+    evening,
+  ] = await Promise.all([
+    searchNearby(anchorLat, anchorLng, ["cafe", "bakery", "breakfast_restaurant"], apiKey, mealRadius, "cafe", 8),
+    searchNearby(anchorLat, anchorLng, ["restaurant", "cafe"], apiKey, mealRadius, "restaurant", 8),
+    searchNearby(anchorLat, anchorLng, ["restaurant"], apiKey, mealRadius, "restaurant", 8),
+    // Morning activities: parks, gardens, markets, museums (museums often open ~10am)
     searchNearby(
-      anchorLat,
-      anchorLng,
-      ["tourist_attraction", "museum", "art_gallery", "park", "historical_landmark"],
-      apiKey,
-      activityRadius,
-      "attraction"
+      anchorLat, anchorLng,
+      ["park", "tourist_attraction", "historical_landmark", "market"],
+      apiKey, activityRadius, "attraction", 8
+    ),
+    // Afternoon activities: museums, galleries, broader attractions
+    searchNearby(
+      anchorLat, anchorLng,
+      ["museum", "art_gallery", "tourist_attraction", "historical_landmark"],
+      apiKey, activityRadius, "attraction", 8
+    ),
+    // Late afternoon / golden hour: scenic spots, breweries, coffee, dessert
+    searchNearby(
+      anchorLat, anchorLng,
+      ["tourist_attraction", "park", "cafe"],
+      apiKey, activityRadius, "attraction", 8
+    ),
+    // Evening: bars, live music, dessert, distilleries
+    searchNearby(
+      anchorLat, anchorLng,
+      ["bar", "night_club", "ice_cream_shop"],
+      apiKey, eveningRadius, "nightlife", 8
     ),
   ]);
 
-  // Deduplicate lunch and dinner (prefer different restaurants)
-  const lunchIds = new Set(lunch.map((p) => p.placeId));
-  const dedupedDinner = dinner.filter((p) => !lunchIds.has(p.placeId));
+  // Cross-slot dedup so the same venue isn't offered for multiple slots.
+  // Priority order = meals first (anchor of the eating schedule), then activities by time.
+  const claimed = new Set<string>();
+  const pick = (places: PlaceCandidate[], limit: number): PlaceCandidate[] => {
+    const out: PlaceCandidate[] = [];
+    for (const p of places) {
+      if (claimed.has(p.placeId)) continue;
+      claimed.add(p.placeId);
+      out.push(p);
+      if (out.length >= limit) break;
+    }
+    return out;
+  };
 
   return {
-    breakfast: breakfast.slice(0, 3),
-    lunch: lunch.slice(0, 4),
-    dinner: dedupedDinner.slice(0, 4),
-    secondary: secondary.slice(0, 4),
+    breakfast: pick(breakfast, 4),
+    lunch: pick(lunch, 4),
+    dinner: pick(dinner, 4),
+    morning: pick(morning, 4),
+    afternoon: pick(afternoon, 4),
+    late_afternoon: pick(lateAfternoon, 4),
+    evening: pick(evening, 4),
   };
 }
+
+const EMPTY_SUPPORTING: DaySupportingPlaces = {
+  breakfast: [],
+  morning: [],
+  lunch: [],
+  afternoon: [],
+  late_afternoon: [],
+  dinner: [],
+  evening: [],
+};
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
@@ -224,7 +273,7 @@ export async function buildDayContexts(
       anchors.map((anchor) =>
         anchor
           ? expandAroundAnchor(anchor.coordinates.lat, anchor.coordinates.lng, apiKey, isNationalPark)
-          : Promise.resolve({ breakfast: [], lunch: [], dinner: [], secondary: [] })
+          : Promise.resolve(EMPTY_SUPPORTING)
       )
     );
 
