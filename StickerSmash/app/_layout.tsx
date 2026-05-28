@@ -38,6 +38,7 @@ import TripPromptScreen from '@/components/tripPlanning/TripPromptScreen';
 import TripInterestsScreen from '@/components/tripPlanning/TripInterestsScreen';
 import TripBudgetScreen from '@/components/tripPlanning/TripBudgetScreen';
 import TripReviewScreen from '@/components/tripPlanning/TripReviewScreen';
+import TripStyleScreen from '@/components/tripPlanning/TripStyleScreen';
 import ArticleWebViewScreen from '@/components/ArticleWebViewScreen';
 import SearchScreen from '@/app/SearchScreen';
 import ArticleDetailScreen from '@/components/ArticleDetailScreen';
@@ -62,6 +63,7 @@ export type RootStackParamList = {
   SearchScreen: undefined;
   TripParty: undefined;
   TripDates: undefined;
+  TripStyle: undefined;
   TripPrompt: undefined;
   TripInterests: undefined;
   TripBudget: undefined;
@@ -264,6 +266,7 @@ const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
                 <Stack.Screen name="ArticleDetail" component={ArticleDetailScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripParty" component={TripPartyScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripDates" component={TripDatesScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="TripStyle" component={TripStyleScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripPrompt" component={TripPromptScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripInterests" component={TripInterestsScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripBudget" component={TripBudgetScreen} options={{ headerShown: false }} />

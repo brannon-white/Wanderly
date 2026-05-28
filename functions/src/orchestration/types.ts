@@ -21,6 +21,12 @@ export interface TripDerivedIntent {
   dimensionSignals?: Partial<TasteProfile>;
 }
 
+export type OvernightType = 'hotel' | 'camping' | 'airbnb' | 'rv' | 'flexible' | 'unknown';
+
+export type TripType = 'hub' | 'route';
+
+export type TravelPace = 'every_night' | 'every_few_days' | 'few_stops' | 'flexible';
+
 export interface TripIntent {
   destination: string;
   country?: string;
@@ -34,18 +40,34 @@ export interface TripIntent {
   endDate?: string | null;
   tasteProfile?: TasteProfile;
   // Blended profile: 70% prompt signals + 30% taste profile for conflicting dimensions.
-  // Used for ranking and generation in place of raw tasteProfile when a prompt is present.
   effectiveTasteProfile?: TasteProfile;
   tripPrompt?: string;
   derivedIntent?: TripDerivedIntent;
   includeActivities?: string[];
   avoidActivities?: string[];
   destinationType: 'city' | 'national_park';
+  tripType: TripType;
+  travelPace?: TravelPace;
+}
+
+export interface SearchQuery {
+  query: string;
+  category: PlaceCategory;
+  neighborhood?: string;
+}
+
+// Per-stop planning strategy — one entry per overnight anchor
+export interface StopStrategy {
+  location: string;             // e.g. "Bend, Oregon"
+  region?: string;              // e.g. "Central Oregon"
+  nightCount: number;           // nights sleeping here
+  overnightType: OvernightType;
+  dayThemes: string[];          // catchy theme per day (length === nightCount for hub, +1 for departure day on route)
+  searchQueries: SearchQuery[]; // place searches scoped to this stop's location
 }
 
 export interface TripStrategy {
-  primaryNeighborhoods: string[];
-  dayThemes: string[];
+  stops: StopStrategy[];        // replaces primaryNeighborhoods / dayThemes / searchQueries
   tripStyle: "relaxed" | "balanced" | "packed";
   dailyActivityCount: number;
   activityBalance: {
@@ -56,13 +78,6 @@ export interface TripStrategy {
     shopping: number;
     wellness: number;
   };
-  searchQueries: SearchQuery[];
-}
-
-export interface SearchQuery {
-  query: string;
-  category: PlaceCategory;
-  neighborhood?: string;
 }
 
 export type PlaceCategory =
@@ -96,11 +111,20 @@ export interface RankedPlace extends PlaceCandidate {
 }
 
 export interface PlaceCluster {
-  dayIndex: number;
+  dayIndex: number;       // day index within this stop (0-based)
+  stopIndex: number;      // which stop this cluster belongs to
   places: RankedPlace[];
   centerLat: number;
   centerLng: number;
-  neighborhood?: string;
+  neighborhood?: string;  // day theme
+}
+
+// Per-stop clusters + trails — one entry per stop in TripStrategy.stops
+export interface StopClusters {
+  stopIndex: number;
+  stop: StopStrategy;
+  clusters: PlaceCluster[];
+  osmHikes: OsmHike[];
 }
 
 export interface OsmHike {

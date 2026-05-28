@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
+import type { TripType, TravelPace } from '@/types/itinerary';
 
 export type TripFlow = 'full' | 'prebuilt';
 
@@ -13,7 +14,7 @@ export interface DestinationSnapshot {
 
 interface TripPlanningState {
   flow: TripFlow;
-  editingTripId: string; // non-empty when editing an existing committed trip
+  editingTripId: string;
   destinationId: string;
   destinationSnapshot: DestinationSnapshot | null;
   templateId: string;
@@ -27,6 +28,8 @@ interface TripPlanningState {
   tripPrompt: string;
   includeActivities: string[];
   avoidActivities: string[];
+  tripType: TripType;
+  travelPace: TravelPace | '';
 }
 
 interface TripPlanningContextType extends TripPlanningState {
@@ -45,6 +48,8 @@ interface TripPlanningContextType extends TripPlanningState {
   setTripPrompt: (prompt: string) => void;
   setIncludeActivities: (activities: string[]) => void;
   setAvoidActivities: (activities: string[]) => void;
+  setTripType: (type: TripType) => void;
+  setTravelPace: (pace: TravelPace | '') => void;
   reset: () => void;
 }
 
@@ -64,6 +69,8 @@ const defaultState: TripPlanningState = {
   tripPrompt: '',
   includeActivities: [],
   avoidActivities: [],
+  tripType: 'hub',
+  travelPace: '',
 };
 
 const TripPlanningContext = createContext<TripPlanningContextType>({
@@ -83,6 +90,8 @@ const TripPlanningContext = createContext<TripPlanningContextType>({
   setTripPrompt: () => {},
   setIncludeActivities: () => {},
   setAvoidActivities: () => {},
+  setTripType: () => {},
+  setTravelPace: () => {},
   reset: () => {},
 });
 
@@ -104,6 +113,8 @@ export function TripPlanningProvider({ children }: { children: React.ReactNode }
   const setTripPrompt = (tripPrompt: string) => setState(s => ({ ...s, tripPrompt }));
   const setIncludeActivities = (includeActivities: string[]) => setState(s => ({ ...s, includeActivities, interests: includeActivities }));
   const setAvoidActivities = (avoidActivities: string[]) => setState(s => ({ ...s, avoidActivities }));
+  const setTripType = (tripType: TripType) => setState(s => ({ ...s, tripType }));
+  const setTravelPace = (travelPace: TravelPace | '') => setState(s => ({ ...s, travelPace }));
   const reset = () => setState(defaultState);
 
   return (
@@ -113,6 +124,7 @@ export function TripPlanningProvider({ children }: { children: React.ReactNode }
         setFlow, setEditingTripId, setDestinationId, setDestination, setTemplateId, setTemplateTitle, setTemplateHeroImage,
         setParty, setStartDate, setEndDate, setInterests, setBudget,
         setTripPrompt, setIncludeActivities, setAvoidActivities,
+        setTripType, setTravelPace,
         reset,
       }}
     >

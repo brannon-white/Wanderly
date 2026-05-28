@@ -3,6 +3,7 @@ import { View, Text, Image, StyleSheet } from 'react-native';
 import type { GeneratedItinerary } from '@/types/itinerary';
 import type { CommittedTrip } from '@/context/MyTripsContext';
 import { formatTripSubtitle } from '@/context/MyTripsContext';
+import { getItineraryDays } from '@/utils/itineraryHelpers';
 
 interface ShareCardProps {
   itinerary: GeneratedItinerary;
@@ -18,7 +19,7 @@ const ShareCard = React.forwardRef<View, ShareCardProps>(
     const location = [itinerary.destinationName, itinerary.country]
       .filter(Boolean)
       .join(', ');
-    const days = itinerary.days.slice(0, 4);
+    const days = getItineraryDays(itinerary).slice(0, 4);
 
     return (
       <View ref={ref} style={styles.card} collapsable={false}>

@@ -357,6 +357,22 @@ export const styles = StyleSheet.create({
     paddingTop: 2,
   },
 
+  stopHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 56,
+    paddingTop: 8,
+    paddingBottom: 2,
+  },
+
+  stopHeaderText: {
+    fontSize: 12,
+    color: '#6A62B7',
+    fontFamily: 'SourceSans3-Regular',
+    fontStyle: 'italic',
+  },
+
   // ── Plan trip / Go back button ────────────────────────────────────────
   planTripButton: {
     backgroundColor: PURPLE,

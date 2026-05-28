@@ -32,6 +32,7 @@ import { DEMO_FULL_ITINERARIES } from '@/data/demoData';
 import { useTripPlanning } from '@/context/TripPlanningContext';
 import { useMyTrips, formatTripSubtitle } from '@/context/MyTripsContext';
 import type { GeneratedItinerary, ItineraryActivity, ItineraryDay } from '@/types/itinerary';
+import { getItineraryDays, getItineraryStops, updateItineraryDay, isRouteTrip, getStopForDayIndex } from '@/utils/itineraryHelpers';
 import { getAuth } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { searchPhoto } from '@/services/unsplash';
@@ -269,6 +270,11 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, onPress, onLon
 }
 
 function normalizePrebuiltItinerary(data: any, docId: string): GeneratedItinerary {
+  // Already migrated to stops — return as-is
+  if (Array.isArray(data.stops) && data.stops.length > 0) {
+    return { ...data, id: docId };
+  }
+  // Legacy prebuilt format: normalise to a single-stop itinerary
   const days: ItineraryDay[] = Array.isArray(data.days) && data.days.length > 0
     ? data.days
     : (data.template ?? []).map((dayEntry: any, dayIdx: number) => {
@@ -325,7 +331,8 @@ export default function ItineraryScreen() {
   const [aiBarMessage, setAiBarMessage] = useState('');
   const [aiBarLoading, setAiBarLoading] = useState(false);
   const shareCardRef = useRef<View>(null);
-  const activities = itinerary?.days[selectedDay]?.activities ?? [];
+  const allDays = itinerary ? getItineraryDays(itinerary) : [];
+  const activities = allDays[selectedDay]?.activities ?? [];
   const MapView = MapsModule?.default;
   const Marker = MapsModule?.Marker;
 
@@ -416,7 +423,7 @@ export default function ItineraryScreen() {
   useEffect(() => {
     if (!itinerary) return;
     let cancelled = false;
-    const dayActivities = itinerary.days[selectedDay]?.activities ?? [];
+    const dayActivities = getItineraryDays(itinerary)[selectedDay]?.activities ?? [];
 
     async function loadSequentially() {
       let anyFailed = false;
@@ -462,7 +469,7 @@ export default function ItineraryScreen() {
   }, [itinerary?.id]);
 
   const getDayLabel = (index: number): string => {
-    if (isBrowsing || !committedTrip) return itinerary?.days[index]?.label ?? `Day ${index + 1}`;
+    if (isBrowsing || !committedTrip) return (itinerary ? getItineraryDays(itinerary)[index]?.label : null) ?? `Day ${index + 1}`;
     const d = new Date(committedTrip.startDate);
     d.setDate(d.getDate() + index);
     return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
@@ -489,21 +496,24 @@ export default function ItineraryScreen() {
     if (!itinerary || !id) return;
     const uid = getAuth().currentUser?.uid;
     if (!uid) return;
-    const updatedDays = itinerary.days.map((d, di) => {
-      if (di !== dayIndex) return d;
-      return { ...d, activities: d.activities.filter((_, ai) => ai !== activityIndex) };
-    });
-    setRemoteItinerary({ ...itinerary, days: updatedDays });
+    const currentDay = allDays[dayIndex];
+    if (!currentDay) return;
+    const updatedDay = { ...currentDay, activities: currentDay.activities.filter((_, ai) => ai !== activityIndex) };
+    const updatedItinerary = updateItineraryDay(itinerary, dayIndex, updatedDay);
+    setRemoteItinerary(updatedItinerary);
     try {
+      const firestoreUpdate = updatedItinerary.stops
+        ? { stops: updatedItinerary.stops, updatedAt: firestore.FieldValue.serverTimestamp() }
+        : { days: (updatedItinerary as any).days, updatedAt: firestore.FieldValue.serverTimestamp() };
       await firestore()
         .collection('users').doc(uid)
         .collection('itineraries').doc(id)
-        .update({ days: updatedDays, updatedAt: firestore.FieldValue.serverTimestamp() });
+        .update(firestoreUpdate);
     } catch (err) {
       setRemoteItinerary(itinerary);
       Alert.alert('Could not remove activity', err instanceof Error ? err.message : 'Please try again.');
     }
-  }, [itinerary, id]);
+  }, [itinerary, id, allDays]);
 
   const handleAction = useCallback(async (dayIndex: number, activityIndex: number, activity: ItineraryActivity, action: ActivityAction) => {
     if (action === 'remove') {
@@ -537,17 +547,23 @@ export default function ItineraryScreen() {
     if (!itinerary || !id) return;
     const uid = getAuth().currentUser?.uid;
     if (!uid) return;
-    const updatedDays = itinerary.days.map((d, di) => di === selectedDay ? { ...d, activities: data } : d);
-    setRemoteItinerary({ ...itinerary, days: updatedDays });
+    const currentDay = allDays[selectedDay];
+    if (!currentDay) return;
+    const updatedDay = { ...currentDay, activities: data };
+    const updatedItinerary = updateItineraryDay(itinerary, selectedDay, updatedDay);
+    setRemoteItinerary(updatedItinerary);
     try {
+      const firestoreUpdate = updatedItinerary.stops
+        ? { stops: updatedItinerary.stops, updatedAt: firestore.FieldValue.serverTimestamp() }
+        : { days: (updatedItinerary as any).days, updatedAt: firestore.FieldValue.serverTimestamp() };
       await firestore()
         .collection('users').doc(uid)
         .collection('itineraries').doc(id)
-        .update({ days: updatedDays, updatedAt: firestore.FieldValue.serverTimestamp() });
+        .update(firestoreUpdate);
     } catch {
       setRemoteItinerary(itinerary);
     }
-  }, [itinerary, id, selectedDay]);
+  }, [itinerary, id, selectedDay, allDays]);
 
   const handleAiBarSubmit = useCallback(async () => {
     const message = aiBarMessage.trim();
@@ -728,7 +744,7 @@ export default function ItineraryScreen() {
           style={styles.dateSelector}
           contentContainerStyle={styles.dateSelectorContent}
         >
-          {(itinerary.days ?? []).map((day, index) => (
+          {allDays.map((day, index) => (
             <TouchableOpacity
               key={`${day.label}-${index}`}
               style={[styles.dateBtn, selectedDay === index && styles.dateBtnActive]}
@@ -741,9 +757,21 @@ export default function ItineraryScreen() {
           ))}
         </ScrollView>
 
+        {/* Stop header for route trips */}
+        {itinerary && isRouteTrip(itinerary) && (() => {
+          const stop = getStopForDayIndex(itinerary, selectedDay);
+          if (!stop) return null;
+          return (
+            <View style={styles.stopHeader}>
+              <Ionicons name="location-outline" size={14} color="#6A62B7" />
+              <Text style={styles.stopHeaderText}>{stop.overnightAnchor?.location ?? stop.location}</Text>
+            </View>
+          );
+        })()}
+
         {/* Day title */}
-        {itinerary.days[selectedDay]?.title ? (
-          <Text style={styles.dayTitle}>{itinerary.days[selectedDay].title}</Text>
+        {allDays[selectedDay]?.title ? (
+          <Text style={styles.dayTitle}>{allDays[selectedDay].title}</Text>
         ) : null}
 
         {/* Smart insights (info-level shown at top of day) */}

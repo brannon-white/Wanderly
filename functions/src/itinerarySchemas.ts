@@ -36,6 +36,8 @@ export const generateItineraryRequestSchema = z.object({
   includeActivities: z.array(z.string()).optional(),
   avoidActivities: z.array(z.string()).optional(),
   destinationType: z.enum(['city', 'national_park']).optional(),
+  tripType: z.enum(['hub', 'route']).default('hub'),
+  travelPace: z.enum(['every_night', 'every_few_days', 'few_stops', 'flexible']).optional(),
 });
 
 export type TasteProfile = NonNullable<z.infer<typeof tasteProfileSchema>>;
@@ -74,7 +76,23 @@ export const itineraryActivitySchema = z.object({
 export const itineraryDaySchema = z.object({
   label: z.string().min(1),
   title: z.string().optional(),
+  isDriveDay: z.boolean().optional(),
   activities: z.array(itineraryActivitySchema).min(1),
+});
+
+export const overnightAnchorSchema = z.object({
+  location: z.string().min(1),
+  overnightType: z.enum(['hotel', 'camping', 'airbnb', 'rv', 'flexible', 'unknown']).default('unknown'),
+  coordinates: itineraryCoordinatesSchema.optional(),
+});
+
+export const tripStopSchema = z.object({
+  stopIndex: z.number().int().nonnegative(),
+  location: z.string().min(1),
+  arrivalDate: z.string().nullable().optional(),
+  departureDate: z.string().nullable().optional(),
+  overnightAnchor: overnightAnchorSchema,
+  days: z.array(itineraryDaySchema).min(1),
 });
 
 export const generatedItinerarySchema = z.object({
@@ -95,7 +113,8 @@ export const generatedItinerarySchema = z.object({
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
   source: z.enum(["ai_generated", "prebuilt", "manual", "demo"]),
-  days: z.array(itineraryDaySchema).min(1),
+  tripType: z.enum(["hub", "route"]).default("hub"),
+  stops: z.array(tripStopSchema).min(1),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
   model: z.string().optional(),
@@ -145,16 +164,12 @@ export const regenerateDayRequestSchema = z.object({
     .optional(),
 });
 
-export type GenerateItineraryRequest = z.infer<
-  typeof generateItineraryRequestSchema
->;
+export type GenerateItineraryRequest = z.infer<typeof generateItineraryRequestSchema>;
 export type GeneratedItinerary = z.infer<typeof generatedItinerarySchema>;
-export type CallableGenerateItineraryResponse = z.infer<
-  typeof callableGenerateItineraryResponseSchema
->;
-export type RegenerateActivityRequest = z.infer<
-  typeof regenerateActivityRequestSchema
->;
+export type TripStop = z.infer<typeof tripStopSchema>;
+export type OvernightAnchor = z.infer<typeof overnightAnchorSchema>;
+export type CallableGenerateItineraryResponse = z.infer<typeof callableGenerateItineraryResponseSchema>;
+export type RegenerateActivityRequest = z.infer<typeof regenerateActivityRequestSchema>;
 export type RegenerateDayRequest = z.infer<typeof regenerateDayRequestSchema>;
 
 export const getSuggestedReplacementsRequestSchema = z.object({
@@ -187,3 +202,41 @@ export type GetSuggestedReplacementsRequest = z.infer<typeof getSuggestedReplace
 export type ConfirmActivityReplacementRequest = z.infer<typeof confirmActivityReplacementRequestSchema>;
 export type EditItineraryWithLanguageRequest = z.infer<typeof editItineraryWithLanguageRequestSchema>;
 export type OptimizeDayRequest = z.infer<typeof optimizeDayRequestSchema>;
+
+// ─── Helper: flatten all days across stops for global day-index operations ───
+
+export function getAllDays(itinerary: GeneratedItinerary): GeneratedItinerary["stops"][number]["days"] {
+  return itinerary.stops.flatMap(s => s.days);
+}
+
+export function mapAllDays(
+  itinerary: GeneratedItinerary,
+  fn: (day: GeneratedItinerary["stops"][number]["days"][number], globalDayIndex: number) => GeneratedItinerary["stops"][number]["days"][number]
+): GeneratedItinerary {
+  let globalIdx = 0;
+  const newStops = itinerary.stops.map(stop => ({
+    ...stop,
+    days: stop.days.map(day => fn(day, globalIdx++)),
+  }));
+  return { ...itinerary, stops: newStops };
+}
+
+export function updateDayByIndex(
+  itinerary: GeneratedItinerary,
+  globalDayIndex: number,
+  newDay: GeneratedItinerary["stops"][number]["days"][number]
+): GeneratedItinerary {
+  let cumulative = 0;
+  const newStops = itinerary.stops.map(stop => {
+    const stopEnd = cumulative + stop.days.length;
+    if (globalDayIndex >= cumulative && globalDayIndex < stopEnd) {
+      const localIdx = globalDayIndex - cumulative;
+      const newDays = stop.days.map((d, i) => (i === localIdx ? newDay : d));
+      cumulative = stopEnd;
+      return { ...stop, days: newDays };
+    }
+    cumulative = stopEnd;
+    return stop;
+  });
+  return { ...itinerary, stops: newStops };
+}

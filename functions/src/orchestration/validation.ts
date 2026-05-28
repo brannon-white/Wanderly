@@ -1,5 +1,5 @@
 import * as logger from "firebase-functions/logger";
-import { type GeneratedItinerary } from "../itinerarySchemas";
+import { type GeneratedItinerary, getAllDays, mapAllDays } from "../itinerarySchemas";
 
 // ~1.5 km ≈ 18-minute walk — anything beyond this is not reasonably walkable
 const MAX_WALK_KM = 1.5;
@@ -48,9 +48,9 @@ function parseActivityTime(timeStr: string): ParsedTime | null {
 
 function isMealTime(startMinutes: number, window: "breakfast" | "lunch" | "dinner"): boolean {
   const windows = {
-    breakfast: [7 * 60, 10 * 60],   // 7:00 AM – 10:00 AM
-    lunch: [11 * 60, 15 * 60],       // 11:00 AM – 3:00 PM
-    dinner: [17 * 60, 21 * 60 + 30], // 5:00 PM – 9:30 PM
+    breakfast: [7 * 60, 10 * 60],
+    lunch: [11 * 60, 15 * 60],
+    dinner: [17 * 60, 21 * 60 + 30],
   };
   const [min, max] = windows[window];
   return startMinutes >= min && startMinutes <= max;
@@ -63,11 +63,15 @@ export function validateItinerary(
   let repaired = false;
   const seenVenues = new Set<string>();
 
-  const days = itinerary.days.map((day, dayIndex) => {
-    const dayLabel = `Day ${dayIndex + 1}`;
+  let globalDayIndex = 0;
 
-    // Fix unrealistic walking legs: if the AI recommended walking but the
-    // two coordinates are more than MAX_WALK_KM apart, switch to rideshare.
+  const validated = mapAllDays(itinerary, (day) => {
+    const dayLabel = `Day ${globalDayIndex + 1}`;
+    globalDayIndex++;
+
+    // Skip strict meal checks on drive days
+    const isDriveDay = day.isDriveDay === true;
+
     const activitiesWithFixedTransport = day.activities.map((activity, i) => {
       if (i === day.activities.length - 1) return activity;
       const next = day.activities[i + 1];
@@ -82,18 +86,17 @@ export function validateItinerary(
 
       const transport = (activity.transport ?? []).map((t) => {
         if (t.mode?.toLowerCase() !== "walk") return t;
-        const walkMins = Math.round(distKm * 12); // ~12 min/km walking pace
+        const walkMins = Math.round(distKm * 12);
         issues.push(
           `${dayLabel}: replaced ${walkMins}-min walk between "${activity.name}" and "${next.name}" (${distKm.toFixed(1)} km) with rideshare`
         );
         repaired = true;
-        return { ...t, mode: "rideshare", time: `${Math.round(distKm * 3)} min` };
+        return { ...t, mode: "taxi", time: `${Math.round(distKm * 3)} min` };
       });
 
       return { ...activity, transport };
     });
 
-    // Remove duplicate venues across all days
     const activities = activitiesWithFixedTransport.filter((activity) => {
       const key = activity.name.toLowerCase().trim();
       if (seenVenues.has(key)) {
@@ -105,42 +108,37 @@ export function validateItinerary(
       return true;
     });
 
-    // Check time overlaps (best-effort — Claude usually handles this)
     for (let i = 1; i < activities.length; i++) {
       const prev = activities[i - 1];
       const curr = activities[i];
       const prevTime = parseActivityTime(prev.time);
       const currTime = parseActivityTime(curr.time);
-
       if (prevTime && currTime && currTime.startMinutes < prevTime.endMinutes - 5) {
-        issues.push(
-          `${dayLabel}: possible time overlap — "${prev.name}" ends after "${curr.name}" starts`
-        );
-        // Note: we log but don't repair overlap; the scheduling change would require regeneration
+        issues.push(`${dayLabel}: possible time overlap — "${prev.name}" ends after "${curr.name}" starts`);
       }
     }
 
-    // Check meal coverage
-    const hasMeal = {
-      breakfast: activities.some(
-        (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
-          isMealTime(parseActivityTime(a.time)!.startMinutes, "breakfast")
-      ),
-      lunch: activities.some(
-        (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
-          isMealTime(parseActivityTime(a.time)!.startMinutes, "lunch")
-      ),
-      dinner: activities.some(
-        (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
-          isMealTime(parseActivityTime(a.time)!.startMinutes, "dinner")
-      ),
-    };
+    if (!isDriveDay) {
+      const hasMeal = {
+        breakfast: activities.some(
+          (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
+            isMealTime(parseActivityTime(a.time)!.startMinutes, "breakfast")
+        ),
+        lunch: activities.some(
+          (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
+            isMealTime(parseActivityTime(a.time)!.startMinutes, "lunch")
+        ),
+        dinner: activities.some(
+          (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
+            isMealTime(parseActivityTime(a.time)!.startMinutes, "dinner")
+        ),
+      };
 
-    if (!hasMeal.breakfast) issues.push(`${dayLabel}: missing breakfast`);
-    if (!hasMeal.lunch) issues.push(`${dayLabel}: missing lunch`);
-    if (!hasMeal.dinner) issues.push(`${dayLabel}: missing dinner`);
+      if (!hasMeal.breakfast) issues.push(`${dayLabel}: missing breakfast`);
+      if (!hasMeal.lunch) issues.push(`${dayLabel}: missing lunch`);
+      if (!hasMeal.dinner) issues.push(`${dayLabel}: missing dinner`);
+    }
 
-    // Check activity count is reasonable (3–8 per day)
     if (activities.length < 3) {
       issues.push(`${dayLabel}: only ${activities.length} activities (expected at least 3)`);
     }
@@ -148,7 +146,6 @@ export function validateItinerary(
       issues.push(`${dayLabel}: ${activities.length} activities may be unrealistic`);
     }
 
-    // Hiking feasibility checks
     const hikingActivities = activities.filter(
       (a) => a.category === "adventure" || a.category === "nature"
     );
@@ -159,9 +156,7 @@ export function validateItinerary(
     }).length;
 
     if (majorHikeCount > 1) {
-      issues.push(
-        `${dayLabel}: ${majorHikeCount} major hikes (4+ hrs each) scheduled — only one allowed per day`
-      );
+      issues.push(`${dayLabel}: ${majorHikeCount} major hikes (4+ hrs each) scheduled — only one allowed per day`);
     }
 
     const totalHikingMinutes = hikingActivities.reduce((sum, a) => {
@@ -170,9 +165,7 @@ export function validateItinerary(
     }, 0);
 
     if (totalHikingMinutes > 6 * 60) {
-      issues.push(
-        `${dayLabel}: ${Math.round(totalHikingMinutes / 60)}h of hiking exceeds the 6-hour daily cap`
-      );
+      issues.push(`${dayLabel}: ${Math.round(totalHikingMinutes / 60)}h of hiking exceeds the 6-hour daily cap`);
     }
 
     return { ...day, activities };
@@ -192,7 +185,7 @@ export function validateItinerary(
   }
 
   return {
-    itinerary: { ...itinerary, days },
+    itinerary: validated,
     result: {
       isValid: fatalIssues.length === 0,
       issues,

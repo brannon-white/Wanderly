@@ -28,7 +28,6 @@ function kMeans(places: RankedPlace[], k: number, iterations = 15): RankedPlace[
     return places.map((p) => [p]);
   }
 
-  // Seed centers using spread-out high-scoring places
   const step = Math.max(1, Math.floor(places.length / k));
   let centers = places
     .filter((_, i) => i % step === 0)
@@ -53,7 +52,6 @@ function kMeans(places: RankedPlace[], k: number, iterations = 15): RankedPlace[
       clusters[closest].push(place);
     }
 
-    // Recompute centers; keep old center if cluster is empty
     centers = clusters.map((cl, j) =>
       cl.length > 0 ? centroid(cl) : centers[j]
     );
@@ -62,8 +60,11 @@ function kMeans(places: RankedPlace[], k: number, iterations = 15): RankedPlace[
   return clusters.filter((c) => c.length > 0);
 }
 
-export function clusterRecommendations(
+// Cluster places for a single stop into numDays geographic clusters.
+// Returns clusters with stopIndex and dayIndex (local to this stop) set.
+export function clusterForStop(
   ranked: RankedPlace[],
+  stopIndex: number,
   numDays: number,
   dayThemes: string[]
 ): PlaceCluster[] {
@@ -71,17 +72,26 @@ export function clusterRecommendations(
 
   const clusters = kMeans(ranked, numDays);
 
-  // Sort clusters roughly west-to-east (longitude ascending) so day order feels geographic
+  // Sort west-to-east so day order feels geographic
   const sorted = clusters
     .map((places) => ({ places, center: centroid(places) }))
     .sort((a, b) => a.center.lng - b.center.lng);
 
   return sorted.map(({ places, center }, i) => ({
     dayIndex: i,
-    // Give Claude the top 14 per cluster to choose from
+    stopIndex,
     places: places.slice(0, 14),
     centerLat: center.lat,
     centerLng: center.lng,
     neighborhood: dayThemes[i],
   }));
+}
+
+// Legacy single-destination clustering — kept for backward compat
+export function clusterRecommendations(
+  ranked: RankedPlace[],
+  numDays: number,
+  dayThemes: string[]
+): PlaceCluster[] {
+  return clusterForStop(ranked, 0, numDays, dayThemes);
 }

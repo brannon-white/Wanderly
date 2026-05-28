@@ -39,17 +39,23 @@ export type ItinerarySource =
   | 'manual'
   | 'demo';
 
+export type OvernightType = 'hotel' | 'camping' | 'airbnb' | 'rv' | 'flexible' | 'unknown';
+
+export type TripType = 'hub' | 'route';
+
+export type TravelPace = 'every_night' | 'every_few_days' | 'few_stops' | 'flexible';
+
 export interface TasteProfile {
-  pace: number;                // 0=relaxed, 1=packed
-  foodie: number;              // 0=fuel only, 1=food-first
-  nature: number;              // 0=urban, 1=nature-first
-  nightlife: number;           // 0=early nights, 1=evening scene
-  hiddenGems: number;          // 0=famous spots, 1=off the beaten path
-  touristTolerance: number;    // 0=avoids crowds, 1=fine with tourists
-  walkingTolerance: number;    // 0=minimize walking, 1=happy to walk
-  structurePreference: number; // 0=spontaneous, 1=fully planned
-  adventure: number;           // 0=cultural/dining, 1=outdoor/physical
-  luxury: number;              // 0=budget local, 1=premium comfort
+  pace: number;
+  foodie: number;
+  nature: number;
+  nightlife: number;
+  hiddenGems: number;
+  touristTolerance: number;
+  walkingTolerance: number;
+  structurePreference: number;
+  adventure: number;
+  luxury: number;
 }
 
 export interface TripDerivedIntent {
@@ -75,6 +81,8 @@ export interface GenerateItineraryRequest {
   includeActivities?: string[];
   avoidActivities?: string[];
   destinationType?: 'city' | 'national_park';
+  tripType?: TripType;
+  travelPace?: TravelPace;
 }
 
 export interface ItineraryCoordinates {
@@ -110,7 +118,23 @@ export interface ItineraryActivity {
 export interface ItineraryDay {
   label: string;
   title?: string;
+  isDriveDay?: boolean;
   activities: ItineraryActivity[];
+}
+
+export interface OvernightAnchor {
+  location: string;
+  overnightType: OvernightType;
+  coordinates?: ItineraryCoordinates;
+}
+
+export interface TripStop {
+  stopIndex: number;
+  location: string;
+  arrivalDate?: string | null;
+  departureDate?: string | null;
+  overnightAnchor: OvernightAnchor;
+  days: ItineraryDay[];
 }
 
 export interface GeneratedItinerary {
@@ -131,7 +155,11 @@ export interface GeneratedItinerary {
   startDate?: string | null;
   endDate?: string | null;
   source: ItinerarySource;
-  days: ItineraryDay[];
+  tripType?: TripType;
+  // New primary field — all new itineraries use stops[]
+  stops?: TripStop[];
+  // Legacy field — present in old Firestore docs generated before the migration
+  days?: ItineraryDay[];
   createdAt?: string;
   updatedAt?: string;
   model?: string;

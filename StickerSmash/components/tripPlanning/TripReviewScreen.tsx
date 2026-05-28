@@ -66,6 +66,8 @@ export default function TripReviewScreen() {
     tripPrompt,
     includeActivities,
     avoidActivities,
+    tripType,
+    travelPace,
     reset,
   } = useTripPlanning();
   const isEditing = !!editingTripId;
@@ -137,6 +139,8 @@ export default function TripReviewScreen() {
       includeActivities: includeActivities.length > 0 ? [...includeActivities] : undefined,
       avoidActivities: avoidActivities.length > 0 ? [...avoidActivities] : undefined,
       destinationType: destinationSnapshot?.destinationType ?? 'city',
+      tripType: tripType ?? 'hub',
+      travelPace: travelPace || undefined,
     };
     const savedHeroImage = templateHeroImage;
     const savedParty = party;
@@ -252,6 +256,26 @@ export default function TripReviewScreen() {
         </View>
 
         <SectionDivider />
+
+        {tripType === 'route' && (
+          <>
+            <View style={styles.section}>
+              <View style={styles.sectionRow}>
+                <View style={styles.sectionIcon}>
+                  <Ionicons name="map-outline" size={18} color={TEXT_GRAY} />
+                </View>
+                <Text style={styles.sectionLabel}>Travel Style</Text>
+                <View style={{ flex: 1 }} />
+                <EditIcon onPress={() => navigation.navigate('TripStyle')} />
+              </View>
+              <Text style={styles.sectionValue}>
+                Multi-stop road trip
+                {travelPace ? ` · ${travelPace.replace(/_/g, ' ')}` : ''}
+              </Text>
+            </View>
+            <SectionDivider />
+          </>
+        )}
 
         <View style={styles.section}>
           <View style={styles.sectionRow}>
