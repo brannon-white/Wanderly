@@ -320,6 +320,32 @@ export const styles = StyleSheet.create({
     marginTop: 6,
   },
 
+  // Inline transport connector — replaces the old purple box
+  transportConnector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 12,
+    gap: 6,
+  },
+
+  transportConnectorLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e8e8e8',
+  },
+
+  transportConnectorText: {
+    fontSize: 12,
+    color: '#aaa',
+    fontFamily: 'SourceSans3-Regular',
+  },
+
+  transportConnectorChevron: {
+    padding: 2,
+  },
+
+  // Legacy keys — keep so older code that might reference them doesn't break at runtime
   transportStrip: {
     flexDirection: 'row',
     backgroundColor: '#F5F3FF',
@@ -390,39 +416,39 @@ export const styles = StyleSheet.create({
 
   // ── Compact activity card ─────────────────────────────────────────────
   compactCard: {
-    borderRadius: 14,
+    borderRadius: 20,
     overflow: 'hidden',
     backgroundColor: '#fff',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.07,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
 
   compactImage: {
     width: '100%',
-    height: 100,
+    height: 140,
   },
 
   compactBody: {
     padding: 12,
-    paddingTop: 10,
+    paddingTop: 11,
+    paddingBottom: 13,
   },
 
   compactTitle: {
     fontSize: 15,
-    fontWeight: '600',
     color: '#1A1A2E',
-    fontFamily: 'Merriweather_36pt-Bold',
+    fontFamily: 'SourceSans3-SemiBold',
     marginBottom: 3,
-    lineHeight: 20,
+    lineHeight: 21,
   },
 
   compactMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 3,
+    marginBottom: 4,
   },
 
   compactMeta: {
@@ -431,11 +457,46 @@ export const styles = StyleSheet.create({
     fontFamily: 'SourceSans3-Regular',
   },
 
+  compactTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 5,
+  },
+
   compactTime: {
     fontSize: 12,
     color: PURPLE,
+    fontFamily: 'SourceSans3-SemiBold',
+  },
+
+  compactDuration: {
+    fontSize: 12,
+    color: '#bbb',
     fontFamily: 'SourceSans3-Regular',
-    fontWeight: '600',
+  },
+
+  compactDescription: {
+    fontSize: 12,
+    color: '#888',
+    fontFamily: 'SourceSans3-Regular',
+    lineHeight: 17,
+    fontStyle: 'italic',
+  },
+
+  imagePreparingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    zIndex: 10,
+  },
+
+  imagePreparingText: {
+    fontSize: 14,
+    color: '#888',
+    fontFamily: 'SourceSans3-Regular',
   },
 
   // ── Legacy keys kept so other files don't break ───────────────────────

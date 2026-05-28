@@ -13,16 +13,15 @@ import {
 } from "./itinerarySchemas";
 
 import { extractIntent } from "./orchestration/intentExtraction";
-import { generateTripStrategy } from "./orchestration/tripStrategy";
-import { fetchRecommendations, fetchNearbyForClusters, searchNearbyForActivity } from "./orchestration/placesRetrieval";
-import { rankRecommendations } from "./orchestration/ranking";
-import { clusterForStop } from "./orchestration/clustering";
+import { generateTripArchetype } from "./orchestration/archetype";
+import { buildDayContexts } from "./orchestration/contextBuilder";
 import { generateDailyPlans } from "./orchestration/dailyPlanning";
 import { validateItinerary } from "./orchestration/validation";
 import { enrichTransportTimes } from "./orchestration/directions";
-import { buildCacheKey, getCachedPlaces, setCachedPlaces } from "./orchestration/placesCache";
+import { enrichWithImages } from "./orchestration/imageEnrichment";
+import { searchNearbyForActivity } from "./orchestration/placesRetrieval";
 import { fetchHikingTrails } from "./orchestration/trailDiscovery";
-import { type StopClusters, type RankedPlace } from "./orchestration/types";
+import { type DayContext, type OsmHike } from "./orchestration/types";
 
 export { MODEL_NAME, PROMPT_VERSION };
 
@@ -75,35 +74,6 @@ function stampOsmTrailData(
   });
 }
 
-// ─── Merge real Google Places data into Claude-generated output ──────────────
-
-function mergePlaceData(
-  itinerary: GeneratedItinerary,
-  ranked: RankedPlace[]
-): GeneratedItinerary {
-  if (ranked.length === 0) return itinerary;
-
-  const byName = new Map(ranked.map((p) => [p.name.toLowerCase(), p]));
-
-  return mapAllDays(itinerary, (day) => {
-    const activities = day.activities.map((activity) => {
-      const match = byName.get(activity.name.toLowerCase());
-      if (!match) return activity;
-
-      const updates: Partial<typeof activity> = {};
-      if (match.rating > 0) {
-        updates.rating = match.rating;
-        updates.reviewCount = match.reviewCount;
-      }
-      if (match.editorialSummary) {
-        updates.description = match.editorialSummary;
-      }
-      return { ...activity, ...updates };
-    });
-    return { ...day, activities };
-  });
-}
-
 // ─── Main orchestration pipeline ────────────────────────────────────────────
 
 export async function generateItineraryFlow(
@@ -116,78 +86,66 @@ export async function generateItineraryFlow(
   logger.info("Pipeline: extracting intent", { destination: input.destinationName, tripType: input.tripType });
   const intent = await extractIntent(input);
 
-  // Step 2: Generate trip strategy (now returns stops[])
-  logger.info("Pipeline: generating trip strategy", { pace: intent.pace, days: intent.durationDays, tripType: intent.tripType });
-  const strategy = await generateTripStrategy(intent);
+  // Step 2: Design the trip archetype — LLM designs day experiences (no venues yet)
+  logger.info("Pipeline: generating trip archetype", { pace: intent.pace, days: intent.durationDays });
+  const archetype = await generateTripArchetype(intent);
 
-  logger.info("Pipeline: strategy generated", {
-    stopCount: strategy.stops.length,
-    stops: strategy.stops.map(s => `${s.location} (${s.nightCount}n)`),
+  logger.info("Pipeline: archetype generated", {
+    stopCount: archetype.stops.length,
+    stops: archetype.stops.map((s) => `${s.location} (${s.nightCount}n)`),
+    dayThemes: archetype.stops.flatMap((s) => s.days.map((d) => d.theme)),
   });
 
-  // Steps 3–5: For each stop, fetch places, rank, cluster, get trails
-  const allRanked: RankedPlace[] = [];
-  const stopClusters: StopClusters[] = [];
+  // Step 3: Initialize per-stop trail arrays (populated after anchor coordinates are known)
+  const osmHikesByStop: OsmHike[][] = archetype.stops.map(() => []);
 
-  for (let stopIndex = 0; stopIndex < strategy.stops.length; stopIndex++) {
-    const stop = strategy.stops[stopIndex];
-    logger.info(`Pipeline: processing stop ${stopIndex + 1}/${strategy.stops.length}`, { location: stop.location });
+  // Step 4: Build day contexts — anchor discovery + geographic expansion per day
+  let dayContextsByStop: DayContext[][] = archetype.stops.map((s) =>
+    s.days.map((skeleton, dayIdx) => ({
+      skeleton,
+      stopLocation: s.location,
+      stopIndex: archetype.stops.indexOf(s),
+      dayIndexInStop: dayIdx,
+      anchor: null,
+      supporting: { breakfast: [], lunch: [], dinner: [], secondary: [] },
+      osmHikes: [],
+    }))
+  );
 
-    let ranked: RankedPlace[] = [];
+  if (googlePlacesApiKey) {
+    try {
+      logger.info("Pipeline: building day contexts (anchor discovery + geographic expansion)");
+      dayContextsByStop = await buildDayContexts(
+        archetype,
+        osmHikesByStop,
+        googlePlacesApiKey,
+        (input.destinationType ?? 'city') === 'national_park'
+      );
 
-    if (googlePlacesApiKey && stop.searchQueries.length > 0) {
-      const cacheKey = buildCacheKey(stop.location, intent.budget, intent.interests);
-      let candidates = await getCachedPlaces(cacheKey);
-
-      if (!candidates) {
-        logger.info("Pipeline: cache miss — fetching from Google Places", { stop: stop.location, queryCount: stop.searchQueries.length });
-        candidates = await fetchRecommendations(stop.searchQueries, googlePlacesApiKey);
-        await setCachedPlaces(cacheKey, candidates);
-      } else {
-        logger.info("Pipeline: cache hit", { stop: stop.location });
+      // Now that we have anchor coordinates, fetch OSM trails near each anchor
+      for (let stopIdx = 0; stopIdx < dayContextsByStop.length; stopIdx++) {
+        const stopContexts = dayContextsByStop[stopIdx];
+        const anchoredDay = stopContexts.find((ctx) => ctx.anchor !== null);
+        if (anchoredDay?.anchor) {
+          const trails = await fetchHikingTrails(
+            anchoredDay.anchor.coordinates.lat,
+            anchoredDay.anchor.coordinates.lng
+          );
+          // Stamp trails onto all days in this stop
+          dayContextsByStop[stopIdx] = stopContexts.map((ctx) => ({ ...ctx, osmHikes: trails }));
+          logger.info("Pipeline: OSM trails fetched", { stop: anchoredDay.stopLocation, count: trails.length });
+        }
       }
-
-      ranked = rankRecommendations(candidates, intent);
-      allRanked.push(...ranked);
-      logger.info("Pipeline: ranking complete", { stop: stop.location, candidateCount: candidates.length, rankedCount: ranked.length });
-    } else {
-      logger.info("Pipeline: skipping Google Places for stop", { stop: stop.location });
+    } catch (error) {
+      logger.warn("Pipeline: context building failed, continuing without real Places data", { error });
     }
-
-    // Cluster into this stop's days
-    let clusters = clusterForStop(ranked, stopIndex, stop.nightCount, stop.dayThemes);
-
-    // Nearby search enrichment per cluster
-    if (googlePlacesApiKey && clusters.length > 0) {
-      clusters = await fetchNearbyForClusters(clusters, googlePlacesApiKey, input.destinationType ?? 'city');
-    }
-
-    // Fetch OSM trails for this stop's geographic center
-    const clusterCenterLat = clusters.length > 0
-      ? clusters.reduce((s, c) => s + c.centerLat, 0) / clusters.length
-      : undefined;
-    const clusterCenterLng = clusters.length > 0
-      ? clusters.reduce((s, c) => s + c.centerLng, 0) / clusters.length
-      : undefined;
-
-    const osmHikes = clusterCenterLat !== undefined && clusterCenterLng !== undefined
-      ? await fetchHikingTrails(clusterCenterLat, clusterCenterLng)
-      : [];
-
-    logger.info("Pipeline: stop processing complete", {
-      stop: stop.location,
-      clusterCount: clusters.length,
-      trailsFound: osmHikes.length,
-    });
-
-    stopClusters.push({ stopIndex, stop, clusters, osmHikes });
   }
 
-  // Step 6: Generate all daily plans in one Claude call
-  logger.info("Pipeline: generating daily plans");
-  const rawItinerary = await generateDailyPlans(stopClusters, intent, strategy);
+  // Step 5: Generate narrative itinerary — LLM assembles the final schedule
+  logger.info("Pipeline: generating narrative itinerary");
+  const rawItinerary = await generateDailyPlans(dayContextsByStop, intent, archetype);
 
-  // Step 7: Parse with schema
+  // Step 6: Parse with schema
   const parsed = generatedItinerarySchema.parse({
     ...rawItinerary,
     destinationId: input.destinationId,
@@ -205,33 +163,39 @@ export async function generateItineraryFlow(
     isActive: true,
   });
 
-  // Step 7b: Merge real ratings and editorial descriptions from Google Places
-  logger.info("Pipeline: merging real place data");
-  const withPlaceData = mergePlaceData(parsed, allRanked);
+  // Step 7: Stamp OSM trail data onto matched hiking activities
+  const allOsmHikes = dayContextsByStop.flatMap((stop) =>
+    stop.flatMap((ctx) => ctx.osmHikes)
+  );
+  const withTrailData = stampOsmTrailData(parsed, allOsmHikes);
 
   // Step 8: Validate
   logger.info("Pipeline: validating itinerary");
-  const { itinerary: validated, result } = validateItinerary(withPlaceData);
+  const { itinerary: validated, result } = validateItinerary(withTrailData);
 
   if (result.issues.length > 0) {
     logger.info("Pipeline: validation issues", { issues: result.issues, repaired: result.repaired });
   }
 
-  // Step 9: Stamp OSM trail data (use all trails from all stops)
-  const allOsmHikes = stopClusters.flatMap(sc => sc.osmHikes);
-  const withTrailData = stampOsmTrailData(validated, allOsmHikes);
-
-  // Step 10: Enrich transport times with real Google Distance Matrix data
+  // Step 9: Enrich transport times with real Google Routes API data
+  let withTransportTimes = validated;
   if (googlePlacesApiKey) {
     try {
       logger.info("Pipeline: enriching transport times");
-      return await enrichTransportTimes(withTrailData, googlePlacesApiKey);
+      withTransportTimes = await enrichTransportTimes(validated, googlePlacesApiKey);
     } catch (error) {
       logger.warn("Pipeline: transport enrichment failed, using estimates", { error });
     }
   }
 
-  return withTrailData;
+  // Step 10: Pre-fetch images before push notification fires
+  try {
+    logger.info("Pipeline: pre-fetching images");
+    return await enrichWithImages(withTransportTimes);
+  } catch (error) {
+    logger.warn("Pipeline: image enrichment failed, client will fetch on open", { error });
+    return withTransportTimes;
+  }
 }
 
 // ─── Partial regeneration: single activity ──────────────────────────────────

@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { FAST_MODEL_NAME } from "../constants";
-import { type TripIntent, type TripStrategy, type StopStrategy, type SearchQuery } from "./types";
+import { type TripIntent, type TripStrategy, type StopStrategy } from "./types";
 
 const STOP_SCHEMA = {
   type: "object" as const,

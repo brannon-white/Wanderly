@@ -108,7 +108,9 @@ import {
   editItineraryWithLanguageRequestSchema,
   optimizeDayRequestSchema,
   type CallableGenerateItineraryResponse,
+  type GenerateItineraryRequest,
 } from "./itinerarySchemas";
+import { getAllDays } from "./itinerarySchemas";
 
 initializeApp();
 
@@ -187,16 +189,7 @@ function classifyHttpError(error: unknown): HttpErrorDetails {
 
 async function buildAndSaveItinerary(
   uid: string,
-  input: {
-    destinationId: string;
-    destinationName: string;
-    country?: string;
-    party: string;
-    startDate: string | null;
-    endDate: string | null;
-    interests: string[];
-    budget: string;
-  }
+  input: GenerateItineraryRequest
 ): Promise<CallableGenerateItineraryResponse> {
   logger.info("Generating itinerary", {
     uid,
@@ -214,7 +207,7 @@ async function buildAndSaveItinerary(
     destinationId: input.destinationId,
     model: itinerary.model ?? MODEL_NAME,
     promptVersion: itinerary.promptVersion ?? PROMPT_VERSION,
-    daysCount: itinerary.days.length,
+    daysCount: getAllDays(itinerary).length,
   });
 
   const firestore = getFirestore();
@@ -420,7 +413,7 @@ export const regenerateActivityHttp = functionsV1
       const updated = await regenerateActivity({ itinerary: currentItinerary, dayIndex, activityIndex, reason });
 
       await itineraryRef.update({
-        days: updated.days,
+        stops: updated.stops,
         updatedAt: FieldValue.serverTimestamp(),
       });
 
@@ -486,7 +479,7 @@ export const regenerateDayHttp = functionsV1
       const updated = await regenerateDay({ itinerary: currentItinerary, dayIndex, modifications });
 
       await itineraryRef.update({
-        days: updated.days,
+        stops: updated.stops,
         updatedAt: FieldValue.serverTimestamp(),
       });
 
@@ -865,7 +858,7 @@ export const editItineraryWithLanguageHttp = functionsV1
       if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
       logger.info("editItineraryWithLanguageHttp", { uid, itineraryId, message });
       const updated = await editItineraryWithLanguage({ itinerary: snap.data() as any, message });
-      await itineraryRef.update({ days: updated.days, updatedAt: FieldValue.serverTimestamp() });
+      await itineraryRef.update({ stops: updated.stops, updatedAt: FieldValue.serverTimestamp() });
       res.status(200).json({ itinerary: updated });
     } catch (error) {
       const e = classifyHttpError(error);
@@ -896,7 +889,7 @@ export const optimizeDayHttp = functionsV1
       if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
       logger.info("optimizeDayHttp", { uid, itineraryId, dayIndex, mode });
       const updated = await optimizeDay({ itinerary: snap.data() as any, dayIndex, mode });
-      await itineraryRef.update({ days: updated.days, updatedAt: FieldValue.serverTimestamp() });
+      await itineraryRef.update({ stops: updated.stops, updatedAt: FieldValue.serverTimestamp() });
       res.status(200).json({ itinerary: updated });
     } catch (error) {
       const e = classifyHttpError(error);
