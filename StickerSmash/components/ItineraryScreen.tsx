@@ -247,14 +247,21 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, onPress, onLon
       {/* Card + inline transport connector */}
       <View style={{ flex: 1 }}>
         <View style={styles.compactCard}>
-          {/* Cinematic image */}
-          <Image
-            source={imageUri ? { uri: imageUri } : undefined}
-            style={[styles.compactImage, (!imageUri || imageUri === '') && { backgroundColor: '#F0EEFF' }]}
-            cachePolicy="memory-disk"
-            contentFit="cover"
-            transition={250}
-          />
+          {/* Cinematic image — falls back to a category-icon placeholder when no URL resolved */}
+          {imageUri ? (
+            <Image
+              source={{ uri: imageUri }}
+              style={styles.compactImage}
+              cachePolicy="memory-disk"
+              contentFit="cover"
+              transition={250}
+            />
+          ) : (
+            <View style={[styles.compactImage, styles.compactImageFallback]}>
+              <View style={styles.compactImageFallbackHalo} />
+              <Ionicons name={catIcon} size={44} color="#6A62B7" />
+            </View>
+          )}
 
           {/* Text content */}
           <View style={styles.compactBody}>
@@ -472,6 +479,8 @@ export default function ItineraryScreen() {
     if (!itinerary) return;
     let cancelled = false;
     const dayActivities = getItineraryDays(itinerary)[selectedDay]?.activities ?? [];
+    const currentStop = isRouteTrip(itinerary) ? getStopForDayIndex(itinerary, selectedDay) : null;
+    const locationContext = currentStop?.location ?? itinerary.destinationName;
 
     async function loadSequentially() {
       let anyFailed = false;
@@ -480,12 +489,29 @@ export default function ItineraryScreen() {
         if (loadedImageIds.current.has(a.id)) continue;
         loadedImageIds.current.add(a.id);
 
-        const url = isPlaceholder(a.image) ? await searchPhoto(a.name) : a.image;
-        if (cancelled) return;
+        let url: string | null = null;
+        if (isPlaceholder(a.image)) {
+          // Strip suffixes like " – Breakfast" / " - Lunch" that hurt Unsplash matches
+          const baseName = a.name.split(/\s+[–-]\s+/)[0].trim();
+          url = await searchPhoto(baseName);
+          if (cancelled) return;
+          // Generic fallback: category + location (e.g. "Restaurant Portland, OR")
+          if (!url) {
+            const catLabel = CATEGORY_LABELS[(a.category ?? '').toLowerCase()] ?? a.category;
+            const fallbackQuery = [catLabel, locationContext].filter(Boolean).join(' ').trim();
+            if (fallbackQuery) {
+              url = await searchPhoto(fallbackQuery);
+              if (cancelled) return;
+            }
+          }
+        } else {
+          url = a.image;
+        }
         if (url) {
           setActivityImages((prev) => ({ ...prev, [a.id]: url }));
         } else {
-          // Store empty string as sentinel so the imagesReady gate knows this slot is resolved
+          // Store empty string as sentinel so the imagesReady gate knows this slot is resolved.
+          // The card renders a category-icon placeholder for this state.
           setActivityImages((prev) => ({ ...prev, [a.id]: '' }));
           loadedImageIds.current.delete(a.id);
           anyFailed = true;
@@ -839,22 +865,38 @@ export default function ItineraryScreen() {
           ))}
         </ScrollView>
 
-        {/* Stop header for route trips */}
-        {itinerary && isRouteTrip(itinerary) && (() => {
+        {/* Stop card (route trips) — wraps day title + overnight info with a left accent bar */}
+        {itinerary && isRouteTrip(itinerary) ? (() => {
           const stop = getStopForDayIndex(itinerary, selectedDay);
-          if (!stop) return null;
+          const dayTitle = allDays[selectedDay]?.title;
+          const daytime = stop?.location;
+          const overnight = stop?.overnightAnchor?.location;
+          if (!stop && !dayTitle) return null;
           return (
-            <View style={styles.stopHeader}>
-              <Ionicons name="location-outline" size={14} color="#6A62B7" />
-              <Text style={styles.stopHeaderText}>{stop.overnightAnchor?.location ?? stop.location}</Text>
+            <View style={styles.stopCard}>
+              <View style={styles.stopCardAccent} />
+              <View style={styles.stopCardBody}>
+                {daytime ? (
+                  <View style={styles.stopCardLocationRow}>
+                    <Ionicons name="location" size={12} color="#6A62B7" />
+                    <Text style={styles.stopCardLocation} numberOfLines={1}>{daytime}</Text>
+                  </View>
+                ) : null}
+                {dayTitle ? <Text style={styles.stopCardTitle}>{dayTitle}</Text> : null}
+                {overnight && overnight !== daytime ? (
+                  <View style={styles.stopCardOvernightRow}>
+                    <Ionicons name="moon-outline" size={11} color="#9890C8" />
+                    <Text style={styles.stopCardOvernight} numberOfLines={1}>Overnight in {overnight}</Text>
+                  </View>
+                ) : null}
+              </View>
             </View>
           );
-        })()}
-
-        {/* Day title */}
-        {allDays[selectedDay]?.title ? (
-          <Text style={styles.dayTitle}>{allDays[selectedDay].title}</Text>
-        ) : null}
+        })() : (
+          allDays[selectedDay]?.title ? (
+            <Text style={styles.dayTitle}>{allDays[selectedDay].title}</Text>
+          ) : null
+        )}
 
         {/* Smart insights (info-level shown at top of day) */}
         {dayInsights.filter((ins) => ins.afterIndex === -1).map((ins, i) => (
