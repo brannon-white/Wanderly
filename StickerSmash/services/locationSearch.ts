@@ -7,7 +7,7 @@ export interface LocationResult {
   countryCode: string;
   flag: string;
   imageUrl: string | null;
-  destinationType: 'city' | 'national_park';
+  destinationType: 'city' | 'national_park' | 'region';
 }
 
 export interface SearchedDestination {
@@ -17,7 +17,7 @@ export interface SearchedDestination {
   flag: string;
   imageUrl: string;
   gallery: string[];
-  destinationType: 'city' | 'national_park';
+  destinationType: 'city' | 'national_park' | 'region';
 }
 
 function toFlag(countryCode: string): string {
@@ -70,8 +70,15 @@ async function fetchLocations(query: string): Promise<LocationResult[]> {
     if (seen.has(key)) continue;
     seen.add(key);
 
-    const destinationType: 'city' | 'national_park' =
-      (isNationalPark || isLeisurePark) ? 'national_park' : 'city';
+    // A state/region boundary has no city-level address — it's a boundary
+    // where the matched name IS the region itself (state, province, county)
+    const hasCityAddress = !!(addr.city || addr.town || addr.village || addr.municipality);
+    const isRegionBoundary = isBoundary && !isNationalPark && !hasCityAddress;
+
+    const destinationType: 'city' | 'national_park' | 'region' =
+      (isNationalPark || isLeisurePark) ? 'national_park'
+      : isRegionBoundary ? 'region'
+      : 'city';
 
     results.push({
       id: key,

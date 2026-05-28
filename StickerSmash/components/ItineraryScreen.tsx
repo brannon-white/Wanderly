@@ -797,7 +797,36 @@ export default function ItineraryScreen() {
           style={styles.dateSelector}
           contentContainerStyle={styles.dateSelectorContent}
         >
-          {allDays.map((day, index) => (
+          {itinerary && isRouteTrip(itinerary) ? (() => {
+            const stops = getItineraryStops(itinerary);
+            const elements: React.ReactNode[] = [];
+            let globalDayIdx = 0;
+            for (const stop of stops) {
+              const cityName = stop.location.split(',')[0].trim();
+              elements.push(
+                <View key={`stop-label-${stop.stopIndex}`} style={styles.stopTabGroupLabel}>
+                  <Ionicons name="location-outline" size={10} color="#8B7FCC" />
+                  <Text style={styles.stopTabGroupLabelText}>{cityName}</Text>
+                </View>
+              );
+              for (let i = 0; i < stop.days.length; i++) {
+                const idx = globalDayIdx;
+                elements.push(
+                  <TouchableOpacity
+                    key={`day-${idx}`}
+                    style={[styles.dateBtn, selectedDay === idx && styles.dateBtnActive]}
+                    onPress={() => setSelectedDay(idx)}
+                  >
+                    <Text style={[styles.dateBtnText, selectedDay === idx && styles.dateBtnTextActive]}>
+                      {getDayLabel(idx)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+                globalDayIdx++;
+              }
+            }
+            return elements;
+          })() : allDays.map((day, index) => (
             <TouchableOpacity
               key={`${day.label}-${index}`}
               style={[styles.dateBtn, selectedDay === index && styles.dateBtnActive]}

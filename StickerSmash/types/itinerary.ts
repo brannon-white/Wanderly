@@ -80,7 +80,7 @@ export interface GenerateItineraryRequest {
   derivedIntent?: TripDerivedIntent;
   includeActivities?: string[];
   avoidActivities?: string[];
-  destinationType?: 'city' | 'national_park';
+  destinationType?: 'city' | 'national_park' | 'region';
   tripType?: TripType;
   travelPace?: TravelPace;
 }
