@@ -15,7 +15,7 @@ import {
 import { extractIntent } from "./orchestration/intentExtraction";
 import { generateTripArchetype } from "./orchestration/archetype";
 import { buildDayContexts } from "./orchestration/contextBuilder";
-import { generateDailyPlans } from "./orchestration/dailyPlanning";
+import { generateDailyPlans, repairItinerary } from "./orchestration/dailyPlanning";
 import { validateItinerary } from "./orchestration/validation";
 import { enrichTransportTimes } from "./orchestration/directions";
 import { enrichWithImages } from "./orchestration/imageEnrichment";
@@ -107,7 +107,15 @@ export async function generateItineraryFlow(
       stopIndex: archetype.stops.indexOf(s),
       dayIndexInStop: dayIdx,
       anchor: null,
-      supporting: { breakfast: [], lunch: [], dinner: [], secondary: [] },
+      supporting: {
+        breakfast: [],
+        morning: [],
+        lunch: [],
+        afternoon: [],
+        late_afternoon: [],
+        dinner: [],
+        evening: [],
+      },
       osmHikes: [],
     }))
   );
@@ -143,41 +151,68 @@ export async function generateItineraryFlow(
 
   // Step 5: Generate narrative itinerary — LLM assembles the final schedule
   logger.info("Pipeline: generating narrative itinerary");
-  const rawItinerary = await generateDailyPlans(dayContextsByStop, intent, archetype);
+  let rawItinerary = await generateDailyPlans(dayContextsByStop, intent, archetype);
 
-  // Step 6: Parse with schema
-  const parsed = generatedItinerarySchema.parse({
-    ...rawItinerary,
-    destinationId: input.destinationId,
-    destinationName: (rawItinerary.destinationName as string) || input.destinationName,
-    country: (rawItinerary.country as string) || input.country,
-    budget: input.budget,
-    interests: input.interests,
-    travelerType: input.party,
-    startDate: input.startDate,
-    endDate: input.endDate,
-    source: "ai_generated",
-    tripType: intent.tripType,
-    model: MODEL_NAME,
-    promptVersion: PROMPT_VERSION,
-    isActive: true,
-  });
+  const finaliseAndStamp = (raw: Record<string, unknown>): GeneratedItinerary => {
+    const parsed = generatedItinerarySchema.parse({
+      ...raw,
+      destinationId: input.destinationId,
+      destinationName: (raw.destinationName as string) || input.destinationName,
+      country: (raw.country as string) || input.country,
+      budget: input.budget,
+      interests: input.interests,
+      travelerType: input.party,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      source: "ai_generated",
+      tripType: intent.tripType,
+      model: MODEL_NAME,
+      promptVersion: PROMPT_VERSION,
+      isActive: true,
+    });
 
-  // Step 7: Stamp OSM trail data onto matched hiking activities
-  const allOsmHikes = dayContextsByStop.flatMap((stop) =>
-    stop.flatMap((ctx) => ctx.osmHikes)
-  );
-  const withTrailData = stampOsmTrailData(parsed, allOsmHikes);
+    const allOsmHikes = dayContextsByStop.flatMap((stop) =>
+      stop.flatMap((ctx) => ctx.osmHikes)
+    );
+    return stampOsmTrailData(parsed, allOsmHikes);
+  };
 
-  // Step 8: Validate
-  logger.info("Pipeline: validating itinerary");
-  const { itinerary: validated, result } = validateItinerary(withTrailData);
+  // Step 6: Validate; on fatal failures, run ONE LLM repair pass.
+  let withTrailData = finaliseAndStamp(rawItinerary);
+  let { itinerary: validated, result } = validateItinerary(withTrailData, { tripStyle: archetype.tripStyle });
 
-  if (result.issues.length > 0) {
-    logger.info("Pipeline: validation issues", { issues: result.issues, repaired: result.repaired });
+  if (!result.isValid) {
+    logger.warn("Pipeline: validation failed — running repair pass", {
+      fatalIssues: result.fatalIssues,
+      issueCount: result.issues.length,
+    });
+
+    try {
+      rawItinerary = await repairItinerary(
+        rawItinerary,
+        result.fatalIssues,
+        dayContextsByStop,
+        intent,
+        archetype,
+      );
+      withTrailData = finaliseAndStamp(rawItinerary);
+      ({ itinerary: validated, result } = validateItinerary(withTrailData, { tripStyle: archetype.tripStyle }));
+
+      if (!result.isValid) {
+        logger.warn("Pipeline: repair pass did not fully fix issues — shipping best-effort", {
+          remainingFatal: result.fatalIssues,
+        });
+      } else {
+        logger.info("Pipeline: repair pass succeeded");
+      }
+    } catch (error) {
+      logger.warn("Pipeline: repair pass failed — shipping original output", { error });
+    }
+  } else if (result.issues.length > 0) {
+    logger.info("Pipeline: validation passed with minor issues", { issues: result.issues });
   }
 
-  // Step 9: Enrich transport times with real Google Routes API data
+  // Step 8: Enrich transport times with real Google Routes API data
   let withTransportTimes = validated;
   if (googlePlacesApiKey) {
     try {
@@ -188,7 +223,7 @@ export async function generateItineraryFlow(
     }
   }
 
-  // Step 10: Pre-fetch images before push notification fires
+  // Step 9: Pre-fetch images before push notification fires
   try {
     logger.info("Pipeline: pre-fetching images");
     return await enrichWithImages(withTransportTimes);
@@ -348,24 +383,37 @@ TRIP CONTEXT:
 
 DO NOT USE any of these venues (used on other days): ${excludePlaces.join(", ")}
 
+SLOT GRID — fill EVERY required slot. The day must run from 08:00 until at least 20:30.
+
+  08:00–09:30  BREAKFAST   ★ required — café / bakery
+  09:30–12:00  MORNING     ★ required — major activity or anchor experience
+  12:00–14:00  LUNCH       ★ required — restaurant or café
+  14:00–17:00  AFTERNOON   ★ required — museum / gallery / neighbourhood walk / scenic stop
+  17:00–18:30  LATE AFTERNOON ◆ recommended — sunset spot, brewery, coffee, dessert
+  18:30–20:30  DINNER      ★ required — full-service restaurant
+  20:30–22:30  EVENING     ◆ recommended — bar, live music, dessert, night walk
+
 RULES:
-1. Include breakfast, lunch, AND dinner at real named restaurants in ${stopLocation}
-2. Specific named places only — no vague entries
-3. Realistic timing with transit between activities
-4. Format times as "09:00 AM - 10:30 AM"
-5. Transport array for each activity pointing to the next
-6. Google Maps URLs: https://www.google.com/maps/search/?api=1&query=Place+Name+City
-7. Use real coordinates for ${stopLocation}`;
+1. Minimum 6 activities. Day must end no earlier than 8:30 PM.
+2. Specific named places only — no vague entries.
+3. Realistic timing with transit between activities. No time overlaps.
+4. Format times as "09:00 AM - 10:30 AM".
+5. Realistic durations: breakfast 45–60 min, lunch 60–75 min, dinner 75–90 min, major attraction 2–3 hrs.
+6. transport array describes how to reach the NEXT activity. Last activity = empty array.
+7. Set category to "food" for all meals, "adventure" for hikes/trails, "nightlife" for bars.
+8. Google Maps URLs: https://www.google.com/maps/search/?api=1&query=Place+Name+City
+9. Use real coordinates for ${stopLocation}.`;
 
   const DAY_SCHEMA = {
     type: "object" as const,
-    required: ["label", "activities"],
+    required: ["label", "title", "activities"],
     properties: {
       label: { type: "string" },
       title: { type: "string" },
       isDriveDay: { type: "boolean" },
       activities: {
         type: "array",
+        minItems: 6,
         items: ACTIVITY_TOOL_INPUT_SCHEMA,
       },
     },

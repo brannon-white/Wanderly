@@ -1,64 +1,87 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { MODEL_NAME, ITINERARY_TOOL_INPUT_SCHEMA } from "../constants";
-import { type TripIntent, type TripArchetype, type DayContext, type PlaceCandidate } from "./types";
+import * as logger from "firebase-functions/logger";
+import { MODEL_NAME, ITINERARY_TOOL_INPUT_SCHEMA, MIN_ACTIVITIES_BY_STYLE } from "../constants";
+import { type TripIntent, type TripArchetype, type DayContext, type PlaceCandidate, type DaySupportingPlaces } from "./types";
 
 function formatPlace(p: PlaceCandidate): string {
   const summary = p.editorialSummary ? ` — "${p.editorialSummary}"` : "";
   const priceStr = p.priceLevel > 0 ? ` | ${"$".repeat(p.priceLevel)}` : "";
-  return `  • ${p.name} | rating: ${p.rating}/5 (${p.reviewCount} reviews)${priceStr} | ${p.address.split(",").slice(0, 2).join(",")}${summary}`;
+  return `    • ${p.name} | ${p.rating}/5 (${p.reviewCount} reviews)${priceStr} | ${p.address.split(",").slice(0, 2).join(",")}${summary}`;
 }
+
+interface SlotDef {
+  key: keyof DaySupportingPlaces;
+  label: string;
+  window: string;
+  hint: string;
+  required: boolean;        // true = must be filled on every non-drive day
+  recommended?: boolean;    // true = strongly suggested, optional for slow pace
+  canHoldAnchor: boolean;
+}
+
+const SLOTS: SlotDef[] = [
+  { key: "breakfast",      label: "BREAKFAST",      window: "08:00–09:30", hint: "café / bakery / breakfast spot — NEVER a bar or dinner-only restaurant", required: true,  canHoldAnchor: false },
+  { key: "morning",        label: "MORNING",        window: "09:30–12:00", hint: "morning activity OR the anchor if it's an AM experience (hike, sunrise, market)", required: true,  canHoldAnchor: true  },
+  { key: "lunch",          label: "LUNCH",          window: "12:00–14:00", hint: "restaurant or café — 60–75 min", required: true,  canHoldAnchor: false },
+  { key: "afternoon",      label: "AFTERNOON",      window: "14:00–17:00", hint: "midday activity OR the anchor (museum, gallery, tour, neighbourhood walk)", required: true,  canHoldAnchor: true  },
+  { key: "late_afternoon", label: "LATE AFTERNOON", window: "17:00–18:30", hint: "golden-hour stop — scenic view, brewery / wine bar, coffee, dessert. Anchor OK if it's a sunset experience.", required: false, recommended: true, canHoldAnchor: true },
+  { key: "dinner",         label: "DINNER",         window: "18:30–20:30", hint: "full-service restaurant — 75–90 min. Vary cuisine across days.", required: true,  canHoldAnchor: false },
+  { key: "evening",        label: "EVENING",        window: "20:30–22:30", hint: "bar / live music / dessert / night walk. Required for balanced & packed pace; optional for relaxed.", required: false, recommended: true, canHoldAnchor: false },
+];
 
 function formatDayContext(ctx: DayContext, dayNumber: number, isRoute: boolean): string {
   const lines: string[] = [];
   const { skeleton, anchor, supporting, osmHikes, stopLocation } = ctx;
 
-  lines.push(`${"═".repeat(60)}`);
-  lines.push(`DAY ${dayNumber}: ${skeleton.theme.toUpperCase()}${skeleton.isDepartureDay ? " [DEPARTURE DAY]" : ""}`);
-  lines.push(`Location: ${stopLocation} | Vibe: ${skeleton.vibe} | Pace: ${skeleton.pace}`);
+  lines.push("═".repeat(64));
+  lines.push(`DAY ${dayNumber} — ${skeleton.theme.toUpperCase()}${skeleton.isDepartureDay ? " [DEPARTURE DAY]" : ""}`);
+  lines.push(`Stop: ${stopLocation}  |  Vibe: ${skeleton.vibe}  |  Pace: ${skeleton.pace}`);
 
   if (anchor) {
-    lines.push(`\nDAY ANCHOR (the centerpiece — build the day around this):`);
+    lines.push("");
+    lines.push("ANCHOR (the day's centerpiece — must appear in MORNING, AFTERNOON, or LATE AFTERNOON):");
     lines.push(formatPlace(anchor));
-    lines.push(`Anchor intent: ${skeleton.anchorIntent}`);
+    lines.push(`  Intent: ${skeleton.anchorIntent}`);
   } else {
-    lines.push(`\nANCHOR: [not found via search — use your knowledge of ${stopLocation} for: ${skeleton.anchorIntent}]`);
+    lines.push("");
+    lines.push(`ANCHOR: [no Places result — use your knowledge of ${stopLocation} for: ${skeleton.anchorIntent}]`);
   }
 
   if (osmHikes.length > 0 && !skeleton.isDepartureDay) {
-    lines.push(`\nVERIFIED HIKING TRAILS nearby (use exact names and durations):`);
-    for (const h of osmHikes) {
-      lines.push(`  • ${h.name} | ${h.distanceMiles} mi | ~${h.estimatedDurationHours} hrs | ${h.difficulty}`);
+    lines.push("");
+    lines.push("VERIFIED HIKING TRAILS NEARBY (use exact trail names + durations):");
+    for (const h of osmHikes.slice(0, 5)) {
+      lines.push(`    • ${h.name} | ${h.distanceMiles} mi | ~${h.estimatedDurationHours} hrs | ${h.difficulty}`);
     }
   }
 
-  lines.push(`\nSUPPORTING PLACES (real venues nearby — prefer these over invented names):`);
-
-  if (supporting.breakfast.length > 0) {
-    lines.push(`  Breakfast options:`);
-    supporting.breakfast.forEach((p) => lines.push(formatPlace(p)));
-  }
-
-  if (supporting.lunch.length > 0) {
-    lines.push(`  Lunch options:`);
-    supporting.lunch.slice(0, 3).forEach((p) => lines.push(formatPlace(p)));
-  }
-
-  if (supporting.dinner.length > 0) {
-    lines.push(`  Dinner options:`);
-    supporting.dinner.slice(0, 3).forEach((p) => lines.push(formatPlace(p)));
-  }
-
-  if (supporting.secondary.length > 0) {
-    lines.push(`  Secondary activities (complement the anchor):`);
-    supporting.secondary.slice(0, 3).forEach((p) => lines.push(formatPlace(p)));
-  }
-
-  lines.push(`\nMeal intent for this day: ${skeleton.mealIntent}`);
-  lines.push(`Secondary intent: ${skeleton.secondaryIntent}`);
-
   if (skeleton.isDepartureDay && isRoute) {
-    lines.push(`\nDEPARTURE DAY RULES: Morning only (3–4 activities max). Short stops only. No hikes. Activities along the drive route.`);
+    lines.push("");
+    lines.push("DEPARTURE-DAY OVERRIDE: morning only (3–4 short activities). No major hikes. Skip evening slots. Activities should lie along the drive route to the next stop.");
+    return lines.join("\n");
   }
+
+  lines.push("");
+  lines.push("SLOT GRID — fill EVERY required slot. Recommended slots should be filled unless pace=slow.");
+
+  for (const slot of SLOTS) {
+    const candidates = supporting[slot.key];
+    const tag = slot.required ? "★ REQUIRED" : slot.recommended ? "◆ recommended" : "optional";
+    const anchorMarker = slot.canHoldAnchor ? "  [anchor may live here]" : "";
+    lines.push("");
+    lines.push(`  ${slot.window}  ${slot.label}  (${tag})${anchorMarker}`);
+    lines.push(`    Hint: ${slot.hint}`);
+    if (candidates.length > 0) {
+      lines.push("    Candidates (prefer these — they're verified by Google Places):");
+      candidates.forEach((p) => lines.push(formatPlace(p)));
+    } else {
+      lines.push(`    Candidates: [none returned — invent a real, well-known venue in ${stopLocation}]`);
+    }
+  }
+
+  lines.push("");
+  lines.push(`Meal intent: ${skeleton.mealIntent}`);
+  lines.push(`Secondary intent: ${skeleton.secondaryIntent}`);
 
   return lines.join("\n");
 }
@@ -74,41 +97,31 @@ function buildPersonalizationBlock(intent: TripIntent): string {
 
   lines.push("\nPERSONALIZATION:");
 
-  if (intent.includeActivities?.length || intent.avoidActivities?.length) {
-    if (intent.includeActivities?.length) lines.push(`  MUST INCLUDE: ${intent.includeActivities.join(", ")}`);
-    if (intent.avoidActivities?.length) lines.push(`  NEVER INCLUDE: ${intent.avoidActivities.join(", ")}`);
-  }
+  if (intent.includeActivities?.length) lines.push(`  MUST INCLUDE: ${intent.includeActivities.join(", ")}`);
+  if (intent.avoidActivities?.length) lines.push(`  NEVER INCLUDE: ${intent.avoidActivities.join(", ")}`);
 
-  if (intent.tripPrompt || hasPromptIntent) {
-    if (intent.tripPrompt) lines.push(`  User's request: "${intent.tripPrompt}"`);
-    if (intent.derivedIntent?.tripMood) lines.push(`  Mood: ${intent.derivedIntent.tripMood}`);
-    if (intent.derivedIntent?.themes?.length) lines.push(`  Themes: ${intent.derivedIntent.themes.join(", ")}`);
-  }
+  if (intent.tripPrompt) lines.push(`  User's request: "${intent.tripPrompt}"`);
+  if (intent.derivedIntent?.tripMood) lines.push(`  Mood: ${intent.derivedIntent.tripMood}`);
+  if (intent.derivedIntent?.themes?.length) lines.push(`  Themes: ${intent.derivedIntent.themes.join(", ")}`);
 
   if (tp) {
     lines.push(
       `  Food: ${tp.foodie > 0.6 ? "food-first — every meal should be special" : tp.foodie < 0.4 ? "food as fuel" : "balanced"}`,
-      `  Nightlife: ${tp.nightlife > 0.5 ? "enjoys bars, live music" : "ends evenings early"}`,
+      `  Nightlife: ${tp.nightlife > 0.5 ? "enjoys bars & live music — keep the EVENING slot lively" : "ends evenings early — EVENING slot optional"}`,
       `  Venue style: ${tp.hiddenGems > 0.6 ? "hidden gems over tourist traps" : tp.hiddenGems < 0.4 ? "well-known iconic venues" : "mix"}`,
     );
-    if (tp.luxury > 0.6) lines.push(`  Comfort: premium venues where possible`);
-    else if (tp.luxury < 0.3) lines.push(`  Comfort: budget-friendly and authentic`);
+    if (tp.luxury > 0.6) lines.push("  Comfort: premium venues where possible");
+    else if (tp.luxury < 0.3) lines.push("  Comfort: budget-friendly and authentic");
   }
 
   return lines.join("\n");
 }
 
-export async function generateDailyPlans(
-  dayContextsByStop: DayContext[][],
-  intent: TripIntent,
-  archetype: TripArchetype,
-): Promise<Record<string, unknown>> {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-  const isRoute = intent.tripType === 'route';
+function buildSystemPrompt(intent: TripIntent, archetype: TripArchetype, dayContextsByStop: DayContext[][]): string {
+  const isRoute = intent.tripType === "route";
   const personalizationBlock = buildPersonalizationBlock(intent);
+  const minActivities = MIN_ACTIVITIES_BY_STYLE[archetype.tripStyle] ?? 6;
 
-  // Build the per-day context section
   const dayContextSections: string[] = [];
   let globalDayNum = 1;
   for (const stopContexts of dayContextsByStop) {
@@ -118,89 +131,100 @@ export async function generateDailyPlans(
     }
   }
 
-  const parkContextBlock = intent.destinationType === 'national_park'
+  const parkContextBlock = intent.destinationType === "national_park"
     ? `\nNATIONAL PARK RULES:
-- In-park anchors (trails, scenic areas) are the morning centerpiece.
-- ALL meals must be in nearby gateway towns — this is correct and expected.
-- After the morning anchor, transition to the gateway town for lunch, afternoon, and dinner.
-- Out-of-park activities are expected and allowed.\n`
+- In-park anchors are the morning centerpiece.
+- ALL meals must be in nearby gateway towns — this is expected, not an error.
+- After the morning anchor, transition to the gateway town for lunch, afternoon, late afternoon, dinner, evening.
+- The afternoon and evening slots still need to be filled — pick from town candidates.\n`
     : "";
 
   const roadTripBlock = isRoute
     ? `\nROAD TRIP RULES:
-- Departure days (last day at each non-final stop): SHORT activities only. No major hikes.
-  Preferred: scenic overlooks, roadside stops, coffee in town. Max 3–4 activities.
-- Activities on departure days must be along the route to the NEXT stop.
+- Departure days (last day at each non-final stop): 3–4 SHORT activities, no major hikes. Activities on the drive route. Skip evening slots.
 - Non-departure days: all activities within ~45–60 min of the overnight anchor.\n`
     : "";
 
-  const prompt = `You are a travel writer building a detailed, realistic itinerary for a mobile travel app.
-Each day has been pre-designed with an anchor experience and real nearby venues. Your job is NARRATIVE ASSEMBLY:
-sequence the day intelligently, write compelling descriptions, and build a schedule that flows naturally.
+  return `You are a senior trip planner assembling a detailed, realistic itinerary for a mobile travel app.
+Each day comes pre-designed with an anchor experience, real nearby venues organised by time slot, and verified trail data.
+Your job: produce a complete day that flows from morning to night and fills every required slot.
 
 TRIP DETAILS:
 - Destination: ${intent.destination}${intent.country ? `, ${intent.country}` : ""}
 - Duration: ${intent.durationDays} days
 - Party: ${intent.party} | Budget: ${intent.budget}
-- Trip type: ${isRoute ? 'ROAD TRIP (multi-stop)' : 'Hub (single location)'}
+- Trip type: ${isRoute ? "ROAD TRIP (multi-stop)" : "Hub (single location)"}
+- Trip style: ${archetype.tripStyle} → minimum ${minActivities} activities per day (3 meals + the rest from morning/afternoon/late-afternoon/evening)
 ${personalizationBlock}
 ${parkContextBlock}
 ${roadTripBlock}
 DAILY CONTEXTS:
 ${dayContextSections.join("\n\n")}
 
-ASSEMBLY RULES:
-1. PREFER the real venues listed in each day's context — they are verified by Google Places.
-   If a supporting place fits the slot, use it. Only invent venues when context is missing.
+═══════════════════════════════════════════════════════════════
+ASSEMBLY RULES — non-negotiable:
 
-2. EVERY day MUST include:
-   - BREAKFAST (8:00–9:30 AM): café or bakery. NEVER a bar or dinner-only restaurant.
-   - LUNCH (12:00–2:00 PM): restaurant or café.
-   - DINNER (6:30–9:00 PM): full-service restaurant. Vary cuisine across days.
-   Set category to "food" for all meals. Departure days may skip dinner if driving all day.
+1. SLOT COMPLETENESS — every non-drive day MUST have:
+   - BREAKFAST in 08:00–09:30
+   - MORNING activity in 09:30–12:00
+   - LUNCH in 12:00–14:00
+   - AFTERNOON activity in 14:00–17:00
+   - DINNER in 18:30–20:30
+   Strongly recommended (omit only if pace=slow and the user's nightlife signal is low):
+   - LATE AFTERNOON in 17:00–18:30
+   - EVENING in 20:30–22:30
+   Day MUST end no earlier than 20:30. A day ending at 14:30 or 17:00 is BROKEN.
 
-3. SPECIFIC NAMED PLACES ONLY. No vague entries like "explore the area" or "local restaurants."
-   Every activity must name the exact spot, trail, or venue.
+2. MINIMUM ACTIVITY COUNT — at least ${minActivities} activities on every non-drive day.
 
-4. TIME FEASIBILITY: If activity A ends at 10:00 AM and transit takes 20 min, B starts at 10:20 AM min.
+3. ANCHOR PLACEMENT — the anchor takes ONE of the morning / afternoon / late-afternoon slots based on its nature.
+   - Sunrise hike / market → morning
+   - Museum / neighbourhood / large attraction → afternoon
+   - Sunset cruise / scenic viewpoint → late afternoon
+   The anchor does not replace meals. Meals still happen.
 
-5. REALISTIC DURATIONS:
-   - Breakfast: 45–60 min | Major attraction: 2–3 hrs | Lunch: 60–75 min
-   - Nature site (waterfall, lake, overlook): 1.5 hrs minimum
-   - State/National park trail: 3+ hours
-   - Dinner: 75–90 min
+4. PREFER CANDIDATE VENUES — the candidates listed under each slot are real, verified, geographically correct.
+   Use them. Invent only when a slot has no candidates and your training-data knowledge is reliable.
+   Never use vague names ("local cafe", "downtown restaurant"). Every venue is a specific named place.
 
-6. DAY STRUCTURE: Start 8:00 AM, end by 10:30 PM. Times format: "09:00 AM - 10:30 AM"
+5. NO REPEATED VENUES — a venue appearing on Day N cannot reappear on any other day, nor twice on the same day.
 
-7. TRANSPORT: For each activity specify travel to the NEXT one (mode + realistic time).
+6. TIME FEASIBILITY — consecutive activities cannot overlap. If A ends 11:30 and transit is 20 min, B starts ≥ 11:50.
+   Time format: "09:00 AM - 10:30 AM" (12-hour, leading zero).
+
+7. REALISTIC DURATIONS:
+   - Breakfast 45–60 min | Lunch 60–75 min | Dinner 75–90 min
+   - Major attraction / museum 2–3 hrs
+   - Nature site (waterfall, lake, viewpoint) 1.5 hrs min
+   - State/national park trail 3+ hrs (single major hike per day)
+   - Bar / dessert / brewery 60–90 min
+
+8. TRANSPORT — for each activity, the transport array describes how to reach the NEXT activity (mode + realistic time).
    Last activity of the day = empty transport array.
 
-8. NO VENUE REPEATED across any days.
+9. OUTDOOR TIMING — no trail or nature reserve may START after 15:00.
 
-9. Google Maps URLs: https://www.google.com/maps/search/?api=1&query=Place+Name+City
+10. CATEGORY ASSIGNMENT — set category to "food" for all meals, "adventure" for hikes & trails, "nightlife" for bars & live-music.
+    Use real Google Maps URLs of the form: https://www.google.com/maps/search/?api=1&query=Place+Name+City
 
-10. OUTDOOR TIMING: No trail or nature reserve to START after 3:00 PM.
+11. DAY VARIETY — vary cuisine, environment, and energy across days. Don't repeat the same anchor shape two days in a row.
 
-11. ONE MAJOR HIKE PER DAY maximum.
-
-12. HIKING FORMAT: name = specific trail name. category = "adventure".
-    Description: include distance, time, difficulty, one feature sentence.
-
-13. ACTIVITY VARIETY: The anchor defines the DAY'S CHARACTER, not every activity.
-    A hiking anchor day still includes local restaurants, a scenic viewpoint, maybe a quick browse of a shop.
-    Do NOT fill every non-meal slot with the same type as the anchor.
-
-14. GEOGRAPHIC COHERENCE: Activities within a day should be geographically logical.
-    Build the day OUTWARD from the anchor — nearby meals and secondary activities first.
-    Do NOT schedule activities on opposite sides of the city from each other.
-
-15. For hub trips: all activities within ~30–40 miles / 45–60 min of ${intent.destination}.
+12. GEOGRAPHIC COHERENCE — build the day OUTWARD from the anchor. No criss-crossing the city.
 
 OUTPUT FORMAT:
-- tripType: "${isRoute ? 'route' : 'hub'}"
-- stops: one entry per stop, in order
-- Each stop has exactly the number of days shown above
-- overnightAnchor.location: where they're actually sleeping (the town/area, not just the park name)`;
+- tripType: "${isRoute ? "route" : "hub"}"
+- stops: one entry per stop, each containing exactly the right number of days.
+- overnightAnchor.location: the actual town/area where the traveller is sleeping.
+- Drive days set isDriveDay=true; they may have fewer activities and skip evening slots.`;
+}
+
+export async function generateDailyPlans(
+  dayContextsByStop: DayContext[][],
+  intent: TripIntent,
+  archetype: TripArchetype,
+): Promise<Record<string, unknown>> {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const prompt = buildSystemPrompt(intent, archetype, dayContextsByStop);
 
   const response = await client.messages.create({
     model: MODEL_NAME,
@@ -217,6 +241,64 @@ OUTPUT FORMAT:
   const toolBlock = response.content.find((b) => b.type === "tool_use");
   if (!toolBlock || toolBlock.type !== "tool_use") {
     throw new Error("Daily planning failed: Claude did not return a structured itinerary");
+  }
+
+  return toolBlock.input as Record<string, unknown>;
+}
+
+// ─── Repair pass ──────────────────────────────────────────────────────────────
+// Called when the validator finds fatal issues. Re-prompts the LLM with the
+// bad itinerary, the explicit list of failures, and the original day contexts
+// so it can fix only what's broken. One retry max.
+
+export async function repairItinerary(
+  badItinerary: Record<string, unknown>,
+  issues: string[],
+  dayContextsByStop: DayContext[][],
+  intent: TripIntent,
+  archetype: TripArchetype,
+): Promise<Record<string, unknown>> {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const basePrompt = buildSystemPrompt(intent, archetype, dayContextsByStop);
+
+  const repairPrompt = `${basePrompt}
+
+═══════════════════════════════════════════════════════════════
+REPAIR PASS — you previously produced the itinerary below, but it has problems.
+Return a CORRECTED full itinerary that fixes every issue while preserving
+the parts that are already correct.
+
+ISSUES TO FIX:
+${issues.map((i, idx) => `  ${idx + 1}. ${i}`).join("\n")}
+
+YOUR PREVIOUS OUTPUT (fix it):
+${JSON.stringify(badItinerary, null, 2)}
+
+REPAIR RULES:
+- Keep days/activities that are already valid. Don't reshuffle just for the sake of it.
+- For days flagged as too short / ending too early, ADD activities in the missing slots from the slot grid.
+- For missing meals, slot them into the correct window using a candidate venue.
+- For duplicate venues, swap the duplicate for another candidate.
+- For time overlaps, shift times so consecutive activities don't conflict.
+- Output the FULL itinerary (every stop, every day, every activity) — not just the diff.`;
+
+  logger.info("Repair pass: re-prompting with issues", { issueCount: issues.length });
+
+  const response = await client.messages.create({
+    model: MODEL_NAME,
+    max_tokens: 16000,
+    tools: [{
+      name: "create_itinerary",
+      description: "Return the corrected full itinerary",
+      input_schema: ITINERARY_TOOL_INPUT_SCHEMA,
+    }],
+    tool_choice: { type: "tool", name: "create_itinerary" },
+    messages: [{ role: "user", content: repairPrompt }],
+  });
+
+  const toolBlock = response.content.find((b) => b.type === "tool_use");
+  if (!toolBlock || toolBlock.type !== "tool_use") {
+    throw new Error("Repair pass failed: Claude did not return a structured itinerary");
   }
 
   return toolBlock.input as Record<string, unknown>;
