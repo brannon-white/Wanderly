@@ -1,5 +1,11 @@
 import * as logger from "firebase-functions/logger";
-import { type PlaceCandidate, type PlaceCategory, type TripArchetype, type DayContext, type DaySupportingPlaces, type OsmHike } from "./types";
+import {
+  type PlaceCandidate,
+  type PlaceCategory,
+  type StopCandidatePool,
+  type StopPool,
+  type OsmHike,
+} from "./types";
 
 const TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
 const NEARBY_SEARCH_URL = "https://places.googleapis.com/v1/places:searchNearby";
@@ -77,10 +83,12 @@ function filterValid(places: GooglePlaceResult[]): Array<GooglePlaceResult & {
   );
 }
 
-// ─── Anchor Discovery ─────────────────────────────────────────────────────────
-// Find ONE high-quality anchor place for a day using a targeted text search.
+// ─── Geocode stop location ────────────────────────────────────────────────────
 
-async function findAnchor(query: string, apiKey: string): Promise<PlaceCandidate | null> {
+async function geocodeStop(
+  location: string,
+  apiKey: string,
+): Promise<{ lat: number; lng: number } | null> {
   try {
     const response = await fetch(TEXT_SEARCH_URL, {
       method: "POST",
@@ -89,34 +97,18 @@ async function findAnchor(query: string, apiKey: string): Promise<PlaceCandidate
         "X-Goog-Api-Key": apiKey,
         "X-Goog-FieldMask": FIELD_MASK,
       },
-      body: JSON.stringify({ textQuery: query, languageCode: "en", maxResultCount: 5 }),
+      body: JSON.stringify({ textQuery: location, languageCode: "en", maxResultCount: 1 }),
     });
-
-    if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      logger.warn("Anchor search non-OK", { status: response.status, query, body: body.slice(0, 200) });
-      return null;
-    }
-
+    if (!response.ok) return null;
     const data = await response.json() as { places?: GooglePlaceResult[] };
-    const valid = filterValid(data.places ?? []);
-    if (valid.length === 0) return null;
-
-    // Prefer highest-rated with meaningful review count
-    const best = valid
-      .filter((p) => (p.userRatingCount ?? 0) > 10)
-      .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))[0]
-      ?? valid[0];
-
-    return toPlaceCandidate(best);
-  } catch (error) {
-    logger.warn("Anchor search failed", { query, error });
+    const first = filterValid(data.places ?? [])[0];
+    return first ? { lat: first.location.latitude, lng: first.location.longitude } : null;
+  } catch {
     return null;
   }
 }
 
-// ─── Geographic Expansion ─────────────────────────────────────────────────────
-// Given anchor coordinates, find supporting places nearby via category-specific searches.
+// ─── Broad pool fetch — 5 category fetches in parallel per stop ───────────────
 
 async function searchNearby(
   lat: number,
@@ -125,7 +117,7 @@ async function searchNearby(
   apiKey: string,
   radiusMeters: number,
   categoryHint: PlaceCategory,
-  maxResults = 6
+  maxResults: number,
 ): Promise<PlaceCandidate[]> {
   try {
     const response = await fetch(NEARBY_SEARCH_URL, {
@@ -156,147 +148,117 @@ async function searchNearby(
   }
 }
 
-async function expandAroundAnchor(
-  anchorLat: number,
-  anchorLng: number,
+async function buildStopCandidatePool(
+  centerLat: number,
+  centerLng: number,
   apiKey: string,
-  isNationalPark: boolean
-): Promise<DaySupportingPlaces> {
-  // National parks: meals/activities are in gateway towns, which can be 15-25km from the trailhead.
-  // Cities: everything should be walkable or a short ride.
-  const mealRadius = isNationalPark ? 20000 : 2500;
-  const activityRadius = isNationalPark ? 8000 : 2500;
-  // Evening/nightlife is usually town-based even for park trips
-  const eveningRadius = isNationalPark ? 25000 : 3000;
+  isNationalPark: boolean,
+  nightCount: number,
+): Promise<StopCandidatePool> {
+  // Pool size scales with how many days the planner needs to fill from it.
+  const perBucket = Math.max(15, Math.min(30, 8 + nightCount * 4));
+  const radius = isNationalPark ? 25000 : 4000;
+  const eveningRadius = isNationalPark ? 30000 : 5000;
 
-  const [
-    breakfast,
-    lunch,
-    dinner,
-    morning,
-    afternoon,
-    lateAfternoon,
-    evening,
-  ] = await Promise.all([
-    searchNearby(anchorLat, anchorLng, ["cafe", "bakery", "breakfast_restaurant"], apiKey, mealRadius, "cafe", 8),
-    searchNearby(anchorLat, anchorLng, ["restaurant", "cafe"], apiKey, mealRadius, "restaurant", 8),
-    searchNearby(anchorLat, anchorLng, ["restaurant"], apiKey, mealRadius, "restaurant", 8),
-    // Morning activities: parks, gardens, markets, museums (museums often open ~10am)
-    searchNearby(
-      anchorLat, anchorLng,
-      ["park", "tourist_attraction", "historical_landmark", "market"],
-      apiKey, activityRadius, "attraction", 8
-    ),
-    // Afternoon activities: museums, galleries, broader attractions
-    searchNearby(
-      anchorLat, anchorLng,
-      ["museum", "art_gallery", "tourist_attraction", "historical_landmark"],
-      apiKey, activityRadius, "attraction", 8
-    ),
-    // Late afternoon / golden hour: scenic spots, breweries, coffee, dessert
-    searchNearby(
-      anchorLat, anchorLng,
-      ["tourist_attraction", "park", "cafe"],
-      apiKey, activityRadius, "attraction", 8
-    ),
-    // Evening: bars, live music, dessert, distilleries
-    searchNearby(
-      anchorLat, anchorLng,
+  const [breakfast, food, nightlife, attractions, scenic] = await Promise.all([
+    searchNearby(centerLat, centerLng,
+      ["cafe", "bakery", "breakfast_restaurant"],
+      apiKey, radius, "cafe", perBucket),
+    searchNearby(centerLat, centerLng,
+      ["restaurant"],
+      apiKey, radius, "restaurant", perBucket),
+    searchNearby(centerLat, centerLng,
       ["bar", "night_club", "ice_cream_shop"],
-      apiKey, eveningRadius, "nightlife", 8
-    ),
+      apiKey, eveningRadius, "nightlife", Math.max(8, Math.round(perBucket * 0.6))),
+    searchNearby(centerLat, centerLng,
+      ["museum", "art_gallery", "tourist_attraction", "historical_landmark", "market"],
+      apiKey, radius, "attraction", perBucket),
+    searchNearby(centerLat, centerLng,
+      ["park", "tourist_attraction"],
+      apiKey, radius, "park", Math.max(8, Math.round(perBucket * 0.6))),
   ]);
 
-  // Cross-slot dedup so the same venue isn't offered for multiple slots.
-  // Priority order = meals first (anchor of the eating schedule), then activities by time.
+  // Cross-category dedup — a venue can only appear in one pool.
+  // Priority: meals & nightlife (time-locked uses) before attractions/scenic.
   const claimed = new Set<string>();
-  const pick = (places: PlaceCandidate[], limit: number): PlaceCandidate[] => {
+  const claim = (places: PlaceCandidate[]): PlaceCandidate[] => {
     const out: PlaceCandidate[] = [];
     for (const p of places) {
       if (claimed.has(p.placeId)) continue;
       claimed.add(p.placeId);
       out.push(p);
-      if (out.length >= limit) break;
     }
     return out;
   };
 
   return {
-    breakfast: pick(breakfast, 4),
-    lunch: pick(lunch, 4),
-    dinner: pick(dinner, 4),
-    morning: pick(morning, 4),
-    afternoon: pick(afternoon, 4),
-    late_afternoon: pick(lateAfternoon, 4),
-    evening: pick(evening, 4),
+    breakfast: claim(breakfast),
+    food: claim(food),
+    nightlife: claim(nightlife),
+    attractions: claim(attractions),
+    scenic: claim(scenic),
   };
 }
 
-const EMPTY_SUPPORTING: DaySupportingPlaces = {
-  breakfast: [],
-  morning: [],
-  lunch: [],
-  afternoon: [],
-  late_afternoon: [],
-  dinner: [],
-  evening: [],
-};
+// ─── Main export — build a StopPool per stop ──────────────────────────────────
 
-// ─── Main export ──────────────────────────────────────────────────────────────
+export interface StopPlan {
+  location: string;
+  region?: string;
+  nightCount: number;
+}
 
-export async function buildDayContexts(
-  archetype: TripArchetype,
-  osmHikesByStop: OsmHike[][],
+export async function buildStopPools(
+  stops: StopPlan[],
   apiKey: string,
-  isNationalPark: boolean
-): Promise<DayContext[][]> {
-  const allContexts: DayContext[][] = [];
+  isNationalPark: boolean,
+  trailsByStopIndex: OsmHike[][],
+): Promise<StopPool[]> {
+  const total = stops.length;
+  const results: StopPool[] = [];
 
-  for (let stopIndex = 0; stopIndex < archetype.stops.length; stopIndex++) {
-    const stop = archetype.stops[stopIndex];
-    const stopOsmHikes = osmHikesByStop[stopIndex] ?? [];
-    const stopContexts: DayContext[] = [];
-
-    // Discover anchors for all days in this stop in parallel
-    logger.info("Context builder: discovering anchors", {
-      stop: stop.location,
-      days: stop.days.length,
-      queries: stop.days.map((d) => d.anchorQuery),
-    });
-
-    const anchors = await Promise.all(
-      stop.days.map((day) => findAnchor(day.anchorQuery, apiKey))
-    );
-
-    // Geographic expansion: run in parallel for all days in the stop
-    const expansions = await Promise.all(
-      anchors.map((anchor) =>
-        anchor
-          ? expandAroundAnchor(anchor.coordinates.lat, anchor.coordinates.lng, apiKey, isNationalPark)
-          : Promise.resolve(EMPTY_SUPPORTING)
-      )
-    );
-
-    logger.info("Context builder: stop complete", {
-      stop: stop.location,
-      anchorsFound: anchors.filter(Boolean).length,
-      anchorNames: anchors.map((a) => a?.name ?? "null"),
-    });
-
-    for (let dayIdx = 0; dayIdx < stop.days.length; dayIdx++) {
-      stopContexts.push({
-        skeleton: stop.days[dayIdx],
-        stopLocation: stop.location,
-        stopIndex,
-        dayIndexInStop: dayIdx,
-        anchor: anchors[dayIdx],
-        supporting: expansions[dayIdx],
-        osmHikes: stopOsmHikes,
+  // Geocode + fetch pools in parallel across all stops
+  const stopWork = await Promise.all(
+    stops.map(async (stop, idx) => {
+      const center = await geocodeStop(stop.location, apiKey);
+      if (!center) {
+        logger.warn("Context builder: geocode failed", { stop: stop.location });
+        return null;
+      }
+      const candidates = await buildStopCandidatePool(
+        center.lat, center.lng, apiKey, isNationalPark, stop.nightCount,
+      );
+      logger.info("Context builder: stop pool fetched", {
+        stop: stop.location,
+        breakfast: candidates.breakfast.length,
+        food: candidates.food.length,
+        nightlife: candidates.nightlife.length,
+        attractions: candidates.attractions.length,
+        scenic: candidates.scenic.length,
       });
-    }
+      return { idx, center, candidates };
+    })
+  );
 
-    allContexts.push(stopContexts);
+  for (let i = 0; i < total; i++) {
+    const work = stopWork[i];
+    const stop = stops[i];
+    results.push({
+      location: stop.location,
+      region: stop.region,
+      nightCount: stop.nightCount,
+      stopIndex: i,
+      isFirstStop: i === 0,
+      isLastStop: i === total - 1,
+      candidates: work?.candidates ?? {
+        breakfast: [], food: [], nightlife: [], attractions: [], scenic: [],
+      },
+      trails: trailsByStopIndex[i] ?? [],
+    });
   }
 
-  return allContexts;
+  return results;
 }
+
+// Re-export geocodeStop so the pipeline can grab a center for the OSM trail fetch.
+export { geocodeStop };
