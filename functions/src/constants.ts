@@ -1,14 +1,11 @@
-export const PROMPT_VERSION = "v7";
+export const PROMPT_VERSION = "v8";
 export const MODEL_NAME = "claude-sonnet-4-6";
 export const FAST_MODEL_NAME = "claude-haiku-4-5-20251001";
 
-// Minimum activities per day, by trip style. Drive/departure days are exempt
-// and validated separately.
-export const MIN_ACTIVITIES_BY_STYLE: Record<"relaxed" | "balanced" | "packed", number> = {
-  relaxed: 5,
-  balanced: 6,
-  packed: 7,
-};
+// Floor: every non-drive day must have at least this many activities.
+// The slot grid in the prompt naturally targets 6–7; the validator catches
+// short days and the repair pass fills them in.
+export const MIN_ACTIVITIES_PER_DAY = 6;
 
 // JSON Schema for a single activity — shared between generation and partial regeneration
 export const ACTIVITY_TOOL_INPUT_SCHEMA = {

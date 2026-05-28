@@ -12,16 +12,14 @@ import {
   type GeneratedItinerary,
 } from "./itinerarySchemas";
 
-import { extractIntent } from "./orchestration/intentExtraction";
-import { generateTripArchetype } from "./orchestration/archetype";
-import { buildDayContexts } from "./orchestration/contextBuilder";
-import { generateDailyPlans, repairItinerary } from "./orchestration/dailyPlanning";
+import { planStops, planItinerary, repairItinerary } from "./orchestration/tripPlanning";
+import { buildStopPools, geocodeStop } from "./orchestration/contextBuilder";
 import { validateItinerary } from "./orchestration/validation";
 import { enrichTransportTimes } from "./orchestration/directions";
 import { enrichWithImages } from "./orchestration/imageEnrichment";
 import { searchNearbyForActivity } from "./orchestration/placesRetrieval";
 import { fetchHikingTrails } from "./orchestration/trailDiscovery";
-import { type DayContext, type OsmHike } from "./orchestration/types";
+import { type OsmHike } from "./orchestration/types";
 
 export { MODEL_NAME, PROMPT_VERSION };
 
@@ -82,76 +80,66 @@ export async function generateItineraryFlow(
 ): Promise<GeneratedItinerary> {
   generateItineraryRequestSchema.parse(input);
 
-  // Step 1: Extract structured intent
-  logger.info("Pipeline: extracting intent", { destination: input.destinationName, tripType: input.tripType });
-  const intent = await extractIntent(input);
+  const durationDays = (() => {
+    if (input.startDate && input.endDate) {
+      const ms = new Date(input.endDate).getTime() - new Date(input.startDate).getTime();
+      return Math.max(1, Math.round(ms / 86_400_000));
+    }
+    return 3;
+  })();
 
-  // Step 2: Design the trip archetype — LLM designs day experiences (no venues yet)
-  logger.info("Pipeline: generating trip archetype", { pace: intent.pace, days: intent.durationDays });
-  const archetype = await generateTripArchetype(intent);
+  const tripType = input.tripType ?? "hub";
+  const isNationalPark = input.destinationType === "national_park";
 
-  logger.info("Pipeline: archetype generated", {
-    stopCount: archetype.stops.length,
-    stops: archetype.stops.map((s) => `${s.location} (${s.nightCount}n)`),
-    dayThemes: archetype.stops.flatMap((s) => s.days.map((d) => d.theme)),
-  });
+  // Step 1: Decide stops. Hub trips skip the LLM call (one stop = destination).
+  logger.info("Pipeline: planning stops", { destination: input.destinationName, tripType });
+  const stops = await planStops(input, durationDays);
 
-  // Step 3: Initialize per-stop trail arrays (populated after anchor coordinates are known)
-  const osmHikesByStop: OsmHike[][] = archetype.stops.map(() => []);
-
-  // Step 4: Build day contexts — anchor discovery + geographic expansion per day
-  let dayContextsByStop: DayContext[][] = archetype.stops.map((s) =>
-    s.days.map((skeleton, dayIdx) => ({
-      skeleton,
-      stopLocation: s.location,
-      stopIndex: archetype.stops.indexOf(s),
-      dayIndexInStop: dayIdx,
-      anchor: null,
-      supporting: {
-        breakfast: [],
-        morning: [],
-        lunch: [],
-        afternoon: [],
-        late_afternoon: [],
-        dinner: [],
-        evening: [],
-      },
-      osmHikes: [],
-    }))
-  );
+  // Step 2: Fetch OSM trails per stop (parallel) + broad Places candidate pool per stop (parallel).
+  let pools: import("./orchestration/types").StopPool[] = stops.map((s, i) => ({
+    location: s.location,
+    region: s.region,
+    nightCount: s.nightCount,
+    stopIndex: i,
+    isFirstStop: i === 0,
+    isLastStop: i === stops.length - 1,
+    candidates: { breakfast: [], food: [], nightlife: [], attractions: [], scenic: [] },
+    trails: [],
+  }));
 
   if (googlePlacesApiKey) {
     try {
-      logger.info("Pipeline: building day contexts (anchor discovery + geographic expansion)");
-      dayContextsByStop = await buildDayContexts(
-        archetype,
-        osmHikesByStop,
-        googlePlacesApiKey,
-        (input.destinationType ?? 'city') === 'national_park'
+      logger.info("Pipeline: fetching candidate pools + trails per stop");
+
+      // OSM trails need stop coordinates — geocode in parallel with pool fetch.
+      const trailsByStopIndex: OsmHike[][] = await Promise.all(
+        stops.map(async (s) => {
+          const center = await geocodeStop(s.location, googlePlacesApiKey);
+          if (!center) return [];
+          try {
+            return await fetchHikingTrails(center.lat, center.lng);
+          } catch {
+            return [];
+          }
+        })
       );
 
-      // Now that we have anchor coordinates, fetch OSM trails near each anchor
-      for (let stopIdx = 0; stopIdx < dayContextsByStop.length; stopIdx++) {
-        const stopContexts = dayContextsByStop[stopIdx];
-        const anchoredDay = stopContexts.find((ctx) => ctx.anchor !== null);
-        if (anchoredDay?.anchor) {
-          const trails = await fetchHikingTrails(
-            anchoredDay.anchor.coordinates.lat,
-            anchoredDay.anchor.coordinates.lng
-          );
-          // Stamp trails onto all days in this stop
-          dayContextsByStop[stopIdx] = stopContexts.map((ctx) => ({ ...ctx, osmHikes: trails }));
-          logger.info("Pipeline: OSM trails fetched", { stop: anchoredDay.stopLocation, count: trails.length });
-        }
-      }
+      pools = await buildStopPools(stops, googlePlacesApiKey, isNationalPark, trailsByStopIndex);
+      logger.info("Pipeline: pools ready", {
+        stops: pools.map((p) => `${p.location}: ${
+          p.candidates.breakfast.length + p.candidates.food.length +
+          p.candidates.nightlife.length + p.candidates.attractions.length +
+          p.candidates.scenic.length
+        } venues, ${p.trails.length} trails`),
+      });
     } catch (error) {
-      logger.warn("Pipeline: context building failed, continuing without real Places data", { error });
+      logger.warn("Pipeline: context building failed, continuing without Places data", { error });
     }
   }
 
-  // Step 5: Generate narrative itinerary — LLM assembles the final schedule
-  logger.info("Pipeline: generating narrative itinerary");
-  let rawItinerary = await generateDailyPlans(dayContextsByStop, intent, archetype);
+  // Step 3: ONE Sonnet call produces the full itinerary.
+  logger.info("Pipeline: planning itinerary (single Sonnet call)");
+  let rawItinerary = await planItinerary(input, pools, durationDays);
 
   const finaliseAndStamp = (raw: Record<string, unknown>): GeneratedItinerary => {
     const parsed = generatedItinerarySchema.parse({
@@ -165,38 +153,28 @@ export async function generateItineraryFlow(
       startDate: input.startDate,
       endDate: input.endDate,
       source: "ai_generated",
-      tripType: intent.tripType,
+      tripType,
       model: MODEL_NAME,
       promptVersion: PROMPT_VERSION,
       isActive: true,
     });
 
-    const allOsmHikes = dayContextsByStop.flatMap((stop) =>
-      stop.flatMap((ctx) => ctx.osmHikes)
-    );
-    return stampOsmTrailData(parsed, allOsmHikes);
+    const allTrails = pools.flatMap((p) => p.trails);
+    return stampOsmTrailData(parsed, allTrails);
   };
 
-  // Step 6: Validate; on fatal failures, run ONE LLM repair pass.
+  // Step 4: Validate; on fatal failures, one LLM repair pass.
   let withTrailData = finaliseAndStamp(rawItinerary);
-  let { itinerary: validated, result } = validateItinerary(withTrailData, { tripStyle: archetype.tripStyle });
+  let { itinerary: validated, result } = validateItinerary(withTrailData);
 
   if (!result.isValid) {
     logger.warn("Pipeline: validation failed — running repair pass", {
       fatalIssues: result.fatalIssues,
-      issueCount: result.issues.length,
     });
-
     try {
-      rawItinerary = await repairItinerary(
-        rawItinerary,
-        result.fatalIssues,
-        dayContextsByStop,
-        intent,
-        archetype,
-      );
+      rawItinerary = await repairItinerary(rawItinerary, result.fatalIssues, input, pools, durationDays);
       withTrailData = finaliseAndStamp(rawItinerary);
-      ({ itinerary: validated, result } = validateItinerary(withTrailData, { tripStyle: archetype.tripStyle }));
+      ({ itinerary: validated, result } = validateItinerary(withTrailData));
 
       if (!result.isValid) {
         logger.warn("Pipeline: repair pass did not fully fix issues — shipping best-effort", {
@@ -212,7 +190,7 @@ export async function generateItineraryFlow(
     logger.info("Pipeline: validation passed with minor issues", { issues: result.issues });
   }
 
-  // Step 8: Enrich transport times with real Google Routes API data
+  // Step 5: Enrich transport times with real Google Routes API data
   let withTransportTimes = validated;
   if (googlePlacesApiKey) {
     try {
@@ -223,7 +201,7 @@ export async function generateItineraryFlow(
     }
   }
 
-  // Step 9: Pre-fetch images before push notification fires
+  // Step 6: Pre-fetch images before push notification fires
   try {
     logger.info("Pipeline: pre-fetching images");
     return await enrichWithImages(withTransportTimes);

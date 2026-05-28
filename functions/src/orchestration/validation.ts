@@ -1,6 +1,6 @@
 import * as logger from "firebase-functions/logger";
 import { type GeneratedItinerary, mapAllDays } from "../itinerarySchemas";
-import { MIN_ACTIVITIES_BY_STYLE } from "../constants";
+import { MIN_ACTIVITIES_PER_DAY } from "../constants";
 
 // ~1.5 km ≈ 18-minute walk — anything beyond this is not reasonably walkable
 const MAX_WALK_KM = 1.5;
@@ -67,13 +67,12 @@ function isMealTime(startMinutes: number, window: "breakfast" | "lunch" | "dinne
 
 export function validateItinerary(
   itinerary: GeneratedItinerary,
-  options: { tripStyle?: "relaxed" | "balanced" | "packed" } = {}
 ): { itinerary: GeneratedItinerary; result: ValidationResult } {
   const issues: string[] = [];
   const fatalIssues: string[] = [];
   let repaired = false;
   const seenVenues = new Set<string>();
-  const minActivities = MIN_ACTIVITIES_BY_STYLE[options.tripStyle ?? "balanced"];
+  const minActivities = MIN_ACTIVITIES_PER_DAY;
 
   let globalDayIndex = 0;
 
@@ -160,10 +159,10 @@ export function validateItinerary(
     if (!hasMeal.lunch) fatalIssues.push(`${dayLabel}: missing lunch in the 11:30–14:30 window`);
     if (!hasMeal.dinner) fatalIssues.push(`${dayLabel}: missing dinner in the 18:00–21:00 window`);
 
-    // Minimum activity count by trip style
+    // Minimum activity count
     if (activities.length < minActivities) {
       fatalIssues.push(
-        `${dayLabel}: only ${activities.length} activities (need at least ${minActivities} for ${options.tripStyle ?? "balanced"} pace — add late-afternoon and/or evening activities)`
+        `${dayLabel}: only ${activities.length} activities (need at least ${minActivities} — add late-afternoon and/or evening activities)`
       );
     }
     if (activities.length > 10) {
