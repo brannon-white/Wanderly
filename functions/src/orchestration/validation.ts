@@ -1,8 +1,12 @@
 import * as logger from "firebase-functions/logger";
 import { type GeneratedItinerary, mapAllDays } from "../itinerarySchemas";
+import { MIN_ACTIVITIES_BY_STYLE } from "../constants";
 
 // ~1.5 km ≈ 18-minute walk — anything beyond this is not reasonably walkable
 const MAX_WALK_KM = 1.5;
+
+// The day must end no earlier than this — otherwise dinner/evening is missing.
+const MIN_DAY_END_MINUTES = 20 * 60 + 30; // 20:30
 
 function haversineKm(
   lat1: number, lng1: number,
@@ -21,6 +25,7 @@ function haversineKm(
 export interface ValidationResult {
   isValid: boolean;
   issues: string[];
+  fatalIssues: string[];
   repaired: boolean;
 }
 
@@ -46,22 +51,29 @@ function parseActivityTime(timeStr: string): ParsedTime | null {
   };
 }
 
+// Meal windows aligned with the planner prompt's slot grid.
+// (A small ± tolerance is allowed — the prompt asks for 08:00–09:30 for
+// breakfast; we accept 07:30–10:00 here so a thoughtful 09:45 breakfast
+// after a sunrise stop doesn't trip the check.)
 function isMealTime(startMinutes: number, window: "breakfast" | "lunch" | "dinner"): boolean {
   const windows = {
-    breakfast: [7 * 60, 10 * 60],
-    lunch: [11 * 60, 15 * 60],
-    dinner: [17 * 60, 21 * 60 + 30],
+    breakfast: [7 * 60 + 30, 10 * 60],
+    lunch: [11 * 60 + 30, 14 * 60 + 30],
+    dinner: [18 * 60, 21 * 60],
   };
   const [min, max] = windows[window];
   return startMinutes >= min && startMinutes <= max;
 }
 
 export function validateItinerary(
-  itinerary: GeneratedItinerary
+  itinerary: GeneratedItinerary,
+  options: { tripStyle?: "relaxed" | "balanced" | "packed" } = {}
 ): { itinerary: GeneratedItinerary; result: ValidationResult } {
   const issues: string[] = [];
+  const fatalIssues: string[] = [];
   let repaired = false;
   const seenVenues = new Set<string>();
+  const minActivities = MIN_ACTIVITIES_BY_STYLE[options.tripStyle ?? "balanced"];
 
   let globalDayIndex = 0;
 
@@ -69,9 +81,9 @@ export function validateItinerary(
     const dayLabel = `Day ${globalDayIndex + 1}`;
     globalDayIndex++;
 
-    // Skip strict meal checks on drive days
     const isDriveDay = day.isDriveDay === true;
 
+    // Deterministic fix: replace unreasonable walks with rideshare
     const activitiesWithFixedTransport = day.activities.map((activity, i) => {
       if (i === day.activities.length - 1) return activity;
       const next = day.activities[i + 1];
@@ -97,6 +109,7 @@ export function validateItinerary(
       return { ...activity, transport };
     });
 
+    // Deterministic fix: drop venues that duplicate ones used on earlier days
     const activities = activitiesWithFixedTransport.filter((activity) => {
       const key = activity.name.toLowerCase().trim();
       if (seenVenues.has(key)) {
@@ -108,44 +121,70 @@ export function validateItinerary(
       return true;
     });
 
+    // Check time overlaps (informational unless severe)
     for (let i = 1; i < activities.length; i++) {
       const prev = activities[i - 1];
       const curr = activities[i];
       const prevTime = parseActivityTime(prev.time);
       const currTime = parseActivityTime(curr.time);
       if (prevTime && currTime && currTime.startMinutes < prevTime.endMinutes - 5) {
-        issues.push(`${dayLabel}: possible time overlap — "${prev.name}" ends after "${curr.name}" starts`);
+        issues.push(`${dayLabel}: time overlap — "${prev.name}" ends after "${curr.name}" starts`);
       }
     }
 
-    if (!isDriveDay) {
-      const hasMeal = {
-        breakfast: activities.some(
-          (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
-            isMealTime(parseActivityTime(a.time)!.startMinutes, "breakfast")
-        ),
-        lunch: activities.some(
-          (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
-            isMealTime(parseActivityTime(a.time)!.startMinutes, "lunch")
-        ),
-        dinner: activities.some(
-          (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
-            isMealTime(parseActivityTime(a.time)!.startMinutes, "dinner")
-        ),
-      };
-
-      if (!hasMeal.breakfast) issues.push(`${dayLabel}: missing breakfast`);
-      if (!hasMeal.lunch) issues.push(`${dayLabel}: missing lunch`);
-      if (!hasMeal.dinner) issues.push(`${dayLabel}: missing dinner`);
+    // Drive days get a lighter check: only ensure they have 2+ activities and no overlaps
+    if (isDriveDay) {
+      if (activities.length < 2) {
+        fatalIssues.push(`${dayLabel} (drive day): only ${activities.length} activities (need at least 2 — e.g. breakfast + scenic stop)`);
+      }
+      return { ...day, activities };
     }
 
-    if (activities.length < 3) {
-      issues.push(`${dayLabel}: only ${activities.length} activities (expected at least 3)`);
+    // Meal completeness
+    const hasMeal = {
+      breakfast: activities.some(
+        (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
+          isMealTime(parseActivityTime(a.time)!.startMinutes, "breakfast")
+      ),
+      lunch: activities.some(
+        (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
+          isMealTime(parseActivityTime(a.time)!.startMinutes, "lunch")
+      ),
+      dinner: activities.some(
+        (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
+          isMealTime(parseActivityTime(a.time)!.startMinutes, "dinner")
+      ),
+    };
+
+    if (!hasMeal.breakfast) fatalIssues.push(`${dayLabel}: missing breakfast in the 07:30–10:00 window`);
+    if (!hasMeal.lunch) fatalIssues.push(`${dayLabel}: missing lunch in the 11:30–14:30 window`);
+    if (!hasMeal.dinner) fatalIssues.push(`${dayLabel}: missing dinner in the 18:00–21:00 window`);
+
+    // Minimum activity count by trip style
+    if (activities.length < minActivities) {
+      fatalIssues.push(
+        `${dayLabel}: only ${activities.length} activities (need at least ${minActivities} for ${options.tripStyle ?? "balanced"} pace — add late-afternoon and/or evening activities)`
+      );
     }
     if (activities.length > 10) {
       issues.push(`${dayLabel}: ${activities.length} activities may be unrealistic`);
     }
 
+    // Day-end check — the headline fix for "day ends at 2:30 PM" bug
+    const lastTime = activities.length > 0
+      ? parseActivityTime(activities[activities.length - 1].time)
+      : null;
+    if (lastTime && lastTime.endMinutes < MIN_DAY_END_MINUTES) {
+      const hr = Math.floor(lastTime.endMinutes / 60);
+      const min = lastTime.endMinutes % 60;
+      const period = hr >= 12 ? "PM" : "AM";
+      const hr12 = hr % 12 === 0 ? 12 : hr % 12;
+      fatalIssues.push(
+        `${dayLabel}: day ends at ${hr12}:${min.toString().padStart(2, "0")} ${period} — must run until at least 8:30 PM (add dinner + evening)`
+      );
+    }
+
+    // Hiking checks
     const hikingActivities = activities.filter(
       (a) => a.category === "adventure" || a.category === "nature"
     );
@@ -156,7 +195,7 @@ export function validateItinerary(
     }).length;
 
     if (majorHikeCount > 1) {
-      issues.push(`${dayLabel}: ${majorHikeCount} major hikes (4+ hrs each) scheduled — only one allowed per day`);
+      issues.push(`${dayLabel}: ${majorHikeCount} major hikes (4+ hrs each) — only one allowed per day`);
     }
 
     const totalHikingMinutes = hikingActivities.reduce((sum, a) => {
@@ -168,19 +207,24 @@ export function validateItinerary(
       issues.push(`${dayLabel}: ${Math.round(totalHikingMinutes / 60)}h of hiking exceeds the 6-hour daily cap`);
     }
 
+    // Outdoor activities starting too late
+    const lateOutdoor = hikingActivities.find((a) => {
+      const t = parseActivityTime(a.time);
+      return t !== null && t.startMinutes > 15 * 60;
+    });
+    if (lateOutdoor) {
+      issues.push(`${dayLabel}: outdoor activity "${lateOutdoor.name}" starts after 3:00 PM`);
+    }
+
     return { ...day, activities };
   });
 
-  const fatalIssues = issues.filter(
-    (i) => !i.includes("removed duplicate") && !i.includes("possible time overlap")
-  );
-
-  if (issues.length > 0) {
+  if (issues.length > 0 || fatalIssues.length > 0) {
     logger.info("Itinerary validation complete", {
       totalIssues: issues.length,
-      repaired,
       fatalIssues: fatalIssues.length,
-      issues,
+      repaired,
+      issues: [...fatalIssues, ...issues],
     });
   }
 
@@ -189,6 +233,7 @@ export function validateItinerary(
     result: {
       isValid: fatalIssues.length === 0,
       issues,
+      fatalIssues,
       repaired,
     },
   };

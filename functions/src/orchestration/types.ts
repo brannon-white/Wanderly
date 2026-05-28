@@ -102,6 +102,28 @@ export interface TripArchetype {
   dailyActivityCount: number;
 }
 
+// Time-slot grid for a full day. The planner is required to fill every slot
+// (with exceptions for relaxed pace and departure days — see dailyPlanning.ts).
+export type DaySlot =
+  | "breakfast"      // 08:00–09:30
+  | "morning"        // 09:30–12:00 (typical anchor slot for AM experiences)
+  | "lunch"          // 12:00–14:00
+  | "afternoon"      // 14:00–17:00 (alternate anchor slot)
+  | "late_afternoon" // 17:00–18:30 (golden hour, scenic, coffee, dessert)
+  | "dinner"         // 18:30–20:30
+  | "evening";       // 20:30–22:30 (bar, live music, dessert, walk)
+
+// Candidate venues organised by slot. The planner fills each slot from these.
+export interface DaySupportingPlaces {
+  breakfast: PlaceCandidate[];
+  morning: PlaceCandidate[];
+  lunch: PlaceCandidate[];
+  afternoon: PlaceCandidate[];
+  late_afternoon: PlaceCandidate[];
+  dinner: PlaceCandidate[];
+  evening: PlaceCandidate[];
+}
+
 // Full context for one day — anchor + nearby supporting places + trails
 export interface DayContext {
   skeleton: DaySkeleton;
@@ -109,12 +131,7 @@ export interface DayContext {
   stopIndex: number;
   dayIndexInStop: number;
   anchor: PlaceCandidate | null;
-  supporting: {
-    breakfast: PlaceCandidate[];
-    lunch: PlaceCandidate[];
-    dinner: PlaceCandidate[];
-    secondary: PlaceCandidate[];
-  };
+  supporting: DaySupportingPlaces;
   osmHikes: OsmHike[];
 }
 
