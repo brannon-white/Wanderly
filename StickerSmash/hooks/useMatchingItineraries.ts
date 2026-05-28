@@ -114,7 +114,7 @@ export function useMatchingItineraries(uid: string) {
         const results = snapshot.docs
           .filter(doc => {
             const d = doc.data();
-            return d.isActive === true && Array.isArray(d.days);
+            return d.isActive === true && (Array.isArray(d.days) || Array.isArray(d.stops));
           })
           .map(doc => {
             const data = doc.data() as Partial<FirestoreItineraryDocument> & { tasteProfileTags?: Partial<TasteProfile> };

@@ -29,21 +29,20 @@ const TRIP_INTENT_EXTRACTION_SCHEMA = {
     themes: { type: "array", items: { type: "string" }, description: "2-4 recurring themes from the description" },
     avoid: { type: "array", items: { type: "string" }, description: "Things the user wants to avoid, if mentioned" },
     energyLevel: { type: "string", enum: ["low", "medium", "high"] },
-    // Only include dimensions the prompt EXPLICITLY addresses — omit the rest
     dimensionSignals: {
       type: "object",
       description: "0.0–1.0 signals for taste dimensions the prompt explicitly targets. Leave out any dimension not clearly addressed.",
       properties: {
-        pace:                { type: "number", minimum: 0, maximum: 1, description: "0=slow/relaxed, 1=fast/packed" },
-        nightlife:           { type: "number", minimum: 0, maximum: 1, description: "0=early nights, 1=bars/clubs/late nights" },
-        luxury:              { type: "number", minimum: 0, maximum: 1, description: "0=budget/local, 1=premium/upscale" },
-        foodie:              { type: "number", minimum: 0, maximum: 1, description: "0=food as fuel, 1=food-first" },
-        hiddenGems:          { type: "number", minimum: 0, maximum: 1, description: "0=iconic tourist spots, 1=off-the-beaten-path" },
-        touristTolerance:    { type: "number", minimum: 0, maximum: 1, description: "0=avoid crowds/tourists, 1=fine with tourist areas" },
-        nature:              { type: "number", minimum: 0, maximum: 1, description: "0=urban/city, 1=nature/outdoors" },
-        adventure:           { type: "number", minimum: 0, maximum: 1, description: "0=cultural/museum, 1=outdoor/physical" },
-        structurePreference: { type: "number", minimum: 0, maximum: 1, description: "0=spontaneous, 1=fully planned" },
-        walkingTolerance:    { type: "number", minimum: 0, maximum: 1, description: "0=minimize walking, 1=walk everywhere" },
+        pace:                { type: "number", minimum: 0, maximum: 1 },
+        nightlife:           { type: "number", minimum: 0, maximum: 1 },
+        luxury:              { type: "number", minimum: 0, maximum: 1 },
+        foodie:              { type: "number", minimum: 0, maximum: 1 },
+        hiddenGems:          { type: "number", minimum: 0, maximum: 1 },
+        touristTolerance:    { type: "number", minimum: 0, maximum: 1 },
+        nature:              { type: "number", minimum: 0, maximum: 1 },
+        adventure:           { type: "number", minimum: 0, maximum: 1 },
+        structurePreference: { type: "number", minimum: 0, maximum: 1 },
+        walkingTolerance:    { type: "number", minimum: 0, maximum: 1 },
       },
     },
   },
@@ -70,10 +69,6 @@ function paceLabelToFloat(pace: string): number | null {
   return null;
 }
 
-// 70% prompt signals / 30% taste profile for each dimension the prompt explicitly addresses.
-// Dimensions the prompt doesn't address are left unchanged from the taste profile.
-// This lets a "packed Tokyo nightlife" prompt dominate while the taste profile still
-// subtly influences venue selection for dimensions it doesn't conflict with.
 function blendTasteProfileWithPrompt(
   tasteProfile: TasteProfile,
   derivedIntent: TripDerivedIntent
@@ -81,7 +76,6 @@ function blendTasteProfileWithPrompt(
   const blended = { ...tasteProfile };
   const signals: Partial<TasteProfile> = { ...(derivedIntent.dimensionSignals ?? {}) };
 
-  // Map high-level pace/energy fields into dimension signals if not already explicit
   if (derivedIntent.pace && signals.pace === undefined) {
     const f = paceLabelToFloat(derivedIntent.pace);
     if (f !== null) signals.pace = f;
@@ -135,7 +129,6 @@ export async function extractIntent(input: GenerateItineraryRequest): Promise<Tr
   const durationDays = computeDays(input);
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  // Parallel: ranked interests + optional prompt intent extraction
   const [intentResponse, derivedIntent] = await Promise.all([
     client.messages.create({
       model: FAST_MODEL_NAME,
@@ -151,6 +144,7 @@ export async function extractIntent(input: GenerateItineraryRequest): Promise<Tr
         content: `Extract structured trip intent for:
 Destination: ${input.destinationName}${input.country ? `, ${input.country}` : ""}
 Duration: ${durationDays} days | Party: ${input.party} | Budget: ${input.budget}
+Trip type: ${input.tripType ?? 'hub'}${input.travelPace ? ` (${input.travelPace})` : ""}
 Interests: ${input.interests.join(", ") || "general sightseeing"}
 ${input.tripPrompt ? `Trip description: "${input.tripPrompt}"` : ""}
 
@@ -168,7 +162,6 @@ Infer pace: budget travelers often pack more in; luxury travelers prefer relaxed
     ? (tool.input as { rankedInterests?: string[]; pace?: string })
     : {};
 
-  // Priority: prompt pace > taste profile > AI-inferred
   const inferredPace = (raw.pace as TripIntent["pace"]) ?? "balanced";
   const promptPaceLabel = derivedIntent.pace;
   const promptPaceEnum = promptPaceLabel === "fast-paced" ? "packed"
@@ -180,8 +173,6 @@ Infer pace: budget travelers often pack more in; luxury travelers prefer relaxed
     : null;
   const pace: TripIntent["pace"] = promptPaceEnum ?? tasteProfilePace ?? inferredPace;
 
-  // Compute the effective taste profile — blends prompt signals (70%) with taste profile (30%)
-  // for dimensions the prompt explicitly addresses; all other dimensions stay as-is.
   const hasDerivedIntent = Object.keys(derivedIntent).length > 0;
   const effectiveTasteProfile =
     input.tasteProfile && hasDerivedIntent
@@ -206,5 +197,7 @@ Infer pace: budget travelers often pack more in; luxury travelers prefer relaxed
     includeActivities: input.includeActivities,
     avoidActivities: input.avoidActivities,
     destinationType: input.destinationType ?? 'city',
+    tripType: input.tripType ?? 'hub',
+    travelPace: input.travelPace,
   };
 }

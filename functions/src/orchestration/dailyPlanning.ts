@@ -1,18 +1,17 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { MODEL_NAME, ITINERARY_TOOL_INPUT_SCHEMA } from "../constants";
-import { type TripIntent, type TripStrategy, type PlaceCluster, type OsmHike } from "./types";
+import { type TripIntent, type TripStrategy, type PlaceCluster, type OsmHike, type StopClusters } from "./types";
 
-function formatClusters(clusters: PlaceCluster[]): string {
+function formatClusters(clusters: PlaceCluster[], stopLocation: string): string {
   return clusters
     .map((cluster, i) => {
       const placeList = cluster.places
         .map((p) => {
-            const summary = p.editorialSummary ? ` | "${p.editorialSummary}"` : "";
-            return `  • ${p.name} | ${p.category} | rating: ${p.rating}/5 (${p.reviewCount} reviews) | price: ${"$".repeat(Math.max(1, p.priceLevel))} | lat: ${p.coordinates.lat.toFixed(5)}, lng: ${p.coordinates.lng.toFixed(5)}${summary}`;
-          })
+          const summary = p.editorialSummary ? ` | "${p.editorialSummary}"` : "";
+          return `  • ${p.name} | ${p.category} | rating: ${p.rating}/5 (${p.reviewCount} reviews) | price: ${"$".repeat(Math.max(1, p.priceLevel))} | lat: ${p.coordinates.lat.toFixed(5)}, lng: ${p.coordinates.lng.toFixed(5)}${summary}`;
+        })
         .join("\n");
-
-      return `DAY ${i + 1} — ${cluster.neighborhood ?? "Exploration Area"} (center: ${cluster.centerLat.toFixed(4)}, ${cluster.centerLng.toFixed(4)}):\n${placeList}`;
+      return `  Day ${i + 1} — ${cluster.neighborhood ?? stopLocation} (center: ${cluster.centerLat.toFixed(4)}, ${cluster.centerLng.toFixed(4)}):\n${placeList}`;
     })
     .join("\n\n");
 }
@@ -20,7 +19,6 @@ function formatClusters(clusters: PlaceCluster[]): string {
 function buildPersonalizationBlock(intent: TripIntent): string {
   const lines: string[] = [];
 
-  // Use the blended effective profile when available
   const tp = intent.effectiveTasteProfile ?? intent.tasteProfile;
   const hasPromptIntent = !!(intent.derivedIntent && Object.keys(intent.derivedIntent).length > 0);
 
@@ -30,7 +28,6 @@ function buildPersonalizationBlock(intent: TripIntent): string {
 
   lines.push("\nPERSONALIZATION (three-layer priority stack):");
 
-  // ── Layer 1: Hard constraints (always win) ──────────────────────────────
   if (intent.includeActivities?.length || intent.avoidActivities?.length) {
     lines.push("\n[1] HARD CONSTRAINTS — absolute rules, always override everything else:");
     if (intent.includeActivities?.length) {
@@ -41,9 +38,8 @@ function buildPersonalizationBlock(intent: TripIntent): string {
     }
   }
 
-  // ── Layer 2: Trip prompt — primary driver for this trip ─────────────────
   if (intent.tripPrompt || hasPromptIntent) {
-    lines.push("\n[2] THIS TRIP'S INTENT — primary flavor driver (treat as the dominant signal):");
+    lines.push("\n[2] THIS TRIP'S INTENT — primary flavor driver:");
     if (intent.tripPrompt) {
       lines.push(`    User wrote: "${intent.tripPrompt}"`);
     }
@@ -56,7 +52,6 @@ function buildPersonalizationBlock(intent: TripIntent): string {
     }
   }
 
-  // ── Layer 3: Effective taste profile (blended) — refinement layer ───────
   if (tp) {
     const isOutdoorHeavy =
       tp.adventure > 0.6 ||
@@ -73,13 +68,13 @@ function buildPersonalizationBlock(intent: TripIntent): string {
       : Math.round(3 + tp.pace * 3);
 
     const blendNote = hasPromptIntent
-      ? " (blended: 70% trip intent above + 30% long-term style — use for tie-breaking and subtle refinement)"
-      : " (long-term travel style — primary guide since no trip prompt given)";
+      ? " (blended: 70% trip intent + 30% long-term style)"
+      : " (long-term travel style — primary guide)";
 
     lines.push(`\n[3] TRAVELER'S DEFAULT STYLE${blendNote}:`);
     lines.push(
       `    Pacing: ${tp.pace < 0.35 ? "relaxed — fewer activities, longer dwell times" : tp.pace > 0.65 ? "packed — maximize activities, efficient transitions" : "balanced"}`,
-      `    Venue style: ${tp.hiddenGems > 0.6 ? "prefers hidden gems and local spots over tourist traps" : tp.hiddenGems < 0.4 ? "prefers well-known iconic venues" : "mix of popular and local"}`,
+      `    Venue style: ${tp.hiddenGems > 0.6 ? "prefers hidden gems and local spots" : tp.hiddenGems < 0.4 ? "prefers well-known iconic venues" : "mix of popular and local"}`,
       `    Food: ${tp.foodie > 0.6 ? "food-first — every meal should be special" : tp.foodie < 0.4 ? "food as fuel — quick and easy" : "balanced food choices"}`,
       `    Evenings: ${tp.nightlife > 0.5 ? "enjoys bars, live music, nightlife" : "ends evenings early, no nightlife"}`,
       `    Activities: ${tp.adventure > 0.6 ? "outdoor and physical" : tp.adventure < 0.4 ? "cultural, museums, food" : "mixed"}`,
@@ -99,43 +94,84 @@ function buildPersonalizationBlock(intent: TripIntent): string {
 }
 
 function formatOsmHikes(hikes: OsmHike[]): string {
-  const lines = hikes.map(
-    (h) =>
-      `  • ${h.name} | ${h.distanceMiles} mi | ~${h.estimatedDurationHours} hrs | ${h.difficulty} | ${h.category}`
-  );
+  return hikes
+    .map((h) => `  • ${h.name} | ${h.distanceMiles} mi | ~${h.estimatedDurationHours} hrs | ${h.difficulty} | ${h.category}`)
+    .join("\n");
+}
+
+function buildStopsSection(
+  stopClusters: StopClusters[],
+  intent: TripIntent,
+  strategy: TripStrategy
+): string {
+  const isRoute = intent.tripType === 'route';
+  const lines: string[] = [];
+
+  for (const sc of stopClusters) {
+    const { stop, clusters, osmHikes, stopIndex } = sc;
+    const hasClusters = clusters.some((c) => c.places.length > 0);
+    const hasOsmHikes = osmHikes.length > 0;
+
+    lines.push(`\n${'═'.repeat(60)}`);
+    lines.push(`STOP ${stopIndex + 1}: ${stop.location.toUpperCase()} — ${stop.nightCount} night(s)`);
+    lines.push(`Overnight anchor: ${stop.overnightType} near ${stop.location}`);
+    if (isRoute && stopIndex < stopClusters.length - 1) {
+      const nextStop = stopClusters[stopIndex + 1].stop;
+      lines.push(`Next stop: ${nextStop.location} — last day here is a DEPARTURE DAY`);
+    }
+
+    if (hasClusters) {
+      lines.push(`\nCANDIDATE PLACES FOR ${stop.location.toUpperCase()} (verified real venues):`);
+      lines.push(formatClusters(clusters, stop.location));
+    }
+
+    if (hasOsmHikes) {
+      lines.push(`\nVERIFIED HIKING TRAILS near ${stop.location} (OpenStreetMap data):`);
+      lines.push(formatOsmHikes(osmHikes));
+      lines.push(`  category key: walk = <2mi | moderate_hike = 2–6mi | major_hike = >6mi`);
+      lines.push(`  IMPORTANT: Use these exact trail names. Use the listed durations.`);
+    }
+
+    lines.push(`\nDay themes for ${stop.location}: ${stop.dayThemes.join(" | ")}`);
+  }
+
   return lines.join("\n");
 }
 
 export async function generateDailyPlans(
-  clusters: PlaceCluster[],
+  stopClusters: StopClusters[],
   intent: TripIntent,
   strategy: TripStrategy,
-  osmHikes: OsmHike[] = []
 ): Promise<Record<string, unknown>> {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  const candidateList = formatClusters(clusters);
-  const hasClusters = clusters.some((c) => c.places.length > 0);
+  const isRoute = intent.tripType === 'route';
   const personalizationBlock = buildPersonalizationBlock(intent);
-  const hasOsmHikes = osmHikes.length > 0;
-  const osmHikeBlock = hasOsmHikes
-    ? `\nVERIFIED HIKING TRAILS (OpenStreetMap data — real trail distances computed from GPS geometry):
-${formatOsmHikes(osmHikes)}
-
-  category key: walk = <2mi easy stroll | moderate_hike = 2–6mi half-day | major_hike = >6mi full commitment
-  IMPORTANT: Use the specific trail names above when scheduling hikes — never just "hiking" or the park name.
-  Use the listed durations exactly. Do not compress them.\n`
-    : "";
 
   const parkContextBlock = intent.destinationType === 'national_park'
     ? `\nDESTINATION TYPE: NATIONAL PARK
-${intent.destination} is a national park. Apply these planning rules in addition to the standard rules below:
-- IN-PARK ANCHORS: Named hiking trails, scenic overlooks, visitor centers, and scenic drives are the primary activity anchors for each day. Schedule them in the MORNING.
-- GATEWAY TOWNS for meals: All meals (breakfast, lunch, dinner) and evening activities should be in nearby gateway towns (${strategy.primaryNeighborhoods.join(', ')}). Gateway town dining is NOT "leaving the destination" — it is the normal and expected infrastructure for a park trip.
-- ONE ZONE PER DAY: Commit to a single park zone each day (e.g. Zion Canyon one day, Kolob Canyons another). Do not try to cover the whole park in a single day — parks span dozens of miles.
-- GATEWAY TRANSITION: After the morning/midday trail, transition to the nearest gateway town for lunch and dinner. Restaurants and cafes in gateway towns are 5–20 minutes from most park trailheads.
-- OUT-OF-PARK ACTIVITIES: Activities outside the park boundary are EXPECTED and ALLOWED as long as they are geographically close to that day's park zone. Do not treat gateway town restaurants as "off-topic".\n`
+${intent.destination} is a national park. Apply these rules:
+- IN-PARK ANCHORS: Named hiking trails, scenic overlooks, visitor centers are the primary morning activities.
+- GATEWAY TOWNS for meals: All meals should be in nearby gateway towns. This is expected infrastructure.
+- ONE ZONE PER DAY: Commit to a single park zone each day.
+- GATEWAY TRANSITION: After the morning trail, transition to the nearest gateway town for lunch and dinner.
+- OUT-OF-PARK ACTIVITIES: Activities outside the park boundary are EXPECTED and ALLOWED.\n`
     : "";
+
+  const roadTripBlock = isRoute
+    ? `\nROAD TRIP RULES — apply to all departure days:
+- DEPARTURE DAY = the last day at each stop except the final stop.
+- On departure days: schedule SHORT activities only. No major hikes. No multi-hour commitments.
+  Preferred: scenic overlooks, roadside attractions, short scenic stops (≤90 min), coffee/breakfast in town.
+- Departure day activities should be geographically along the ROUTE TO THE NEXT STOP — not backtracking.
+- Include a "drive time" note in the day title, e.g. "Drive to Bend: Scenic Stops Along Hwy 97".
+- Total activities on a departure day: 3–4 max (including breakfast).
+- RADIUS CONSTRAINT per non-departure day: Activities must be within 1–1.5 hours of the overnight anchor.
+  Do NOT schedule activities that are hours away from where they're sleeping.
+- NEVER schedule a major hike on a departure day.\n`
+    : "";
+
+  const stopsSection = buildStopsSection(stopClusters, intent, strategy);
 
   const prompt = `You are an expert travel planner building a detailed, realistic itinerary for a mobile travel app.
 
@@ -143,51 +179,55 @@ TRIP DETAILS:
 - Destination: ${intent.destination}${intent.country ? `, ${intent.country}` : ""}
 - Duration: ${intent.durationDays} days
 - Party: ${intent.party} | Budget: ${intent.budget} | Pace: ${intent.pace}
+- Trip type: ${isRoute ? 'ROAD TRIP (multi-stop)' : 'Hub (single location)'}
 - Interests: ${intent.rankedInterests.join(", ")}
 - Dates: ${intent.startDate ?? "flexible"} to ${intent.endDate ?? "flexible"}
 ${personalizationBlock}
 ${parkContextBlock}
-${hasClusters ? `CANDIDATE PLACES FROM GOOGLE PLACES (verified real venues with accurate coordinates):
-${candidateList}
-` : ""}${osmHikeBlock}PLANNING RULES:
-1. ${hasClusters ? "PREFER the candidate places above — they are real venues with verified data. Their coordinates are accurate. Use them wherever they fit." : "Use only established, well-known venues with a strong local reputation. Prefer places that have been operating for years."}
-2. ${hasClusters ? "You may supplement with well-known named landmarks (museums, monuments, iconic sites) when candidates don't cover a needed activity slot." : "Supplement with well-known named landmarks when needed."}
+${roadTripBlock}
+STOPS AND CANDIDATE PLACES:
+${stopsSection}
+
+PLANNING RULES (apply to every day at every stop):
+1. PREFER candidate places listed above — they are real venues with verified data.
+2. Supplement with well-known named landmarks when candidates don't cover a needed slot.
 3. Every day MUST include:
-   - BREAKFAST (8:00–9:30 AM): café, bakery, brunch spot, or hotel restaurant. NEVER a bar, dessert shop, or dinner-only restaurant.
-   - LUNCH (12:00–2:00 PM): restaurant, café, or food market that serves lunch.
+   - BREAKFAST (8:00–9:30 AM): café, bakery, brunch spot. NEVER a bar or dinner-only restaurant.
+   - LUNCH (12:00–2:00 PM): restaurant or café that serves lunch.
    - DINNER (6:30–9:00 PM): full-service restaurant matching ${intent.budget} budget. Vary cuisine across days.
-   Set category to "food" for all meals.
-4. SPECIFIC NAMED PLACES ONLY — no vague entries. NEVER use just the destination or park name as an activity (e.g., "Zion National Park", "Grand Canyon", "Yellowstone" are NOT valid activities — they are the destination, not something to do within it). Every activity must name the specific spot, trail, restaurant, or venue.
+   Set category to "food" for all meals. Exception: departure days may skip dinner if driving all day.
+4. SPECIFIC NAMED PLACES ONLY — no vague entries. NEVER use the destination name as an activity.
+   Every activity must name the specific spot, trail, restaurant, or venue.
 5. TIME FEASIBILITY: if activity A ends at 10:00 AM and transit takes 20 min, activity B starts at 10:20 AM minimum.
-6. REALISTIC DURATIONS: Breakfast 45–60 min | Major attraction 2–3 hrs | Lunch 60–75 min | Mid attraction 1–1.5 hrs | Dinner 75–90 min | Evening 1–2 hrs.
-   NATURE ACTIVITIES (waterfalls, lakes, scenic overlooks, botanical gardens, beaches, gorges, natural areas): minimum 1.5 hrs, typically 2 hrs. Never schedule a nature stop for less than 1.5 hours — reaching it, exploring, and leaving takes time.
-   STATE PARKS / NATIONAL PARKS / HIKING TRAILS / NATURE RESERVES: minimum 3 hours, typically 3–5 hrs. These are half-day anchors, never quick stops.
+6. REALISTIC DURATIONS: Breakfast 45–60 min | Major attraction 2–3 hrs | Lunch 60–75 min | Mid attraction 1–1.5 hrs | Dinner 75–90 min.
+   NATURE ACTIVITIES (waterfalls, lakes, scenic overlooks): minimum 1.5 hrs.
+   STATE/NATIONAL PARKS / HIKING TRAILS: minimum 3 hours.
 7. DAY STRUCTURE: Start 8:00 AM, end by 11:00 PM. Times format: "09:00 AM - 10:30 AM".
 8. TRANSPORT: For each activity specify travel to the NEXT one (mode + realistic time). Last activity of day = empty transport array.
-9. No venue repeated across days.
+9. No venue repeated across any days (across all stops).
 10. Google Maps URLs: https://www.google.com/maps/search/?api=1&query=Place+Name+City
-11. OUTDOOR TIMING: Never schedule a state park, national park, hiking trail, or nature reserve to START after 3:00 PM. Schedule them in the morning (ideally 8–10 AM) or early afternoon at the latest. Trails close at dusk and late arrivals are unsafe and unrealistic.
-12. ONE MAJOR HIKE PER DAY — HARD LIMIT: Never schedule more than one major_hike (>6 miles or >4 hours) in a single day. This is non-negotiable. After the major hike, transition to a nearby town for lunch, a scenic viewpoint requiring no hiking, or a casual dinner — never stack another trail on the same day.
-13. TRAIL TIME ESTIMATION: ${hasOsmHikes ? "Use the durations from the VERIFIED HIKING TRAILS section above when scheduling those trails. For any trail not listed there:" : "When scheduling a hiking trail:"} a moderate 5-mile trail takes 3–4 hours; a strenuous 8+ mile trail takes 5–7 hours. Always add 30–45 minutes for parking, gear prep, and rest stops. Never schedule a hiking trail for less than 3 hours.
-14. TRAILHEAD DRIVE TIME: State and national parks in the same region are often 30–90 minutes apart by car. If two outdoor destinations appear in the same day cluster, check whether driving between them is realistic given the time remaining after the first activity. When in doubt, keep only the better-rated one and fill the rest of the day with a nearby town or viewpoint that requires no hiking.
-15. DAILY HIKING CAP: Total hiking time across all trails in a single day must not exceed 6 hours. Budget accordingly — one major_hike already consumes most of that cap.
-16. HIKING ACTIVITY FORMAT — always follow this for any hiking, trail, or outdoor walk activity:
-    - name: the specific trail name — NEVER a generic name. REJECT THESE: "Hiking", "Morning Hike", "Afternoon Trek", "Zion National Park", "Explore Zion", "Trail Walk". USE THESE: "Angels Landing Trail", "The Narrows", "Emerald Pools Loop", "Hidden Canyon Trail", "Canyon Overlook Trail", "Observation Point Trail"
-    - category: "adventure" (always — never "nature" for a named hiking trail)
-    - description: include the trail distance (e.g. "5.4-mile out-and-back"), estimated hiking time, difficulty, and one sentence on what makes it special (views, features, etc.)
-    - time: block realistic time — short trail 2–3 hrs, moderate trail 3–5 hrs, long trail 5–7 hrs
-    - cost: "Free" for most national park trails (entry fee already paid) or note permit cost if applicable
-    - IMPORTANT: If VERIFIED HIKING TRAILS are listed above, you MUST pick from that list. Use the exact trail name as given — do not abbreviate or rename it.
-17. Day titles: catchy and thematic (e.g. "Temples & Street Food", "Art, Markets & Rooftops").
+11. OUTDOOR TIMING: Never schedule a trail or nature reserve to START after 3:00 PM.
+12. ONE MAJOR HIKE PER DAY — HARD LIMIT.
+13. HIKING ACTIVITY FORMAT: name = specific trail name (never generic). category = "adventure".
+    Description: include distance, estimated time, difficulty, and one feature sentence.
+14. Day titles: catchy and thematic.
+15. ACTIVITY VARIETY: User themes and interests define what to EMPHASIZE, not what to exclusively include.
+    Each day should feel like a complete travel day — varied activity types, local exploration, and unexpected
+    moments. A hiking-focused trip still visits interesting local neighborhoods, cultural stops, or scenic
+    viewpoints between hikes. Do NOT fill every non-meal slot with the same activity type day after day.
 
-Day themes to follow: ${strategy.dayThemes.join(" | ")}`;
+OUTPUT FORMAT:
+- tripType: "${isRoute ? 'route' : 'hub'}"
+- stops: one entry per stop listed above, in the same order
+- Each stop must have exactly the same number of days as its nightCount
+- Each stop's overnightAnchor.location should reflect where they're actually sleeping (the town/area, not just the park)`;
 
   const response = await client.messages.create({
     model: MODEL_NAME,
     max_tokens: 16000,
     tools: [{
       name: "create_itinerary",
-      description: "Create a structured travel itinerary from real place data",
+      description: "Create a structured travel itinerary with stops and daily plans",
       input_schema: ITINERARY_TOOL_INPUT_SCHEMA,
     }],
     tool_choice: { type: "tool", name: "create_itinerary" },
