@@ -1,5 +1,5 @@
 import * as logger from "firebase-functions/logger";
-import { type GeneratedItinerary, getAllDays, mapAllDays } from "../itinerarySchemas";
+import { type GeneratedItinerary, mapAllDays } from "../itinerarySchemas";
 
 // ~1.5 km ≈ 18-minute walk — anything beyond this is not reasonably walkable
 const MAX_WALK_KM = 1.5;

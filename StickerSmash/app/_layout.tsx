@@ -96,6 +96,8 @@ export default function RootLayout() {
 
   useFonts({
     'SourceSans3-Regular': require('@/assets/fonts/Source_Sans_3/static/SourceSans3-Regular.ttf'),
+    'SourceSans3-SemiBold': require('@/assets/fonts/Source_Sans_3/static/SourceSans3-SemiBold.ttf'),
+    'SourceSans3-Bold': require('@/assets/fonts/Source_Sans_3/static/SourceSans3-Bold.ttf'),
     'Merriweather_36pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_36pt-Bold.ttf'),
     'Merriweather_24pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_24pt-Bold.ttf'),
   });

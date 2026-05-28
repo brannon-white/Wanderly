@@ -111,10 +111,10 @@ export function rankRecommendations(
       const popularity = popularityScore(place);
 
       const baseScore =
-        interestMatch * 0.35 +
-        rating       * 0.30 +
-        budget       * 0.20 +
-        popularity   * 0.15;
+        interestMatch * 0.20 +   // reduced: interests set priority, not exclusivity
+        rating        * 0.40 +   // raised: a highly-rated landmark should beat a mediocre interest match
+        budget        * 0.20 +
+        popularity    * 0.20;    // raised: review volume signals genuine worth
 
       const score = baseScore
         * tasteProfileMultiplier(place, intent)   // uses blended effectiveTasteProfile

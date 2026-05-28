@@ -1,75 +1,93 @@
 import * as logger from "firebase-functions/logger";
 import { type GeneratedItinerary, getAllDays, mapAllDays } from "../itinerarySchemas";
 
-const DISTANCE_MATRIX_URL = "https://maps.googleapis.com/maps/api/distancematrix/json";
+// Routes API v2 — same Google Cloud project/key as Places API (New).
+// The legacy Distance Matrix API is a separate product that needs separate enablement.
+const ROUTES_MATRIX_URL = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix";
 
-type GoogleTravelMode = "driving" | "walking" | "transit";
+type GoogleTravelMode = "DRIVE" | "WALK" | "TRANSIT";
 
-interface MatrixElement {
-  status: string;
-  duration?: { value: number; text: string };
-}
-
-interface MatrixRow {
-  elements: MatrixElement[];
-}
-
-interface MatrixResponse {
-  status: string;
-  rows: MatrixRow[];
+interface RouteMatrixElement {
+  originIndex: number;
+  destinationIndex: number;
+  status?: { code: number };
+  duration?: string; // e.g. "1234s"
 }
 
 function transportModeToGoogle(mode: string): GoogleTravelMode {
-  if (mode === "walk") return "walking";
-  if (mode === "subway" || mode === "bus" || mode === "train") return "transit";
-  return "driving";
+  if (mode === "walk") return "WALK";
+  if (mode === "subway" || mode === "bus" || mode === "train") return "TRANSIT";
+  return "DRIVE";
 }
 
-// Calls Distance Matrix API for N consecutive segments using the diagonal approach.
-// origins=[A,B,...,N-1], destinations=[B,C,...,N]
-// Reads rows[i].elements[i] for pair (activities[i] → activities[i+1])
+function secondsToText(seconds: number): string {
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
+}
+
+// One Routes API call for all N segments.
+// Returns an array of duration strings indexed by segment position, or null on failure.
 async function fetchSegmentTimes(
   segments: Array<{ fromLat: number; fromLng: number; toLat: number; toLng: number; mode: GoogleTravelMode }>,
   apiKey: string
 ): Promise<Array<string | null>> {
   if (segments.length === 0) return [];
 
-  const origins = segments.map((s) => `${s.fromLat},${s.fromLng}`).join("|");
-  const destinations = segments.map((s) => `${s.toLat},${s.toLng}`).join("|");
-
-  // All segments in a day typically use the same dominant mode; pick the most common
+  // Use dominant mode for the batch (mixing modes in one call isn't supported cleanly)
   const modeCounts = segments.reduce<Record<string, number>>((acc, s) => {
     acc[s.mode] = (acc[s.mode] ?? 0) + 1;
     return acc;
   }, {});
   const dominantMode = Object.entries(modeCounts).sort((a, b) => b[1] - a[1])[0][0] as GoogleTravelMode;
 
-  const url = new URL(DISTANCE_MATRIX_URL);
-  url.searchParams.set("origins", origins);
-  url.searchParams.set("destinations", destinations);
-  url.searchParams.set("mode", dominantMode);
-  url.searchParams.set("key", apiKey);
+  const body = {
+    origins: segments.map((s) => ({
+      waypoint: { location: { latLng: { latitude: s.fromLat, longitude: s.fromLng } } },
+    })),
+    destinations: segments.map((s) => ({
+      waypoint: { location: { latLng: { latitude: s.toLat, longitude: s.toLng } } },
+    })),
+    travelMode: dominantMode,
+  };
 
   try {
-    const response = await fetch(url.toString());
-    if (!response.ok) {
-      logger.warn("Distance Matrix API non-OK", { status: response.status });
-      return segments.map(() => null);
-    }
-
-    const data = await response.json() as MatrixResponse;
-    if (data.status !== "OK") {
-      logger.warn("Distance Matrix API error status", { status: data.status });
-      return segments.map(() => null);
-    }
-
-    return segments.map((_, i) => {
-      const element = data.rows[i]?.elements[i];
-      if (!element || element.status !== "OK" || !element.duration) return null;
-      return element.duration.text;
+    const response = await fetch(ROUTES_MATRIX_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        // Only fetch duration — minimizes response size and billing
+        "X-Goog-FieldMask": "originIndex,destinationIndex,duration,status",
+      },
+      body: JSON.stringify(body),
     });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      logger.warn("Routes API non-OK", { status: response.status, body: errorText.slice(0, 300) });
+      return segments.map(() => null);
+    }
+
+    const elements = await response.json() as RouteMatrixElement[];
+
+    // Build a map from (originIndex, destinationIndex) → duration
+    const durationMap = new Map<string, string>();
+    for (const el of elements) {
+      if (el.status && el.status.code !== 0) continue;
+      if (!el.duration) continue;
+      const seconds = parseInt(el.duration.replace("s", ""), 10);
+      if (!isNaN(seconds)) {
+        durationMap.set(`${el.originIndex},${el.destinationIndex}`, secondsToText(seconds));
+      }
+    }
+
+    // For our N consecutive segments, origin i → destination i is what we want
+    return segments.map((_, i) => durationMap.get(`${i},${i}`) ?? null);
   } catch (error) {
-    logger.warn("Distance Matrix API fetch failed", { error });
+    logger.warn("Routes API fetch failed", { error });
     return segments.map(() => null);
   }
 }
@@ -78,7 +96,6 @@ export async function enrichTransportTimes(
   itinerary: GeneratedItinerary,
   apiKey: string
 ): Promise<GeneratedItinerary> {
-  // Collect per-day segments so we can batch one API call per day
   type DaySegment = {
     activityIndex: number;
     fromLat: number;
@@ -86,12 +103,11 @@ export async function enrichTransportTimes(
     toLat: number;
     toLng: number;
     mode: GoogleTravelMode;
-    skip: boolean; // ferry or missing coords
+    skip: boolean;
   };
 
   const allDays = getAllDays(itinerary);
 
-  // Build segments per day
   const perDaySegments: DaySegment[][] = allDays.map((day) =>
     day.activities.flatMap((activity, i) => {
       if (i === day.activities.length - 1) return [];
@@ -111,7 +127,6 @@ export async function enrichTransportTimes(
     })
   );
 
-  // Fetch real travel times per day in parallel
   const perDayResults = await Promise.all(
     perDaySegments.map((segments) => {
       const activeSeg = segments.map((s) => s.skip ? null : s);
@@ -119,7 +134,6 @@ export async function enrichTransportTimes(
       if (activeOnly.length === 0) return Promise.resolve(segments.map(() => null));
 
       return fetchSegmentTimes(activeOnly, apiKey).then((times) => {
-        // Re-map back to full segment array (including skipped ones)
         let activeIdx = 0;
         return activeSeg.map((s) => {
           if (s === null) return null;
@@ -129,7 +143,6 @@ export async function enrichTransportTimes(
     })
   );
 
-  // Apply real times back into the itinerary
   let dayIndex = 0;
   return mapAllDays(itinerary, (day) => {
     const segResults = perDayResults[dayIndex++] ?? [];

@@ -74,8 +74,23 @@ const TRANSPORT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   subway: 'train-outline',
   metro: 'train-outline',
   taxi: 'car-outline',
+  rideshare: 'car-outline',
   ferry: 'boat-outline',
   boat: 'boat-outline',
+};
+
+const TRANSPORT_LABELS: Record<string, string> = {
+  walk: 'Walk',
+  car: 'Drive',
+  taxi: 'Drive',
+  rideshare: 'Drive',
+  bus: 'Bus',
+  train: 'Train',
+  subway: 'Subway',
+  metro: 'Subway',
+  bicycle: 'Bike',
+  ferry: 'Ferry',
+  boat: 'Ferry',
 };
 
 const CAT_COLOR = '#6A62B7';
@@ -195,6 +210,24 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, onPress, onLon
     metaLine = parts.join(' · ');
   }
 
+  const firstTransport = transportOptions[0];
+  const transportLabel = firstTransport
+    ? `${TRANSPORT_LABELS[firstTransport.mode?.toLowerCase() ?? ''] ?? 'Travel'} · ${firstTransport.time}`
+    : null;
+  const transportIcon = firstTransport
+    ? (TRANSPORT_ICONS[firstTransport.mode?.toLowerCase() ?? ''] ?? 'navigate-outline')
+    : null;
+
+  const duration = parseDuration(activity.time);
+
+  const handleTransportPress = firstTransport && nextActivity
+    ? () => Linking.openURL(buildDirectionsUrl(
+        { name: activity.name, coordinates: activity.coordinates },
+        { name: nextActivity.name, coordinates: nextActivity.coordinates },
+        firstTransport.mode ?? 'walk',
+      ))
+    : undefined;
+
   return (
     <TouchableOpacity
       style={[styles.activityRow, isDragging && styles.activityRowDragging]}
@@ -211,58 +244,58 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, onPress, onLon
         {!isLast && <View style={styles.timelineLine} />}
       </View>
 
-      {/* Compact card + transport strip */}
+      {/* Card + inline transport connector */}
       <View style={{ flex: 1 }}>
         <View style={styles.compactCard}>
-          {/* Banner image */}
+          {/* Cinematic image */}
           <Image
             source={imageUri ? { uri: imageUri } : undefined}
-            style={[styles.compactImage, !imageUri && { backgroundColor: '#F0EEFF' }]}
+            style={[styles.compactImage, (!imageUri || imageUri === '') && { backgroundColor: '#F0EEFF' }]}
             cachePolicy="memory-disk"
             contentFit="cover"
-            transition={200}
+            transition={250}
           />
 
           {/* Text content */}
           <View style={styles.compactBody}>
             <Text style={styles.compactTitle} numberOfLines={2}>{activity.name}</Text>
+
             <View style={styles.compactMetaRow}>
-              {isTrail && <Footprints size={11} color="#888" style={{ marginRight: 3 }} />}
+              {isTrail && <Footprints size={11} color="#aaa" style={{ marginRight: 3 }} />}
               <Text style={styles.compactMeta} numberOfLines={1}>{metaLine}</Text>
             </View>
-            <Text style={styles.compactTime}>{startTime}</Text>
+
+            <View style={styles.compactTimeRow}>
+              <Text style={styles.compactTime}>{startTime}</Text>
+              {duration ? <Text style={styles.compactDuration}>· {duration}</Text> : null}
+            </View>
+
+            {activity.description ? (
+              <Text style={styles.compactDescription} numberOfLines={2}>
+                "{activity.description}"
+              </Text>
+            ) : null}
           </View>
         </View>
 
-        {/* Transport strip */}
-        {!isLast && transportOptions.length > 0 && (
-          <View style={styles.transportStrip}>
-            {transportOptions.map((t, idx) => {
-              const onPressDir = nextActivity
-                ? () => Linking.openURL(buildDirectionsUrl(
-                    { name: activity.name, coordinates: activity.coordinates },
-                    { name: nextActivity.name, coordinates: nextActivity.coordinates },
-                    t.mode ?? 'walk',
-                  ))
-                : undefined;
-              return (
-                <TouchableOpacity
-                  key={idx}
-                  style={styles.transportStripItem}
-                  onPress={onPressDir}
-                  disabled={!nextActivity}
-                  activeOpacity={nextActivity ? 0.6 : 1}
-                >
-                  <Ionicons
-                    name={TRANSPORT_ICONS[t.mode?.toLowerCase() ?? ''] ?? 'navigate-outline'}
-                    size={22}
-                    color={CAT_COLOR}
-                  />
-                  <Text style={styles.transportStripTime}>{t.time}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+        {/* Inline transport connector */}
+        {!isLast && transportLabel && (
+          <TouchableOpacity
+            style={styles.transportConnector}
+            onPress={handleTransportPress}
+            disabled={!handleTransportPress}
+            activeOpacity={handleTransportPress ? 0.6 : 1}
+          >
+            <View style={styles.transportConnectorLine} />
+            {transportIcon && (
+              <Ionicons name={transportIcon} size={13} color="#bbb" />
+            )}
+            <Text style={styles.transportConnectorText}>{transportLabel}</Text>
+            {handleTransportPress && (
+              <Ionicons name="chevron-forward-outline" size={12} color="#ccc" />
+            )}
+            <View style={styles.transportConnectorLine} />
+          </TouchableOpacity>
         )}
       </View>
     </TouchableOpacity>
@@ -316,6 +349,7 @@ export default function ItineraryScreen() {
   const [loadingRemote, setLoadingRemote] = useState(!!id && !demoItinerary);
   const [remoteLoadError, setRemoteLoadError] = useState<string | null>(null);
   const [heroUri, setHeroUri] = useState<string | undefined>(undefined);
+  const [imagesReady, setImagesReady] = useState(false);
   const itinerary = remoteItinerary ?? demoItinerary;
 
   const [selectedDay, setSelectedDay] = useState(0);
@@ -416,7 +450,21 @@ export default function ItineraryScreen() {
     imageRetryCount.current = 0;
     setActivityImages({});
     setImageRetryTick(0);
+    setImagesReady(false);
   }, [itinerary?.id]);
+
+  // Mark images ready once day 0 images are all resolved (server pre-fetches real URLs; this
+  // handles the legacy path where placeholder strings still arrive from Firestore).
+  useEffect(() => {
+    if (!itinerary) return;
+    const day0 = getItineraryDays(itinerary)[0]?.activities ?? [];
+    if (day0.length === 0) { setImagesReady(true); return; }
+    const allHaveRealUrls = day0.every((a) => !isPlaceholder(a.image));
+    if (allHaveRealUrls) { setImagesReady(true); return; }
+    // Legacy path: wait until activityImages has an entry (or confirmed null) for each day-0 activity
+    const allResolved = day0.every((a) => !isPlaceholder(a.image) || activityImages[a.id] !== undefined);
+    if (allResolved) setImagesReady(true);
+  }, [itinerary?.id, activityImages]);
 
   // Load images for the selected day sequentially to avoid Unsplash rate limits.
   // Parallel fire-and-forget hits rate limits; sequential + retry ensures all images load.
@@ -437,6 +485,8 @@ export default function ItineraryScreen() {
         if (url) {
           setActivityImages((prev) => ({ ...prev, [a.id]: url }));
         } else {
+          // Store empty string as sentinel so the imagesReady gate knows this slot is resolved
+          setActivityImages((prev) => ({ ...prev, [a.id]: '' }));
           loadedImageIds.current.delete(a.id);
           anyFailed = true;
         }
@@ -629,12 +679,15 @@ export default function ItineraryScreen() {
 
   const headerTop = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : insets.top + 8;
 
-  if (loadingRemote) {
+  const isLoadingAll = loadingRemote || (!imagesReady && !isBrowsing && !!id && !demoItinerary);
+
+  if (isLoadingAll) {
+    const msg = loadingRemote ? 'Loading your itinerary...' : 'Preparing your adventure...';
     return (
       <View style={[styles.screen, { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }]}>
         <ActivityIndicator size="large" color={ICON_COLOR} />
         <Text style={{ marginTop: 16, color: '#3D3555', fontFamily: 'SourceSans3-Regular', fontSize: 16, textAlign: 'center' }}>
-          Loading your itinerary...
+          {msg}
         </Text>
       </View>
     );
@@ -815,7 +868,7 @@ export default function ItineraryScreen() {
                     activity={item}
                     isLast={idx === activities.length - 1}
                     nextActivity={activities[idx + 1]}
-                    imageUri={activityImages[item.id]}
+                    imageUri={activityImages[item.id] || (!isPlaceholder(item.image) ? item.image : undefined)}
                     onPress={() => setDetailActivity({ activity: item, dayIndex: selectedDay, activityIndex: idx })}
                     onLongPress={!isBrowsing && !locked ? drag : undefined}
                     isDragging={isActive}

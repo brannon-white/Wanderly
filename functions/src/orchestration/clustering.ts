@@ -60,6 +60,36 @@ function kMeans(places: RankedPlace[], k: number, iterations = 15): RankedPlace[
   return clusters.filter((c) => c.length > 0);
 }
 
+// Enforce category diversity so interest-heavy queries don't monopolize the candidate pool.
+// Caps each non-restaurant category at 3 places; restaurants at 4 (meals need more options).
+// Places are already in score-descending order, so we keep the best within each cap.
+function diversifyCluster(places: RankedPlace[], targetSize = 14): RankedPlace[] {
+  const MAX_PER_CATEGORY = 3;
+  const MAX_RESTAURANTS = 4;
+  const counts: Record<string, number> = {};
+  const selected: RankedPlace[] = [];
+  const overflow: RankedPlace[] = [];
+
+  for (const place of places) {
+    const cat = place.category;
+    const limit = cat === "restaurant" ? MAX_RESTAURANTS : MAX_PER_CATEGORY;
+    if ((counts[cat] ?? 0) < limit) {
+      selected.push(place);
+      counts[cat] = (counts[cat] ?? 0) + 1;
+    } else {
+      overflow.push(place);
+    }
+  }
+
+  // Fill remaining slots from overflow (still sorted by score within remaining categories)
+  let i = 0;
+  while (selected.length < targetSize && i < overflow.length) {
+    selected.push(overflow[i++]);
+  }
+
+  return selected.slice(0, targetSize);
+}
+
 // Cluster places for a single stop into numDays geographic clusters.
 // Returns clusters with stopIndex and dayIndex (local to this stop) set.
 export function clusterForStop(
@@ -80,7 +110,8 @@ export function clusterForStop(
   return sorted.map(({ places, center }, i) => ({
     dayIndex: i,
     stopIndex,
-    places: places.slice(0, 14),
+    // Diversity-enforce before passing candidates to the daily planner
+    places: diversifyCluster(places.slice(0, 40), 14),
     centerLat: center.lat,
     centerLng: center.lng,
     neighborhood: dayThemes[i],
