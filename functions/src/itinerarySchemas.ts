@@ -35,7 +35,7 @@ export const generateItineraryRequestSchema = z.object({
   derivedIntent: tripDerivedIntentSchema,
   includeActivities: z.array(z.string()).optional(),
   avoidActivities: z.array(z.string()).optional(),
-  destinationType: z.enum(['city', 'national_park']).optional(),
+  destinationType: z.enum(['city', 'national_park', 'region']).optional(),
   tripType: z.enum(['hub', 'route']).default('hub'),
   travelPace: z.enum(['every_night', 'every_few_days', 'few_stops', 'flexible']).optional(),
 });

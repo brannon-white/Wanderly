@@ -253,6 +253,14 @@ export default function TripReviewScreen() {
               </View>
             </View>
           </View>
+          {destinationSnapshot?.destinationType === 'region' && (
+            <View style={styles.regionHint}>
+              <Ionicons name="information-circle-outline" size={14} color="#6A62B7" />
+              <Text style={styles.regionHintText}>
+                {destination.name} covers a large area. For the best experience, consider a road trip so you can explore multiple cities.
+              </Text>
+            </View>
+          )}
         </View>
 
         <SectionDivider />
@@ -449,6 +457,22 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 120,
+  },
+  regionHint: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginTop: 10,
+    backgroundColor: '#F0EEFF',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  regionHintText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#6A62B7',
+    lineHeight: 17,
   },
   section: {
     paddingHorizontal: 20,

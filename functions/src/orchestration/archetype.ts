@@ -147,6 +147,18 @@ function buildArchetypePrompt(intent: TripIntent): string {
       `  Departure day anchor = something SHORT and scenic along the drive route (overlook, quick walk, coffee stop)`,
       `  anchorQuery for departure days: "scenic roadside stop near [current stop] on route to [next stop]"`,
     );
+  } else if (intent.destinationType === 'region') {
+    lines.push(
+      ``,
+      `REGION-LEVEL DESTINATION: "${intent.destination}" is a state or region, not a specific city.`,
+      `REQUIRED: Choose a specific city or area within ${intent.destination} as the planning base.`,
+      `Do NOT use "${intent.destination}" alone in anchorQuery values — always include the specific city.`,
+      `Example: for "Oregon", use "best morning hike near Portland Oregon" not "best hike in Oregon".`,
+      ``,
+      intent.tripType === 'route'
+        ? `STRUCTURE: Plan as a road trip — pick 2–4 specific cities within ${intent.destination} as stops. Total nightCount = ${intent.durationDays}.`
+        : `STRUCTURE: Pick ONE compelling city within ${intent.destination} as the hub. All ${intent.durationDays} nights there. Every anchorQuery must name that city explicitly.`,
+    );
   } else {
     lines.push(
       ``,

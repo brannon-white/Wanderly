@@ -399,6 +399,21 @@ export const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
+  stopTabGroupLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    alignSelf: 'center',
+  },
+
+  stopTabGroupLabelText: {
+    fontSize: 11,
+    color: '#8B7FCC',
+    fontFamily: 'SourceSans3-SemiBold',
+  },
+
   // ── Plan trip / Go back button ────────────────────────────────────────
   planTripButton: {
     backgroundColor: PURPLE,
