@@ -32,15 +32,11 @@ import ItineraryScreen from '@/components/ItineraryScreen';
 import DestinationDetailScreen from '@/components/DestinationDetailScreen';
 import AllDestinationsScreen from '@/components/AllDestinationsScreen';
 import DestinationScreen from '@/components/DestinationScreen';
-import TripPartyScreen from '@/components/tripPlanning/TripPartyScreen';
+import TripBasicsScreen from '@/components/tripPlanning/TripBasicsScreen';
 import TripDatesScreen from '@/components/tripPlanning/TripDatesScreen';
-import TripPromptScreen from '@/components/tripPlanning/TripPromptScreen';
-import TripVibesScreen from '@/components/tripPlanning/TripVibesScreen';
-import TripActivitiesScreen from '@/components/tripPlanning/TripActivitiesScreen';
-import TripFoodScreen from '@/components/tripPlanning/TripFoodScreen';
-import TripBudgetScreen from '@/components/tripPlanning/TripBudgetScreen';
-import TripReviewScreen from '@/components/tripPlanning/TripReviewScreen';
 import TripStyleScreen from '@/components/tripPlanning/TripStyleScreen';
+import TripPreferencesScreen from '@/components/tripPlanning/TripPreferencesScreen';
+import TripReviewScreen from '@/components/tripPlanning/TripReviewScreen';
 import ArticleWebViewScreen from '@/components/ArticleWebViewScreen';
 import SearchScreen from '@/app/SearchScreen';
 import ArticleDetailScreen from '@/components/ArticleDetailScreen';
@@ -63,14 +59,10 @@ export type RootStackParamList = {
   DestinationDetail: { id: string };
   DestinationScreen: { id?: string; searchedDestination?: SearchedDestination };
   SearchScreen: undefined;
-  TripParty: undefined;
+  TripBasics: undefined;
   TripDates: undefined;
   TripStyle: undefined;
-  TripPrompt: undefined;
-  TripVibes: undefined;
-  TripActivities: undefined;
-  TripFood: undefined;
-  TripBudget: undefined;
+  TripPreferences: undefined;
   TripReview: undefined;
   AllDestinations: undefined;
   ArticleDetail: { article: Article };
@@ -270,14 +262,10 @@ const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
                 <Stack.Screen name="DestinationScreen" component={DestinationScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="AllDestinations" component={AllDestinationsScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="ArticleDetail" component={ArticleDetailScreen} options={{ headerShown: false }} />
-                <Stack.Screen name="TripParty" component={TripPartyScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="TripBasics" component={TripBasicsScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripDates" component={TripDatesScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripStyle" component={TripStyleScreen} options={{ headerShown: false }} />
-                <Stack.Screen name="TripPrompt" component={TripPromptScreen} options={{ headerShown: false }} />
-                <Stack.Screen name="TripVibes" component={TripVibesScreen} options={{ headerShown: false }} />
-                <Stack.Screen name="TripActivities" component={TripActivitiesScreen} options={{ headerShown: false }} />
-                <Stack.Screen name="TripFood" component={TripFoodScreen} options={{ headerShown: false }} />
-                <Stack.Screen name="TripBudget" component={TripBudgetScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="TripPreferences" component={TripPreferencesScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripReview" component={TripReviewScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="ArticleWebView" component={ArticleWebViewScreen} options={{ headerShown: false }} />
               </Stack.Navigator>

@@ -296,7 +296,7 @@ export default function TripReviewScreen() {
             </View>
             <Text style={styles.sectionLabel}>Party</Text>
             <View style={{ flex: 1 }} />
-            <EditIcon onPress={() => navigation.navigate('TripParty')} />
+            <EditIcon onPress={() => navigation.navigate('TripBasics')} />
           </View>
           <Text style={styles.sectionValue}>{party || '—'}</Text>
         </View>
@@ -327,7 +327,7 @@ export default function TripReviewScreen() {
                 </View>
                 <Text style={styles.sectionLabel}>Trip Vibe</Text>
                 <View style={{ flex: 1 }} />
-                <EditIcon onPress={() => navigation.navigate('TripPrompt')} />
+                <EditIcon onPress={() => navigation.navigate('TripStyle')} />
               </View>
               <Text style={[styles.sectionValue, { fontStyle: 'italic' }]}>"{tripPrompt}"</Text>
             </View>
@@ -343,7 +343,7 @@ export default function TripReviewScreen() {
             </View>
             <Text style={styles.sectionLabel}>Trip Preferences</Text>
             <View style={{ flex: 1 }} />
-            <EditIcon onPress={() => navigation.navigate('TripVibes')} />
+            <EditIcon onPress={() => navigation.navigate('TripPreferences')} />
           </View>
           {tripVibes.length === 0 && includeActivities.length === 0 && foodPreferences.length === 0 ? (
             <Text style={[styles.sectionValue, { color: TEXT_GRAY }]}>None set</Text>
@@ -398,7 +398,7 @@ export default function TripReviewScreen() {
             </View>
             <Text style={styles.sectionLabel}>Budget</Text>
             <View style={{ flex: 1 }} />
-            <EditIcon onPress={() => navigation.navigate('TripBudget')} />
+            <EditIcon onPress={() => navigation.navigate('TripBasics')} />
           </View>
           <Text style={styles.sectionValue}>{budget || '—'}</Text>
         </View>
