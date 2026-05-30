@@ -32,7 +32,7 @@ import { DEMO_FULL_ITINERARIES } from '@/data/demoData';
 import { useTripPlanning } from '@/context/TripPlanningContext';
 import { useMyTrips, formatTripSubtitle } from '@/context/MyTripsContext';
 import type { GeneratedItinerary, ItineraryActivity, ItineraryDay } from '@/types/itinerary';
-import { getItineraryDays, getItineraryStops, updateItineraryDay, isRouteTrip, getStopForDayIndex } from '@/utils/itineraryHelpers';
+import { getItineraryDays, updateItineraryDay, isRouteTrip, getStopForDayIndex } from '@/utils/itineraryHelpers';
 import { getAuth } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { searchPhoto } from '@/services/unsplash';
@@ -641,18 +641,16 @@ export default function ItineraryScreen() {
     }
   }, [itinerary, id, selectedDay, allDays]);
 
-  const handleAiBarSubmit = useCallback(async () => {
-    const message = aiBarMessage.trim();
-    if (!message || !id || aiBarLoading) return;
+  const sendAiMessage = useCallback(async (message: string) => {
+    if (!message.trim() || !id || aiBarLoading) return;
     const usage = await getUsageStatus().catch(() => null);
     if (usage && !usage.isPro && usage.regensLeft <= 0) {
       setShowRegenPaywall(true);
       return;
     }
     setAiBarLoading(true);
-    setAiBarMessage('');
     try {
-      const { itinerary: updated } = await editItineraryWithLanguage({ itineraryId: id, message });
+      const { itinerary: updated } = await editItineraryWithLanguage({ itineraryId: id, message: message.trim() });
       setRemoteItinerary(updated);
     } catch (err) {
       if (err instanceof Error && /regen_limit_reached/i.test(err.message)) {
@@ -663,7 +661,14 @@ export default function ItineraryScreen() {
     } finally {
       setAiBarLoading(false);
     }
-  }, [aiBarMessage, id, aiBarLoading]);
+  }, [id, aiBarLoading]);
+
+  const handleAiBarSubmit = useCallback(() => {
+    const message = aiBarMessage.trim();
+    if (!message) return;
+    setAiBarMessage('');
+    sendAiMessage(message);
+  }, [aiBarMessage, sendAiMessage]);
 
   const handleShare = async () => {
     if (!itinerary || sharing) return;
@@ -823,36 +828,7 @@ export default function ItineraryScreen() {
           style={styles.dateSelector}
           contentContainerStyle={styles.dateSelectorContent}
         >
-          {itinerary && isRouteTrip(itinerary) ? (() => {
-            const stops = getItineraryStops(itinerary);
-            const elements: React.ReactNode[] = [];
-            let globalDayIdx = 0;
-            for (const stop of stops) {
-              const cityName = stop.location.split(',')[0].trim();
-              elements.push(
-                <View key={`stop-label-${stop.stopIndex}`} style={styles.stopTabGroupLabel}>
-                  <Ionicons name="location-outline" size={10} color="#8B7FCC" />
-                  <Text style={styles.stopTabGroupLabelText}>{cityName}</Text>
-                </View>
-              );
-              for (let i = 0; i < stop.days.length; i++) {
-                const idx = globalDayIdx;
-                elements.push(
-                  <TouchableOpacity
-                    key={`day-${idx}`}
-                    style={[styles.dateBtn, selectedDay === idx && styles.dateBtnActive]}
-                    onPress={() => setSelectedDay(idx)}
-                  >
-                    <Text style={[styles.dateBtnText, selectedDay === idx && styles.dateBtnTextActive]}>
-                      {getDayLabel(idx)}
-                    </Text>
-                  </TouchableOpacity>
-                );
-                globalDayIdx++;
-              }
-            }
-            return elements;
-          })() : allDays.map((day, index) => (
+          {allDays.map((day, index) => (
             <TouchableOpacity
               key={`${day.label}-${index}`}
               style={[styles.dateBtn, selectedDay === index && styles.dateBtnActive]}
@@ -1016,10 +992,33 @@ export default function ItineraryScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.aiBarWrapper}
         >
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.aiBarChips}
+            contentContainerStyle={{ gap: 8, paddingHorizontal: 12 }}
+          >
+            {[
+              { label: "🌧️ It's raining", message: "It's raining today. Replace any outdoor activities with good indoor alternatives nearby." },
+              { label: "😴 We're tired", message: "We're feeling tired. Make today's schedule lighter with fewer activities and more relaxed pacing." },
+              { label: "⏩ Shorter day", message: "Shorten today's itinerary. Remove one or two activities and give us more downtime." },
+              { label: "🔁 Mix it up", message: "Today feels repetitive. Swap some activities for more variety — try a different neighborhood or type of experience." },
+              { label: "📍 Stay local", message: "Keep everything close together today. Remove any activity that requires long travel and replace with something nearby." },
+            ].map((chip) => (
+              <TouchableOpacity
+                key={chip.label}
+                style={styles.aiBarChip}
+                onPress={() => sendAiMessage(chip.message)}
+                disabled={aiBarLoading}
+              >
+                <Text style={styles.aiBarChipText}>{chip.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
           <View style={[styles.aiBar, { paddingBottom: insets.bottom > 0 ? insets.bottom : 12 }]}>
             <TextInput
               style={styles.aiBarInput}
-              placeholder="Ask Wanderly..."
+              placeholder="Ask me to change anything..."
               placeholderTextColor="#AAA"
               value={aiBarMessage}
               onChangeText={setAiBarMessage}

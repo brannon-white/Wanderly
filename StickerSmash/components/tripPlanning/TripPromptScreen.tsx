@@ -36,12 +36,12 @@ export default function TripPromptScreen() {
 
   function handleContinue() {
     setTripPrompt(text.trim());
-    navigation.navigate('TripInterests');
+    navigation.navigate('TripVibes');
   }
 
   function handleSkip() {
     setTripPrompt('');
-    navigation.navigate('TripInterests');
+    navigation.navigate('TripVibes');
   }
 
   return (

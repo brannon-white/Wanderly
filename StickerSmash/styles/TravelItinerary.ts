@@ -440,21 +440,6 @@ export const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  stopTabGroupLabel: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    alignSelf: 'center',
-  },
-
-  stopTabGroupLabelText: {
-    fontSize: 11,
-    color: '#8B7FCC',
-    fontFamily: 'SourceSans3-SemiBold',
-  },
-
   // ── Plan trip / Go back button ────────────────────────────────────────
   planTripButton: {
     backgroundColor: PURPLE,
@@ -594,6 +579,29 @@ export const styles = StyleSheet.create({
   },
 
   // ── AI Assistant Bar ──────────────────────────────────────────────────
+  aiBarChips: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 4,
+    gap: 8,
+  },
+
+  aiBarChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#DDD9F5',
+  },
+
+  aiBarChipText: {
+    fontSize: 13,
+    color: '#6A62B7',
+    fontFamily: 'SourceSans3-SemiBold',
+  },
+
   aiBarWrapper: {
     position: 'absolute',
     bottom: 0,
