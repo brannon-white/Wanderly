@@ -3,7 +3,10 @@ import {
   View,
   Text,
   ScrollView,
+  TextInput,
   TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +17,15 @@ import type { RootStackParamList } from '@/app/_layout';
 import { shared, PRIMARY, PRIMARY_LIGHT, BORDER_COLOR, TEXT_DARK, TEXT_GRAY } from '@/styles/tripPlanningStyles';
 import { useTripPlanning } from '@/context/TripPlanningContext';
 import type { TripType, TravelPace } from '@/types/itinerary';
+
+const PROMPT_CHIPS = [
+  'Hidden gems & local spots',
+  'Fast-paced with great food',
+  'Slow travel & nature',
+  'Adventure & outdoor activities',
+];
+
+const MAX_CHARS = 300;
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 
@@ -58,10 +70,11 @@ const PACE_OPTIONS: PaceOption[] = [
 export default function TripStyleScreen() {
   const navigation = useNavigation<NavProp>();
   const insets = useSafeAreaInsets();
-  const { tripType, travelPace, setTripType, setTravelPace, flow } = useTripPlanning();
+  const { tripType, travelPace, tripPrompt, setTripType, setTravelPace, setTripPrompt } = useTripPlanning();
 
   const [selectedStyle, setSelectedStyle] = useState<TripType>(tripType || 'hub');
   const [selectedPace, setSelectedPace] = useState<TravelPace | ''>(travelPace || '');
+  const [promptText, setPromptText] = useState(tripPrompt || '');
 
   const isRoute = selectedStyle === 'route';
   const canContinue = !isRoute || selectedPace !== '';
@@ -69,11 +82,15 @@ export default function TripStyleScreen() {
   const handleContinue = () => {
     setTripType(selectedStyle);
     setTravelPace(isRoute ? (selectedPace as TravelPace) : '');
-    navigation.navigate('TripPrompt');
+    setTripPrompt(promptText.trim());
+    navigation.navigate('TripPreferences');
   };
 
   return (
-    <View style={shared.container}>
+    <KeyboardAvoidingView
+      style={shared.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <View style={[shared.topBar, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity style={shared.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={20} color="#222" />
@@ -85,7 +102,8 @@ export default function TripStyleScreen() {
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={[shared.scrollContent, { paddingHorizontal: 20 }]}
+        contentContainerStyle={[shared.scrollContent, { paddingHorizontal: 20, paddingBottom: 120 }]}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <Text style={shared.heading}>How do you want to travel?</Text>
@@ -157,6 +175,41 @@ export default function TripStyleScreen() {
             </View>
           </>
         )}
+
+        {/* ── Trip prompt ────────────────────────────────────── */}
+        <Text style={[shared.heading, { fontSize: 18, marginTop: 28 }]}>
+          Describe your trip <Text style={{ color: TEXT_GRAY, fontSize: 15, fontFamily: 'SourceSans3-Regular' }}>(optional)</Text>
+        </Text>
+        <Text style={[shared.subheading, { marginTop: 4, marginBottom: 14 }]}>
+          Tell us the vibe — we'll weight it heavily when planning.
+        </Text>
+
+        <View style={styles.inputWrapper}>
+          <TextInput
+            style={styles.textInput}
+            placeholder="e.g. A cozy road trip with coffee shops, forests, and small towns…"
+            placeholderTextColor="#bbb"
+            multiline
+            value={promptText}
+            onChangeText={t => setPromptText(t.slice(0, MAX_CHARS))}
+            textAlignVertical="top"
+          />
+          <Text style={styles.charCount}>{promptText.length}/{MAX_CHARS}</Text>
+        </View>
+
+        <Text style={styles.chipsLabel}>QUICK STARTS</Text>
+        <View style={styles.chipsRow}>
+          {PROMPT_CHIPS.map((chip) => (
+            <TouchableOpacity
+              key={chip}
+              style={[styles.chip, promptText === chip && styles.chipSelected]}
+              onPress={() => setPromptText(chip)}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.chipText, promptText === chip && styles.chipTextSelected]}>{chip}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </ScrollView>
 
       <View style={[shared.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
@@ -169,7 +222,7 @@ export default function TripStyleScreen() {
           <Text style={shared.continueBtnText}>Continue</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -253,5 +306,62 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: TEXT_GRAY,
     fontFamily: 'SourceSans3-Regular',
+  },
+  inputWrapper: {
+    borderWidth: 1.5,
+    borderColor: BORDER_COLOR,
+    borderRadius: 16,
+    padding: 16,
+    backgroundColor: '#fafafa',
+    marginBottom: 20,
+    minHeight: 120,
+  },
+  textInput: {
+    fontSize: 16,
+    color: TEXT_DARK,
+    fontFamily: 'SourceSans3-Regular',
+    lineHeight: 24,
+    minHeight: 80,
+  },
+  charCount: {
+    fontSize: 12,
+    color: '#ccc',
+    fontFamily: 'SourceSans3-Regular',
+    textAlign: 'right',
+    marginTop: 8,
+  },
+  chipsLabel: {
+    fontSize: 11,
+    color: TEXT_GRAY,
+    fontFamily: 'SourceSans3-SemiBold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    borderWidth: 1.5,
+    borderColor: BORDER_COLOR,
+    borderRadius: 100,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#fafafa',
+  },
+  chipSelected: {
+    borderColor: PRIMARY,
+    backgroundColor: PRIMARY_LIGHT,
+  },
+  chipText: {
+    fontSize: 13,
+    color: TEXT_DARK,
+    fontFamily: 'SourceSans3-Regular',
+  },
+  chipTextSelected: {
+    color: PRIMARY,
+    fontFamily: 'SourceSans3-SemiBold',
   },
 });

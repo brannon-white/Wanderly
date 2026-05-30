@@ -211,7 +211,7 @@ export default function DestinationScreen() {
               imageUrl: destination.imageUrl ?? '',
               destinationType: (destination as any).destinationType ?? 'city',
             });
-            navigation.navigate('TripParty');
+            navigation.navigate('TripBasics');
           }}
           activeOpacity={0.85}
         >
