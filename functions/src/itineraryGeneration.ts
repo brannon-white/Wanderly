@@ -13,6 +13,7 @@ import {
 } from "./itinerarySchemas";
 
 import { planStops, planItinerary, repairItinerary } from "./orchestration/tripPlanning";
+import { scoreCandidatePool } from "./orchestration/candidateScoring";
 import { buildStopPools, geocodeStop } from "./orchestration/contextBuilder";
 import { validateItinerary } from "./orchestration/validation";
 import { enrichTransportTimes } from "./orchestration/directions";
@@ -125,6 +126,15 @@ export async function generateItineraryFlow(
       );
 
       pools = await buildStopPools(stops, googlePlacesApiKey, isNationalPark, trailsByStopIndex);
+
+      // Re-rank candidate pools by taste profile before passing to the LLM
+      if (input.tasteProfile) {
+        pools = pools.map((pool) => ({
+          ...pool,
+          candidates: scoreCandidatePool(pool.candidates, input.tasteProfile, pool.nightCount),
+        }));
+      }
+
       logger.info("Pipeline: pools ready", {
         stops: pools.map((p) => `${p.location}: ${
           p.candidates.breakfast.length + p.candidates.food.length +
@@ -177,9 +187,23 @@ export async function generateItineraryFlow(
       ({ itinerary: validated, result } = validateItinerary(withTrailData));
 
       if (!result.isValid) {
-        logger.warn("Pipeline: repair pass did not fully fix issues — shipping best-effort", {
+        logger.warn("Pipeline: first repair pass incomplete — running second repair attempt", {
           remainingFatal: result.fatalIssues,
         });
+        try {
+          rawItinerary = await repairItinerary(rawItinerary, result.fatalIssues, input, pools, durationDays);
+          withTrailData = finaliseAndStamp(rawItinerary);
+          ({ itinerary: validated, result } = validateItinerary(withTrailData));
+          if (!result.isValid) {
+            logger.warn("Pipeline: shipping best-effort after 2 repair attempts", {
+              remainingFatal: result.fatalIssues,
+            });
+          } else {
+            logger.info("Pipeline: second repair pass succeeded");
+          }
+        } catch (error) {
+          logger.warn("Pipeline: second repair pass failed — shipping first repair output", { error });
+        }
       } else {
         logger.info("Pipeline: repair pass succeeded");
       }

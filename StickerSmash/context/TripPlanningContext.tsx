@@ -26,8 +26,10 @@ interface TripPlanningState {
   interests: string[];
   budget: string;
   tripPrompt: string;
+  tripVibes: string[];
   includeActivities: string[];
   avoidActivities: string[];
+  foodPreferences: string[];
   tripType: TripType;
   travelPace: TravelPace | '';
 }
@@ -46,8 +48,10 @@ interface TripPlanningContextType extends TripPlanningState {
   setInterests: (interests: string[]) => void;
   setBudget: (budget: string) => void;
   setTripPrompt: (prompt: string) => void;
+  setTripVibes: (vibes: string[]) => void;
   setIncludeActivities: (activities: string[]) => void;
   setAvoidActivities: (activities: string[]) => void;
+  setFoodPreferences: (prefs: string[]) => void;
   setTripType: (type: TripType) => void;
   setTravelPace: (pace: TravelPace | '') => void;
   reset: () => void;
@@ -67,8 +71,10 @@ const defaultState: TripPlanningState = {
   interests: [],
   budget: '',
   tripPrompt: '',
+  tripVibes: [],
   includeActivities: [],
   avoidActivities: [],
+  foodPreferences: [],
   tripType: 'hub',
   travelPace: '',
 };
@@ -88,8 +94,10 @@ const TripPlanningContext = createContext<TripPlanningContextType>({
   setInterests: () => {},
   setBudget: () => {},
   setTripPrompt: () => {},
+  setTripVibes: () => {},
   setIncludeActivities: () => {},
   setAvoidActivities: () => {},
+  setFoodPreferences: () => {},
   setTripType: () => {},
   setTravelPace: () => {},
   reset: () => {},
@@ -111,8 +119,10 @@ export function TripPlanningProvider({ children }: { children: React.ReactNode }
   const setInterests = (interests: string[]) => setState(s => ({ ...s, interests, includeActivities: interests }));
   const setBudget = (budget: string) => setState(s => ({ ...s, budget }));
   const setTripPrompt = (tripPrompt: string) => setState(s => ({ ...s, tripPrompt }));
+  const setTripVibes = (tripVibes: string[]) => setState(s => ({ ...s, tripVibes }));
   const setIncludeActivities = (includeActivities: string[]) => setState(s => ({ ...s, includeActivities, interests: includeActivities }));
   const setAvoidActivities = (avoidActivities: string[]) => setState(s => ({ ...s, avoidActivities }));
+  const setFoodPreferences = (foodPreferences: string[]) => setState(s => ({ ...s, foodPreferences }));
   const setTripType = (tripType: TripType) => setState(s => ({ ...s, tripType }));
   const setTravelPace = (travelPace: TravelPace | '') => setState(s => ({ ...s, travelPace }));
   const reset = () => setState(defaultState);
@@ -123,7 +133,7 @@ export function TripPlanningProvider({ children }: { children: React.ReactNode }
         ...state,
         setFlow, setEditingTripId, setDestinationId, setDestination, setTemplateId, setTemplateTitle, setTemplateHeroImage,
         setParty, setStartDate, setEndDate, setInterests, setBudget,
-        setTripPrompt, setIncludeActivities, setAvoidActivities,
+        setTripPrompt, setTripVibes, setIncludeActivities, setAvoidActivities, setFoodPreferences,
         setTripType, setTravelPace,
         reset,
       }}

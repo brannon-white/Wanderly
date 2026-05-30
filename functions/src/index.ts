@@ -89,6 +89,12 @@ async function checkAndConsumeRegenCredit(uid: string): Promise<void> {
 
 import Anthropic from "@anthropic-ai/sdk";
 import {
+  signalsFromText,
+  signalsFromOptimizeMode,
+  recordSignals,
+  getEffectiveTasteProfile,
+} from "./orchestration/tasteProfileLearning";
+import {
   generateItineraryFlow,
   regenerateActivity,
   regenerateDay,
@@ -201,7 +207,14 @@ async function buildAndSaveItinerary(
     interestsCount: input.interests.length,
   });
 
-  const itinerary = await generateItineraryFlow(input, process.env.GOOGLE_PLACES_API_KEY);
+  // Blend the user's onboarding baseline with learned adjustments from past behavior
+  const firestore = getFirestore();
+  const userSnap = await firestore.collection("users").doc(uid).get();
+  const learned = ((userSnap.data() ?? {}).learnedTasteAdjustments ?? {}) as Record<string, number>;
+  const effectiveProfile = getEffectiveTasteProfile(input.tasteProfile, learned);
+  const enrichedInput = effectiveProfile ? { ...input, tasteProfile: effectiveProfile } : input;
+
+  const itinerary = await generateItineraryFlow(enrichedInput, process.env.GOOGLE_PLACES_API_KEY);
   logger.info("Itinerary generated from model", {
     uid,
     destinationId: input.destinationId,
@@ -210,7 +223,6 @@ async function buildAndSaveItinerary(
     daysCount: getAllDays(itinerary).length,
   });
 
-  const firestore = getFirestore();
   const itineraryRef = firestore.collection("users").doc(uid).collection("itineraries").doc();
   const timestamp = FieldValue.serverTimestamp();
 
@@ -416,6 +428,13 @@ export const regenerateActivityHttp = functionsV1
         stops: updated.stops,
         updatedAt: FieldValue.serverTimestamp(),
       });
+
+      // Fire-and-forget: extract preference signal from the reason text
+      if (reason) {
+        signalsFromText(reason)
+          .then((signals) => recordSignals(uid, signals))
+          .catch(() => {});
+      }
 
       res.status(200).json({ itinerary: updated });
     } catch (error) {
@@ -859,6 +878,12 @@ export const editItineraryWithLanguageHttp = functionsV1
       logger.info("editItineraryWithLanguageHttp", { uid, itineraryId, message });
       const updated = await editItineraryWithLanguage({ itinerary: snap.data() as any, message });
       await itineraryRef.update({ stops: updated.stops, updatedAt: FieldValue.serverTimestamp() });
+
+      // Fire-and-forget: extract preference signal from the user's message
+      signalsFromText(message)
+        .then((signals) => recordSignals(uid, signals))
+        .catch(() => {});
+
       res.status(200).json({ itinerary: updated });
     } catch (error) {
       const e = classifyHttpError(error);
@@ -890,6 +915,13 @@ export const optimizeDayHttp = functionsV1
       logger.info("optimizeDayHttp", { uid, itineraryId, dayIndex, mode });
       const updated = await optimizeDay({ itinerary: snap.data() as any, dayIndex, mode });
       await itineraryRef.update({ stops: updated.stops, updatedAt: FieldValue.serverTimestamp() });
+
+      // Fire-and-forget: deterministic signal from optimize mode (no LLM needed)
+      const optimizeSignals = signalsFromOptimizeMode(mode);
+      if (optimizeSignals.length > 0) {
+        recordSignals(uid, optimizeSignals).catch(() => {});
+      }
+
       res.status(200).json({ itinerary: updated });
     } catch (error) {
       const e = classifyHttpError(error);

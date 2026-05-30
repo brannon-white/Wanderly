@@ -109,7 +109,8 @@ function formatPlace(p: PlaceCandidate): string {
   const summary = p.editorialSummary ? ` — "${p.editorialSummary}"` : "";
   const priceStr = p.priceLevel > 0 ? ` ${"$".repeat(p.priceLevel)}` : "";
   const addr = p.address.split(",").slice(0, 2).join(",").trim();
-  return `    • ${p.name} | ${p.rating}/5 (${p.reviewCount})${priceStr} | ${addr}${summary}`;
+  const hours = p.openingHours ? ` | Hours: ${p.openingHours}` : "";
+  return `    • ${p.name} | ${p.rating}/5 (${p.reviewCount})${priceStr} | ${addr}${hours}${summary}`;
 }
 
 function formatTasteProfile(tp: TasteProfile | undefined): string {
@@ -162,7 +163,7 @@ function formatStopPool(pool: StopPool): string {
   section("ATTRACTIONS POOL", c.attractions,
     "museums, galleries, landmarks, markets, major sights. Day anchors live here.");
   section("SCENIC / OUTDOOR POOL", c.scenic,
-    "parks, viewpoints, golden-hour spots. Late-afternoon slots love these.");
+    "parks, viewpoints, golden-hour spots. If sparse for a nature-heavy destination, supplement with world-knowledge landmarks (waterfalls, geysers, etc.).");
 
   if (pool.trails.length > 0) {
     lines.push("");
@@ -183,13 +184,24 @@ function buildPlannerPrompt(
   const isRoute = (input.tripType ?? "hub") === "route" || pools.length > 1;
   const isNationalPark = input.destinationType === "national_park";
 
-  const interestLine = input.interests.length > 0
-    ? `INTERESTS: ${input.interests.join(", ")}`
-    : "INTERESTS: general sightseeing";
-
-  const includeLine = input.includeActivities?.length
-    ? `MUST INCLUDE (hard requirement): ${input.includeActivities.join(", ")}`
+  const vibesLine = input.tripVibes?.length
+    ? `CORE TRIP PERSONALITY — "${input.tripVibes.join(" · ")}"
+   ↑ This is the soul of the trip. Every day's tone, venue choices, pacing, and energy
+     must reflect this combination. A "Romantic + Scenic + Slow Travel" trip looks
+     completely different from a "Social + Fast-Paced + Adventure" trip — honor that.`
     : "";
+
+  const interestLine = input.includeActivities?.length
+    ? `ACTIVITIES TO PRIORITIZE: ${input.includeActivities.join(", ")}`
+    : input.interests.length > 0
+      ? `INTERESTS: ${input.interests.join(", ")}`
+      : "INTERESTS: general sightseeing";
+
+  const foodLine = input.foodPreferences?.length
+    ? `FOOD PREFERENCES: ${input.foodPreferences.join(", ")}
+   ↑ Let these shape every meal selection — breakfast spots, lunch, dinner, and evening drinks.`
+    : "";
+
   const avoidLine = input.avoidActivities?.length
     ? `NEVER INCLUDE: ${input.avoidActivities.join(", ")}`
     : "";
@@ -210,9 +222,13 @@ function buildPlannerPrompt(
   const routeBlock = isRoute
     ? `\nROAD TRIP CONTEXT:
 - Stops are pre-decided (see below). Don't change them.
-- The LAST day at each non-final stop should be marked isDriveDay:true, contain 3–4 short activities
-  (breakfast + scenic stop + lunch + maybe one more), and end earlier (~16:00). Skip evening.
-- Non-drive days run the full slot grid below.\n`
+- isDriveDay RULES (read carefully):
+  • isDriveDay:true ONLY for the departure day of a NON-FINAL stop (last day at stop 1 before driving to stop 2, etc.).
+  • NEVER isDriveDay on a hub trip — no inter-stop travel.
+  • NEVER isDriveDay on any day of the FINAL stop — you're already at the destination.
+  • NEVER isDriveDay on the first day at any stop.
+  • Drive days: exactly 3–4 activities (breakfast + scenic stop + lunch + optional 1 more). End ~16:00. No dinner, no evening slot.
+- Non-drive days run the full 7-slot grid below.\n`
     : "";
 
   const poolBlocks = pools.map(formatStopPool).join("\n\n");
@@ -229,15 +245,16 @@ DURATION: ${durationDays} days
 PARTY: ${input.party}
 BUDGET: ${input.budget}
 TRIP TYPE: ${isRoute ? "ROAD TRIP (multi-stop)" : "HUB (single base)"}
+${vibesLine}
 ${interestLine}
+${foodLine}
 ${promptLine}
-${includeLine}
 ${avoidLine}
 
 ${tasteBlock}
 ${parkBlock}${routeBlock}
 ═══════════════════════════════════════════════════════════════
-CANDIDATE POOLS (real venues from Google Places — prefer these)
+CANDIDATE POOLS (real venues, pre-ranked by compatibility with this traveler's taste profile — venues near the top are the best fit)
 
 ${poolBlocks}
 
@@ -250,16 +267,17 @@ DAY STRUCTURE (every non-drive day must fill these slots):
   09:30–12:00  MORNING activity     ★ required  — typical anchor slot for AM experiences
   12:00–14:00  LUNCH                ★ required  — pick from FOOD POOL
   14:00–17:00  AFTERNOON activity   ★ required  — alternate anchor slot
-  17:00–18:30  LATE AFTERNOON       ◆ strongly recommended  — scenic / golden hour / coffee / dessert / brewery
+  17:00–18:30  LATE AFTERNOON       ★ required  — scenic viewpoint / golden hour walk / coffee shop / dessert spot / brewery
   18:30–20:30  DINNER               ★ required  — pick from FOOD POOL (different from lunch)
-  20:30–22:30  EVENING              ◆ strongly recommended  — pick from NIGHTLIFE POOL (or skip only if pace=slow + low nightlife taste)
+  20:30–22:30  EVENING              ★ required  — pick from NIGHTLIFE POOL; if nightlife=low substitute a dessert spot, evening stroll, or stargazing
 
 HARD CONSTRAINTS:
 
-1. MINIMUM ${MIN_ACTIVITIES_PER_DAY} activities per non-drive day. Day must end no earlier than 20:30.
+1. MINIMUM ${MIN_ACTIVITIES_PER_DAY} activities per non-drive day. EVERY non-drive day MUST include late afternoon, dinner, AND an evening activity. Day MUST end no earlier than 20:30. This is non-negotiable — a day ending at 2 PM or 5 PM is a broken itinerary.
 2. NO REPEATED VENUES anywhere in the trip. Each restaurant, attraction, bar appears at most once.
 3. SPECIFIC NAMED PLACES ONLY. No "local cafe", no "downtown restaurant".
-4. PREFER POOL VENUES over invented names. Invent only when a slot has no plausible pool match.
+4. POOL VENUES ARE MANDATORY when the pool is non-empty. Every meal must come from the FOOD or BREAKFAST pool if that pool has options. Every cultural anchor must come from ATTRACTIONS if that pool has options. Do NOT invent a venue name when the relevant pool already has choices. Invent only when the specific pool bucket is completely empty for that category.
+4b. NATURAL LANDMARKS EXCEPTION: For scenic/nature/adventure slots, Google Places may not index major natural features (waterfalls, geysers, glaciers, fjords, craters). For these, USE YOUR WORLD KNOWLEDGE — name the actual landmark (e.g. "Seljalandsfoss Waterfall", "Geysir Geothermal Area") and provide accurate real-world coordinates. This is expected and correct for outdoor destinations.
 5. TIME FEASIBILITY: consecutive activities can't overlap. Account for transit time between coordinates.
    Format times as "09:00 AM - 10:30 AM" (12-hour, leading zero).
 6. REALISTIC DURATIONS:
@@ -287,7 +305,11 @@ D. ANCHOR PLACEMENT — each day has ONE memorable centerpiece. Sunrise hikes / 
 
 E. GEOGRAPHIC COHERENCE — build days outward from the anchor. No criss-crossing the city.
 
-F. RESPECT THE USER'S WORDS — if the user wrote "we love craft breweries", put a brewery in every stop's
+F. HONOR THE CORE PERSONALITY — the CORE TRIP PERSONALITY vibes above define the character of the entire trip,
+   not just individual activities. "Luxury + Romantic + Scenic" means curated venues, intimate settings, and
+   visual moments at every turn — even the breakfast spot should feel special. "Social + Fast-Paced + Adventure"
+   means high-energy back-to-back experiences with group-friendly venues. Let vibes bleed into every decision.
+   Also respect the user's own words — if they wrote "we love craft breweries", put a brewery in every stop's
    late-afternoon slot. If they said "no museums", omit them.
 
 ═══════════════════════════════════════════════════════════════
@@ -295,7 +317,7 @@ OUTPUT FORMAT
 
 - tripType: "${isRoute ? "route" : "hub"}"
 - stops: one entry per stop above, in the same order, with exactly the right nightCount worth of days.
-- For each day produce label ("Day N"), title (catchy theme), activities (≥ ${MIN_ACTIVITIES_PER_DAY}).
+- For each day produce label ("Day N"), title (vivid theme that captures the day's spirit — e.g. "Fire, Ice & the Golden Circle" not "Day 1 in Reykjavik"), activities (≥ ${MIN_ACTIVITIES_PER_DAY} for non-drive days, 3–4 for drive days).
 - For each activity: id, name, category, description (2–3 sentences), time, coordinates (real lat/lng), transport.
 - isDriveDay: true ONLY on departure days between road-trip stops.
 - overnightAnchor.location: where the traveller actually sleeps (the town/area).`;

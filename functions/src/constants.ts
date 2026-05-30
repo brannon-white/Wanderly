@@ -3,9 +3,8 @@ export const MODEL_NAME = "claude-sonnet-4-6";
 export const FAST_MODEL_NAME = "claude-haiku-4-5-20251001";
 
 // Floor: every non-drive day must have at least this many activities.
-// The slot grid in the prompt naturally targets 6–7; the validator catches
-// short days and the repair pass fills them in.
-export const MIN_ACTIVITIES_PER_DAY = 6;
+// The slot grid has 7 required slots; this must match.
+export const MIN_ACTIVITIES_PER_DAY = 7;
 
 // JSON Schema for a single activity — shared between generation and partial regeneration
 export const ACTIVITY_TOOL_INPUT_SCHEMA = {
@@ -20,7 +19,7 @@ export const ACTIVITY_TOOL_INPUT_SCHEMA = {
     },
     description: {
       type: "string",
-      description: "2–3 sentences. What it is, why it fits this day, one specific detail (signature dish, named view, etc.).",
+      description: "3–4 sentences. Paint the experience: what makes this place special, one specific insider tip (best dish to order / best vantage point / when to arrive to beat crowds / what to look for), and why it earns its place in this day. Write like a knowledgeable local, not a brochure.",
     },
     time: {
       type: "string",
@@ -60,13 +59,10 @@ const DAY_SCHEMA = {
   required: ["label", "title", "activities"],
   properties: {
     label: { type: "string", description: "e.g. 'Day 1'" },
-    title: { type: "string", description: "Catchy day theme, e.g. 'Temples & Street Food'" },
+    title: { type: "string", description: "Vivid day theme that captures the day's spirit — e.g. 'Fire, Ice & the Golden Circle' not 'Day 1 in Reykjavik'" },
     isDriveDay: { type: "boolean", description: "true if this is a travel/departure day between stops" },
     activities: {
       type: "array",
-      // Hard floor: every non-drive day must have at least 5 activities (breakfast,
-      // lunch, dinner, plus 2 non-meal items). The prompt asks for more based on
-      // tripStyle, and the validator enforces the style-specific minimum.
       minItems: 5,
       items: ACTIVITY_TOOL_INPUT_SCHEMA,
     },
@@ -115,7 +111,7 @@ export const ITINERARY_TOOL_INPUT_SCHEMA = {
           },
           days: {
             type: "array",
-            description: "Days spent at this stop. Last day may be a drive/departure day.",
+            description: "Days spent at this stop. On non-final stops, the last day may be isDriveDay. Final stop days are NEVER isDriveDay.",
             items: DAY_SCHEMA,
           },
         },

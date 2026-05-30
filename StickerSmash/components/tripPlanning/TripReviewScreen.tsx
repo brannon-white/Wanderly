@@ -64,8 +64,10 @@ export default function TripReviewScreen() {
     interests,
     budget,
     tripPrompt,
+    tripVibes,
     includeActivities,
     avoidActivities,
+    foodPreferences,
     tripType,
     travelPace,
     reset,
@@ -136,8 +138,10 @@ export default function TripReviewScreen() {
       budget,
       tasteProfile: (userProfile as any)?.tasteProfile,
       tripPrompt: tripPrompt || undefined,
+      tripVibes: tripVibes.length > 0 ? [...tripVibes] : undefined,
       includeActivities: includeActivities.length > 0 ? [...includeActivities] : undefined,
       avoidActivities: avoidActivities.length > 0 ? [...avoidActivities] : undefined,
+      foodPreferences: foodPreferences.length > 0 ? [...foodPreferences] : undefined,
       destinationType: destinationSnapshot?.destinationType ?? 'city',
       tripType: tripType ?? 'hub',
       travelPace: travelPace || undefined,
@@ -337,31 +341,49 @@ export default function TripReviewScreen() {
             <View style={styles.sectionIcon}>
               <Ionicons name="options-outline" size={18} color={TEXT_GRAY} />
             </View>
-            <Text style={styles.sectionLabel}>Trip Constraints</Text>
+            <Text style={styles.sectionLabel}>Trip Preferences</Text>
             <View style={{ flex: 1 }} />
-            <EditIcon onPress={() => navigation.navigate('TripInterests')} />
+            <EditIcon onPress={() => navigation.navigate('TripVibes')} />
           </View>
-          {includeActivities.length === 0 && avoidActivities.length === 0 ? (
+          {tripVibes.length === 0 && includeActivities.length === 0 && foodPreferences.length === 0 ? (
             <Text style={[styles.sectionValue, { color: TEXT_GRAY }]}>None set</Text>
           ) : (
             <>
-              {includeActivities.length > 0 && (
-                <View style={styles.pillsRow}>
-                  {includeActivities.map(i => (
-                    <View key={i} style={[styles.pill, { borderColor: '#22A67A', backgroundColor: '#EDFAF5' }]}>
-                      <Text style={[styles.pillText, { color: '#22A67A' }]}>{i}</Text>
-                    </View>
-                  ))}
-                </View>
+              {tripVibes.length > 0 && (
+                <>
+                  <Text style={styles.prefSubLabel}>Vibes</Text>
+                  <View style={styles.pillsRow}>
+                    {tripVibes.map(v => (
+                      <View key={v} style={[styles.pill, { borderColor: '#22A67A', backgroundColor: '#EDFAF5' }]}>
+                        <Text style={[styles.pillText, { color: '#22A67A' }]}>{v}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </>
               )}
-              {avoidActivities.length > 0 && (
-                <View style={[styles.pillsRow, includeActivities.length > 0 ? { marginTop: 8 } : {}]}>
-                  {avoidActivities.map(a => (
-                    <View key={a} style={[styles.pill, { borderColor: '#E04B4B', backgroundColor: '#FFF0F0' }]}>
-                      <Text style={[styles.pillText, { color: '#E04B4B' }]}>✕ {a}</Text>
-                    </View>
-                  ))}
-                </View>
+              {includeActivities.length > 0 && (
+                <>
+                  <Text style={[styles.prefSubLabel, tripVibes.length > 0 && { marginTop: 10 }]}>Activities</Text>
+                  <View style={styles.pillsRow}>
+                    {includeActivities.map(a => (
+                      <View key={a} style={[styles.pill, { borderColor: '#22A67A', backgroundColor: '#EDFAF5' }]}>
+                        <Text style={[styles.pillText, { color: '#22A67A' }]}>{a}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              )}
+              {foodPreferences.length > 0 && (
+                <>
+                  <Text style={[styles.prefSubLabel, (tripVibes.length > 0 || includeActivities.length > 0) && { marginTop: 10 }]}>Food</Text>
+                  <View style={styles.pillsRow}>
+                    {foodPreferences.map(f => (
+                      <View key={f} style={[styles.pill, { borderColor: '#22A67A', backgroundColor: '#EDFAF5' }]}>
+                        <Text style={[styles.pillText, { color: '#22A67A' }]}>{f}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </>
               )}
             </>
           )}
@@ -534,6 +556,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: TEXT_GRAY,
     fontFamily: 'SourceSans3-Regular',
+  },
+  prefSubLabel: {
+    fontSize: 12,
+    fontFamily: 'SourceSans3-SemiBold',
+    color: TEXT_GRAY,
+    paddingLeft: 36,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 6,
   },
   pillsRow: {
     flexDirection: 'row',

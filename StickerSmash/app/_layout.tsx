@@ -35,7 +35,9 @@ import DestinationScreen from '@/components/DestinationScreen';
 import TripPartyScreen from '@/components/tripPlanning/TripPartyScreen';
 import TripDatesScreen from '@/components/tripPlanning/TripDatesScreen';
 import TripPromptScreen from '@/components/tripPlanning/TripPromptScreen';
-import TripInterestsScreen from '@/components/tripPlanning/TripInterestsScreen';
+import TripVibesScreen from '@/components/tripPlanning/TripVibesScreen';
+import TripActivitiesScreen from '@/components/tripPlanning/TripActivitiesScreen';
+import TripFoodScreen from '@/components/tripPlanning/TripFoodScreen';
 import TripBudgetScreen from '@/components/tripPlanning/TripBudgetScreen';
 import TripReviewScreen from '@/components/tripPlanning/TripReviewScreen';
 import TripStyleScreen from '@/components/tripPlanning/TripStyleScreen';
@@ -65,7 +67,9 @@ export type RootStackParamList = {
   TripDates: undefined;
   TripStyle: undefined;
   TripPrompt: undefined;
-  TripInterests: undefined;
+  TripVibes: undefined;
+  TripActivities: undefined;
+  TripFood: undefined;
   TripBudget: undefined;
   TripReview: undefined;
   AllDestinations: undefined;
@@ -270,7 +274,9 @@ const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
                 <Stack.Screen name="TripDates" component={TripDatesScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripStyle" component={TripStyleScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripPrompt" component={TripPromptScreen} options={{ headerShown: false }} />
-                <Stack.Screen name="TripInterests" component={TripInterestsScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="TripVibes" component={TripVibesScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="TripActivities" component={TripActivitiesScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="TripFood" component={TripFoodScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripBudget" component={TripBudgetScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="TripReview" component={TripReviewScreen} options={{ headerShown: false }} />
                 <Stack.Screen name="ArticleWebView" component={ArticleWebViewScreen} options={{ headerShown: false }} />

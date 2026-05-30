@@ -39,6 +39,7 @@ export interface PlaceCandidate {
   category: PlaceCategory;
   neighborhood?: string;
   editorialSummary?: string;
+  openingHours?: string;
 }
 
 // ─── Single-call architecture (v8) ────────────────────────────────────────────

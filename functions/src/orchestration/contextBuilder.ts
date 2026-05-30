@@ -20,6 +20,7 @@ const FIELD_MASK = [
   "places.priceLevel",
   "places.types",
   "places.editorialSummary",
+  "places.regularOpeningHours",
 ].join(",");
 
 interface GooglePlaceResult {
@@ -32,6 +33,9 @@ interface GooglePlaceResult {
   priceLevel?: string;
   types?: string[];
   editorialSummary?: { text: string };
+  regularOpeningHours?: {
+    weekdayDescriptions?: string[];
+  };
 }
 
 function priceLevelToNumber(priceLevel?: string): number {
@@ -54,6 +58,13 @@ function inferCategory(types: string[]): PlaceCategory {
   return "attraction";
 }
 
+function compactHours(weekdayDescriptions?: string[]): string | undefined {
+  if (!weekdayDescriptions || weekdayDescriptions.length === 0) return undefined;
+  // Strip the day name prefix (e.g. "Monday: 8:00 AM – 10:00 PM") and join with semicolons
+  // to keep the string short for the prompt. Return first 4 days only to stay compact.
+  return weekdayDescriptions.slice(0, 4).map((d) => d.replace(/^[^:]+:\s*/, "")).join(" | ");
+}
+
 function toPlaceCandidate(p: GooglePlaceResult & {
   location: NonNullable<GooglePlaceResult["location"]>;
   displayName: NonNullable<GooglePlaceResult["displayName"]>;
@@ -70,6 +81,7 @@ function toPlaceCandidate(p: GooglePlaceResult & {
     types,
     category: categoryHint ?? inferCategory(types),
     editorialSummary: p.editorialSummary?.text,
+    openingHours: compactHours(p.regularOpeningHours?.weekdayDescriptions),
   };
 }
 

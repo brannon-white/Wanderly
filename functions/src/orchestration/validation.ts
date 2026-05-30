@@ -1,12 +1,15 @@
 import * as logger from "firebase-functions/logger";
-import { type GeneratedItinerary, mapAllDays } from "../itinerarySchemas";
+import { type GeneratedItinerary } from "../itinerarySchemas";
 import { MIN_ACTIVITIES_PER_DAY } from "../constants";
 
 // ~1.5 km ≈ 18-minute walk — anything beyond this is not reasonably walkable
 const MAX_WALK_KM = 1.5;
 
-// The day must end no earlier than this — otherwise dinner/evening is missing.
+// Normal days must end no earlier than 20:30 (dinner + evening fully in).
 const MIN_DAY_END_MINUTES = 20 * 60 + 30; // 20:30
+
+// Drive days are transition legs — lighter schedule, but must still run past 1 PM.
+const MIN_DRIVE_DAY_END_MINUTES = 13 * 60; // 13:00
 
 function haversineKm(
   lat1: number, lng1: number,
@@ -75,148 +78,181 @@ export function validateItinerary(
   const minActivities = MIN_ACTIVITIES_PER_DAY;
 
   let globalDayIndex = 0;
+  const lastStopIndex = itinerary.stops.length - 1;
 
-  const validated = mapAllDays(itinerary, (day) => {
-    const dayLabel = `Day ${globalDayIndex + 1}`;
-    globalDayIndex++;
+  const newStops = itinerary.stops.map((stop, stopIdx) => {
+    const isLastStop = stopIdx === lastStopIndex;
 
-    const isDriveDay = day.isDriveDay === true;
+    const newDays = stop.days.map((day) => {
+      const dayLabel = `Day ${globalDayIndex + 1}`;
+      globalDayIndex++;
 
-    // Deterministic fix: replace unreasonable walks with rideshare
-    const activitiesWithFixedTransport = day.activities.map((activity, i) => {
-      if (i === day.activities.length - 1) return activity;
-      const next = day.activities[i + 1];
-      if (!activity.coordinates || !next.coordinates) return activity;
+      const isDriveDay = day.isDriveDay === true;
 
-      const distKm = haversineKm(
-        activity.coordinates.latitude, activity.coordinates.longitude,
-        next.coordinates.latitude, next.coordinates.longitude,
-      );
-
-      if (distKm <= MAX_WALK_KM) return activity;
-
-      const transport = (activity.transport ?? []).map((t) => {
-        if (t.mode?.toLowerCase() !== "walk") return t;
-        const walkMins = Math.round(distKm * 12);
-        issues.push(
-          `${dayLabel}: replaced ${walkMins}-min walk between "${activity.name}" and "${next.name}" (${distKm.toFixed(1)} km) with rideshare`
+      // Illegal drive day: final stop has nowhere to drive to
+      if (isDriveDay && isLastStop) {
+        fatalIssues.push(
+          `${dayLabel}: final stop cannot have a drive day — treat as a normal full day ending at 8:30 PM`
         );
-        repaired = true;
-        return { ...t, mode: "taxi", time: `${Math.round(distKm * 3)} min` };
+        // Fall through and validate as a normal day
+      }
+
+      // Deterministic fix: replace unreasonable walks with rideshare
+      const activitiesWithFixedTransport = day.activities.map((activity, i) => {
+        if (i === day.activities.length - 1) return activity;
+        const next = day.activities[i + 1];
+        if (!activity.coordinates || !next.coordinates) return activity;
+
+        const distKm = haversineKm(
+          activity.coordinates.latitude, activity.coordinates.longitude,
+          next.coordinates.latitude, next.coordinates.longitude,
+        );
+
+        if (distKm <= MAX_WALK_KM) return activity;
+
+        const transport = (activity.transport ?? []).map((t) => {
+          if (t.mode?.toLowerCase() !== "walk") return t;
+          const walkMins = Math.round(distKm * 12);
+          issues.push(
+            `${dayLabel}: replaced ${walkMins}-min walk between "${activity.name}" and "${next.name}" (${distKm.toFixed(1)} km) with rideshare`
+          );
+          repaired = true;
+          return { ...t, mode: "taxi", time: `${Math.round(distKm * 3)} min` };
+        });
+
+        return { ...activity, transport };
       });
 
-      return { ...activity, transport };
-    });
+      // Deterministic fix: drop venues that duplicate ones used on earlier days
+      const activities = activitiesWithFixedTransport.filter((activity) => {
+        const key = activity.name.toLowerCase().trim();
+        if (seenVenues.has(key)) {
+          issues.push(`${dayLabel}: removed duplicate venue "${activity.name}"`);
+          repaired = true;
+          return false;
+        }
+        seenVenues.add(key);
+        return true;
+      });
 
-    // Deterministic fix: drop venues that duplicate ones used on earlier days
-    const activities = activitiesWithFixedTransport.filter((activity) => {
-      const key = activity.name.toLowerCase().trim();
-      if (seenVenues.has(key)) {
-        issues.push(`${dayLabel}: removed duplicate venue "${activity.name}"`);
-        repaired = true;
-        return false;
+      // Check time overlaps (informational unless severe)
+      for (let i = 1; i < activities.length; i++) {
+        const prev = activities[i - 1];
+        const curr = activities[i];
+        const prevTime = parseActivityTime(prev.time);
+        const currTime = parseActivityTime(curr.time);
+        if (prevTime && currTime && currTime.startMinutes < prevTime.endMinutes - 5) {
+          issues.push(`${dayLabel}: time overlap — "${prev.name}" ends after "${curr.name}" starts`);
+        }
       }
-      seenVenues.add(key);
-      return true;
-    });
 
-    // Check time overlaps (informational unless severe)
-    for (let i = 1; i < activities.length; i++) {
-      const prev = activities[i - 1];
-      const curr = activities[i];
-      const prevTime = parseActivityTime(prev.time);
-      const currTime = parseActivityTime(curr.time);
-      if (prevTime && currTime && currTime.startMinutes < prevTime.endMinutes - 5) {
-        issues.push(`${dayLabel}: time overlap — "${prev.name}" ends after "${curr.name}" starts`);
+      // Legitimate drive day (non-final stop): lighter checks only
+      if (isDriveDay && !isLastStop) {
+        if (activities.length < 3) {
+          fatalIssues.push(
+            `${dayLabel} (drive day): only ${activities.length} activities (need at least 3 — breakfast + scenic stop + lunch)`
+          );
+        }
+        const lastDriveTime = activities.length > 0
+          ? parseActivityTime(activities[activities.length - 1].time)
+          : null;
+        if (lastDriveTime && lastDriveTime.endMinutes < MIN_DRIVE_DAY_END_MINUTES) {
+          const hr = Math.floor(lastDriveTime.endMinutes / 60);
+          const min = lastDriveTime.endMinutes % 60;
+          const period = hr >= 12 ? "PM" : "AM";
+          const hr12 = hr % 12 === 0 ? 12 : hr % 12;
+          fatalIssues.push(
+            `${dayLabel} (drive day): ends at ${hr12}:${min.toString().padStart(2, "0")} ${period} — drive days must run until at least 1:00 PM`
+          );
+        }
+        return { ...day, activities };
       }
-    }
 
-    // Drive days get a lighter check: only ensure they have 2+ activities and no overlaps
-    if (isDriveDay) {
-      if (activities.length < 2) {
-        fatalIssues.push(`${dayLabel} (drive day): only ${activities.length} activities (need at least 2 — e.g. breakfast + scenic stop)`);
+      // Full normal-day checks (also applies to illegal drive days on the final stop)
+
+      // Meal completeness
+      const hasMeal = {
+        breakfast: activities.some(
+          (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
+            isMealTime(parseActivityTime(a.time)!.startMinutes, "breakfast")
+        ),
+        lunch: activities.some(
+          (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
+            isMealTime(parseActivityTime(a.time)!.startMinutes, "lunch")
+        ),
+        dinner: activities.some(
+          (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
+            isMealTime(parseActivityTime(a.time)!.startMinutes, "dinner")
+        ),
+      };
+
+      if (!hasMeal.breakfast) fatalIssues.push(`${dayLabel}: missing breakfast in the 07:30–10:00 window`);
+      if (!hasMeal.lunch) fatalIssues.push(`${dayLabel}: missing lunch in the 11:30–14:30 window`);
+      if (!hasMeal.dinner) fatalIssues.push(`${dayLabel}: missing dinner in the 18:00–21:00 window`);
+
+      // Minimum activity count
+      if (activities.length < minActivities) {
+        fatalIssues.push(
+          `${dayLabel}: only ${activities.length} activities (need at least ${minActivities} — add late-afternoon and/or evening activities)`
+        );
       }
+      if (activities.length > 10) {
+        issues.push(`${dayLabel}: ${activities.length} activities may be unrealistic`);
+      }
+
+      // Day-end check
+      const lastTime = activities.length > 0
+        ? parseActivityTime(activities[activities.length - 1].time)
+        : null;
+      if (lastTime && lastTime.endMinutes < MIN_DAY_END_MINUTES) {
+        const hr = Math.floor(lastTime.endMinutes / 60);
+        const min = lastTime.endMinutes % 60;
+        const period = hr >= 12 ? "PM" : "AM";
+        const hr12 = hr % 12 === 0 ? 12 : hr % 12;
+        fatalIssues.push(
+          `${dayLabel}: day ends at ${hr12}:${min.toString().padStart(2, "0")} ${period} — must run until at least 8:30 PM (add dinner + evening)`
+        );
+      }
+
+      // Hiking checks
+      const hikingActivities = activities.filter(
+        (a) => a.category === "adventure" || a.category === "nature"
+      );
+
+      const majorHikeCount = hikingActivities.filter((a) => {
+        const t = parseActivityTime(a.time);
+        return t !== null && t.endMinutes - t.startMinutes >= 4 * 60;
+      }).length;
+
+      if (majorHikeCount > 1) {
+        issues.push(`${dayLabel}: ${majorHikeCount} major hikes (4+ hrs each) — only one allowed per day`);
+      }
+
+      const totalHikingMinutes = hikingActivities.reduce((sum, a) => {
+        const t = parseActivityTime(a.time);
+        return sum + (t ? t.endMinutes - t.startMinutes : 0);
+      }, 0);
+
+      if (totalHikingMinutes > 6 * 60) {
+        issues.push(`${dayLabel}: ${Math.round(totalHikingMinutes / 60)}h of hiking exceeds the 6-hour daily cap`);
+      }
+
+      // Outdoor activities starting too late
+      const lateOutdoor = hikingActivities.find((a) => {
+        const t = parseActivityTime(a.time);
+        return t !== null && t.startMinutes > 15 * 60;
+      });
+      if (lateOutdoor) {
+        issues.push(`${dayLabel}: outdoor activity "${lateOutdoor.name}" starts after 3:00 PM`);
+      }
+
       return { ...day, activities };
-    }
-
-    // Meal completeness
-    const hasMeal = {
-      breakfast: activities.some(
-        (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
-          isMealTime(parseActivityTime(a.time)!.startMinutes, "breakfast")
-      ),
-      lunch: activities.some(
-        (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
-          isMealTime(parseActivityTime(a.time)!.startMinutes, "lunch")
-      ),
-      dinner: activities.some(
-        (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
-          isMealTime(parseActivityTime(a.time)!.startMinutes, "dinner")
-      ),
-    };
-
-    if (!hasMeal.breakfast) fatalIssues.push(`${dayLabel}: missing breakfast in the 07:30–10:00 window`);
-    if (!hasMeal.lunch) fatalIssues.push(`${dayLabel}: missing lunch in the 11:30–14:30 window`);
-    if (!hasMeal.dinner) fatalIssues.push(`${dayLabel}: missing dinner in the 18:00–21:00 window`);
-
-    // Minimum activity count
-    if (activities.length < minActivities) {
-      fatalIssues.push(
-        `${dayLabel}: only ${activities.length} activities (need at least ${minActivities} — add late-afternoon and/or evening activities)`
-      );
-    }
-    if (activities.length > 10) {
-      issues.push(`${dayLabel}: ${activities.length} activities may be unrealistic`);
-    }
-
-    // Day-end check — the headline fix for "day ends at 2:30 PM" bug
-    const lastTime = activities.length > 0
-      ? parseActivityTime(activities[activities.length - 1].time)
-      : null;
-    if (lastTime && lastTime.endMinutes < MIN_DAY_END_MINUTES) {
-      const hr = Math.floor(lastTime.endMinutes / 60);
-      const min = lastTime.endMinutes % 60;
-      const period = hr >= 12 ? "PM" : "AM";
-      const hr12 = hr % 12 === 0 ? 12 : hr % 12;
-      fatalIssues.push(
-        `${dayLabel}: day ends at ${hr12}:${min.toString().padStart(2, "0")} ${period} — must run until at least 8:30 PM (add dinner + evening)`
-      );
-    }
-
-    // Hiking checks
-    const hikingActivities = activities.filter(
-      (a) => a.category === "adventure" || a.category === "nature"
-    );
-
-    const majorHikeCount = hikingActivities.filter((a) => {
-      const t = parseActivityTime(a.time);
-      return t !== null && t.endMinutes - t.startMinutes >= 4 * 60;
-    }).length;
-
-    if (majorHikeCount > 1) {
-      issues.push(`${dayLabel}: ${majorHikeCount} major hikes (4+ hrs each) — only one allowed per day`);
-    }
-
-    const totalHikingMinutes = hikingActivities.reduce((sum, a) => {
-      const t = parseActivityTime(a.time);
-      return sum + (t ? t.endMinutes - t.startMinutes : 0);
-    }, 0);
-
-    if (totalHikingMinutes > 6 * 60) {
-      issues.push(`${dayLabel}: ${Math.round(totalHikingMinutes / 60)}h of hiking exceeds the 6-hour daily cap`);
-    }
-
-    // Outdoor activities starting too late
-    const lateOutdoor = hikingActivities.find((a) => {
-      const t = parseActivityTime(a.time);
-      return t !== null && t.startMinutes > 15 * 60;
     });
-    if (lateOutdoor) {
-      issues.push(`${dayLabel}: outdoor activity "${lateOutdoor.name}" starts after 3:00 PM`);
-    }
 
-    return { ...day, activities };
+    return { ...stop, days: newDays };
   });
+
+  const validated: GeneratedItinerary = { ...itinerary, stops: newStops };
 
   if (issues.length > 0 || fatalIssues.length > 0) {
     logger.info("Itinerary validation complete", {
