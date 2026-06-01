@@ -442,6 +442,47 @@ RULES:
   return updateDayByIndex(itinerary, dayIndex, newDay);
 }
 
+// ─── Specific type inference for replacement relevance ──────────────────────
+
+function inferSpecificType(name: string, category: string): string {
+  const n = name.toLowerCase();
+  if (category === "food") {
+    if (/coffee|café|cafe|espresso|latte|cappuccino/i.test(n)) return "coffee shop or café";
+    if (/bar|pub|brewery|tavern|taproom/i.test(n)) return "bar or brewery";
+    if (/bakery|pastry|boulangerie|patisserie/i.test(n)) return "bakery or pastry shop";
+    if (/ramen|sushi|noodle|pho|udon/i.test(n)) return "noodle or Asian restaurant";
+    if (/pizza|trattoria|osteria/i.test(n)) return "Italian restaurant";
+    if (/taco|burrito|cantina/i.test(n)) return "Mexican restaurant";
+    return "restaurant";
+  }
+  if (category === "culture" || category === "attraction" || category === "museum") {
+    if (/museum/i.test(n)) return "museum";
+    if (/gallery/i.test(n)) return "art gallery";
+    if (/theater|theatre/i.test(n)) return "theater";
+    if (/cathedral|church|temple|mosque/i.test(n)) return "historic religious site";
+    return "cultural attraction or landmark";
+  }
+  if (category === "adventure" || category === "nature") {
+    if (/trail|hike|trek/i.test(n)) return "hiking trail";
+    if (/beach/i.test(n)) return "beach";
+    if (/park/i.test(n)) return "park or garden";
+    if (/waterfall/i.test(n)) return "waterfall or natural feature";
+    return "outdoor activity";
+  }
+  if (category === "nightlife") return "bar or nightlife venue";
+  if (category === "wellness") return "spa or wellness center";
+  if (category === "shopping") return "market or shopping spot";
+  return category;
+}
+
+function nearbyTypesForActivity(name: string, category: string): string[] | undefined {
+  if (category !== "food") return undefined;
+  if (/coffee|café|cafe|espresso/i.test(name)) return ["cafe"];
+  if (/bar|pub|brewery|tavern/i.test(name)) return ["bar", "night_club"];
+  if (/bakery|pastry/i.test(name)) return ["bakery"];
+  return undefined;
+}
+
 // ─── Get suggested replacements for a single activity ───────────────────────
 
 export interface GetSuggestedReplacementsInput {
@@ -483,12 +524,13 @@ export async function getSuggestedReplacements(
     cumulative += stop.days.length;
   }
 
-  const isLocationAware = (reason === "similar_nearby" || reason === "hidden_gem") && activity.coordinates;
+  const specificType = inferSpecificType(activity.name, activity.category ?? "");
+  const isLocationAware = (reason === "similar_nearby" || reason === "hidden_gem" || reason === "cheaper") && activity.coordinates;
   let nearbyContext = "";
 
   if (isLocationAware && googlePlacesApiKey && activity.coordinates) {
     try {
-      const nearby = await searchNearbyForActivity(
+      let nearby = await searchNearbyForActivity(
         activity.coordinates.latitude,
         activity.coordinates.longitude,
         activity.category ?? "attraction",
@@ -496,8 +538,15 @@ export async function getSuggestedReplacements(
         {
           hiddenGemMode: reason === "hidden_gem",
           radiusMeters: reason === "hidden_gem" ? 2000 : 1500,
+          typesOverride: nearbyTypesForActivity(activity.name, activity.category ?? ""),
         }
       );
+
+      // For cheaper: filter to low-price venues only (free or inexpensive)
+      if (reason === "cheaper") {
+        nearby = nearby.filter((p) => p.priceLevel <= 2);
+      }
+
       const filtered = nearby
         .filter((p) => !existingVenues.toLowerCase().includes(p.name.toLowerCase()))
         .slice(0, 12);
@@ -551,7 +600,8 @@ TRIP CONTEXT:
 
 ACTIVITY TO REPLACE:
 - Name: ${activity.name}
-- Type: ${activity.category}
+- Specific type: ${specificType}
+- Category: ${activity.category}
 - Time slot: ${activity.time}
 ${reasonHint}
 
@@ -562,11 +612,14 @@ ${nextActivity ? `- Next activity: ${nextActivity.name} (starts ${nextActivity.t
 ${nearbyContext}
 RULES:
 1. Each candidate must keep the same time slot (${activity.time})
-2. Do NOT reuse any of these existing venues: ${existingVenues}
-3. All ${count} candidates must be different from each other
-4. ${nearbyContext ? "Use the real nearby places listed above" : `Use real, well-known establishments in ${stopLocation}`}
-5. Set transport to travel from the candidate to: ${nextActivity?.name ?? "end of day"} (empty array if last)
-6. Image field: set to empty string`;
+2. CATEGORY MATCH — CRITICAL: every candidate must be the same specific type as the original.
+   "${activity.name}" is a ${specificType}. Only suggest ${specificType}s as replacements.
+   Do NOT suggest a restaurant if replacing a coffee shop. Do NOT suggest a museum if replacing a bar.
+3. Do NOT reuse any of these existing venues: ${existingVenues}
+4. All ${count} candidates must be different from each other
+5. ${nearbyContext ? "Use the real nearby places listed above" : `Use real, well-known establishments in ${stopLocation}`}
+6. Set transport to travel from the candidate to: ${nextActivity?.name ?? "end of day"} (empty array if last)
+7. Image field: set to empty string`;
 
   const response = await client.messages.create({
     model: MODEL_NAME,
@@ -685,32 +738,31 @@ Analyze the request and return the minimal set of mutations needed.
   const { mutations } = toolBlock.input as { mutations: ItineraryMutation[] };
 
   let result = itinerary;
-  const currentDays = getAllDays(result);
 
   for (const mutation of mutations) {
+    // Re-derive the current day from the accumulated result on every iteration
+    // so that multiple mutations on the same day compose correctly.
     if (mutation.op === "replace_activity") {
       const { dayIndex, activityIndex, activity } = mutation;
-      const day = currentDays[dayIndex];
+      const day = getAllDays(result)[dayIndex];
       if (day?.activities[activityIndex]) {
-        const newDay = {
+        result = updateDayByIndex(result, dayIndex, {
           ...day,
           activities: day.activities.map((a, ai) => (ai === activityIndex ? activity : a)),
-        };
-        result = updateDayByIndex(result, dayIndex, newDay);
+        });
       }
     } else if (mutation.op === "remove_activity") {
       const { dayIndex, activityIndex } = mutation;
-      const day = currentDays[dayIndex];
+      const day = getAllDays(result)[dayIndex];
       if (day) {
-        const newDay = {
+        result = updateDayByIndex(result, dayIndex, {
           ...day,
           activities: day.activities.filter((_, i) => i !== activityIndex),
-        };
-        result = updateDayByIndex(result, dayIndex, newDay);
+        });
       }
     } else if (mutation.op === "reorder_day") {
       const { dayIndex, newOrder } = mutation;
-      const day = currentDays[dayIndex];
+      const day = getAllDays(result)[dayIndex];
       if (day) {
         const reordered = newOrder
           .filter((i) => i >= 0 && i < day.activities.length)
@@ -802,9 +854,22 @@ export async function optimizeDay(
     .map(({ i }) => i);
 
   if (mode === "minimize_walking") {
-    const newOrder = nearestNeighborOrder(day.activities);
-    const reordered = newOrder.map((i) => day.activities[i]);
-    return updateDayByIndex(itinerary, dayIndex, { ...day, activities: reordered });
+    // Meals must stay in their time-based positions — only reorder non-meal activities.
+    // Extract non-meal activities, run nearest-neighbor on them, then slot them back.
+    const mealIndices = new Set(
+      day.activities.map((a, i) => ({ i, isFood: a.category === "food" }))
+        .filter(({ isFood }) => isFood)
+        .map(({ i }) => i)
+    );
+    const nonMealActivities = day.activities.filter((_, i) => !mealIndices.has(i));
+    const nonMealOrder = nearestNeighborOrder(nonMealActivities);
+    const reorderedNonMeals = nonMealOrder.map((i) => nonMealActivities[i]);
+
+    let nonMealCursor = 0;
+    const rebuilt = day.activities.map((a, i) =>
+      mealIndices.has(i) ? a : reorderedNonMeals[nonMealCursor++]
+    );
+    return updateDayByIndex(itinerary, dayIndex, { ...day, activities: rebuilt });
   }
 
   // Find stop location for this day
@@ -821,10 +886,10 @@ export async function optimizeDay(
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   const modeInstructions: Record<string, string> = {
-    minimize_cost: "Reorder and if needed replace expensive activities with free/cheap alternatives.",
-    relax_mode: "Remove rushed transitions. Reduce activities if needed. Prioritize cafes, parks, and leisurely experiences.",
-    maximize_sightseeing: "Optimize order and timing to visit the maximum number of top-rated attractions efficiently.",
-    foodie_mode: "Replace non-food activities with notable food experiences, local markets, or famous restaurants.",
+    minimize_cost: "Replace expensive activities with free or cheap alternatives. Keep all meals. Use replace_activity only.",
+    relax_mode: "Replace back-to-back high-energy activities with cafes, parks, or leisurely experiences. Optionally use remove_activity to cut one rushed stop. Keep all meals.",
+    maximize_sightseeing: "Replace non-essential activities (casual walks, shopping) with top-rated landmarks, museums, and cultural sites. KEEP ALL MEALS. Use replace_activity only — NEVER use remove_activity for this mode. The goal is better sights, not fewer activities.",
+    foodie_mode: "Replace non-food activities with notable restaurants, local markets, or famous food experiences. Keep at least 2 non-food activities per day.",
   };
 
   const activityList = day.activities.map((a, i) =>
@@ -852,10 +917,17 @@ export async function optimizeDay(
     },
   };
 
-  const prompt = `Optimize day ${dayIndex + 1} of a travel itinerary for: ${mode.replace(/_/g, " ")}.
+  const modeGuard = mode === "maximize_sightseeing"
+    ? "\n⚠️ CRITICAL: Do NOT use remove_activity. Only use replace_activity to swap non-sightseeing stops with attractions."
+    : mode === "relax_mode"
+    ? "\n⚠️ Remove at most 1 activity. Prefer replace_activity over remove_activity."
+    : "";
+
+  const prompt = `Optimize day ${dayIndex + 1} of a travel itinerary.
 
 LOCATION: ${stopLocation}${itinerary.country ? `, ${itinerary.country}` : ""}
-OPTIMIZATION GOAL: ${modeInstructions[mode] ?? mode}
+OPTIMIZATION MODE: ${mode.replace(/_/g, " ").toUpperCase()}
+GOAL: ${modeInstructions[mode] ?? mode}${modeGuard}
 
 CURRENT DAY ACTIVITIES:
 ${activityList}
@@ -863,9 +935,9 @@ ${activityList}
 RULES:
 - Do NOT modify LOCKED activities (marked with 🔒)
 - Locked activity indices: [${lockedActivities.join(", ")}]
-- Use reorder_day for reordering. Use replace_activity to swap. Use remove_activity to delete.
+- Use reorder_day for reordering. Use replace_activity to swap in a new activity. Use remove_activity to delete.
 - All operations reference dayIndex: ${dayIndex}
-- Return the minimal mutations needed`;
+- Return only the mutations needed to achieve the goal`;
 
   const response = await client.messages.create({
     model: FAST_MODEL_NAME,

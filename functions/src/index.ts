@@ -116,7 +116,8 @@ import {
   type CallableGenerateItineraryResponse,
   type GenerateItineraryRequest,
 } from "./itinerarySchemas";
-import { getAllDays } from "./itinerarySchemas";
+import { getAllDays, updateDayByIndex, type GeneratedItinerary } from "./itinerarySchemas";
+import { enrichDayTransportTimes, enrichTransportTimes } from "./orchestration/directions";
 
 initializeApp();
 
@@ -378,7 +379,7 @@ export const regenerateActivityHttp = functionsV1
   .runWith({
     maxInstances: 10,
     timeoutSeconds: 120,
-    secrets: [anthropicApiKey],
+    secrets: [anthropicApiKey, googlePlacesApiKey],
     serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
   })
   .https.onRequest(async (req, res) => {
@@ -422,7 +423,12 @@ export const regenerateActivityHttp = functionsV1
 
       logger.info("regenerateActivityHttp", { uid, itineraryId, dayIndex, activityIndex });
 
-      const updated = await regenerateActivity({ itinerary: currentItinerary, dayIndex, activityIndex, reason });
+      let updated = await regenerateActivity({ itinerary: currentItinerary, dayIndex, activityIndex, reason });
+
+      // Re-enrich transport times for the affected day so travel legs stay accurate
+      if (process.env.GOOGLE_PLACES_API_KEY) {
+        updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
+      }
 
       await itineraryRef.update({
         stops: updated.stops,
@@ -825,7 +831,7 @@ export const getSuggestedReplacementsHttp = functionsV1
 
 export const confirmActivityReplacementHttp = functionsV1
   .region("us-central1")
-  .runWith({ maxInstances: 10, timeoutSeconds: 30, serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
+  .runWith({ maxInstances: 10, timeoutSeconds: 60, secrets: [googlePlacesApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
   .https.onRequest(async (req, res) => {
     if (corsHandler(req, res)) return;
     if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed." }); return; }
@@ -840,14 +846,23 @@ export const confirmActivityReplacementHttp = functionsV1
       const itineraryRef = getFirestore().collection("users").doc(uid).collection("itineraries").doc(itineraryId);
       const snap = await itineraryRef.get();
       if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
-      const current = snap.data() as any;
-      const updatedDays = current.days.map((d: any, di: number) => {
-        if (di !== dayIndex) return d;
-        return { ...d, activities: d.activities.map((a: any, ai: number) => ai === activityIndex ? candidateActivity : a) };
-      });
-      await itineraryRef.update({ days: updatedDays, updatedAt: FieldValue.serverTimestamp() });
+      const current = snap.data() as GeneratedItinerary;
+      const currentDay = getAllDays(current)[dayIndex];
+      if (!currentDay) { res.status(404).json({ error: "Day not found." }); return; }
+      const updatedDay = {
+        ...currentDay,
+        activities: currentDay.activities.map((a, ai) => ai === activityIndex ? candidateActivity : a),
+      };
+      let updated = updateDayByIndex(current, dayIndex, updatedDay);
+
+      // Re-enrich transport times for the affected day so legs stay accurate after the swap
+      if (process.env.GOOGLE_PLACES_API_KEY) {
+        updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
+      }
+
+      await itineraryRef.update({ stops: updated.stops, updatedAt: FieldValue.serverTimestamp() });
       logger.info("confirmActivityReplacementHttp", { uid, itineraryId, dayIndex, activityIndex });
-      res.status(200).json({ itinerary: { ...current, days: updatedDays } });
+      res.status(200).json({ itinerary: updated });
     } catch (error) {
       const e = classifyHttpError(error);
       logger.error("confirmActivityReplacementHttp failed", { ...e, rawError: error });
@@ -859,7 +874,7 @@ export const confirmActivityReplacementHttp = functionsV1
 
 export const editItineraryWithLanguageHttp = functionsV1
   .region("us-central1")
-  .runWith({ maxInstances: 10, timeoutSeconds: 120, secrets: [anthropicApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
+  .runWith({ maxInstances: 10, timeoutSeconds: 120, secrets: [anthropicApiKey, googlePlacesApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
   .https.onRequest(async (req, res) => {
     if (corsHandler(req, res)) return;
     if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed." }); return; }
@@ -876,7 +891,13 @@ export const editItineraryWithLanguageHttp = functionsV1
       const snap = await itineraryRef.get();
       if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
       logger.info("editItineraryWithLanguageHttp", { uid, itineraryId, message });
-      const updated = await editItineraryWithLanguage({ itinerary: snap.data() as any, message });
+      let updated = await editItineraryWithLanguage({ itinerary: snap.data() as any, message });
+
+      // Re-enrich transport for all days — natural language edits can affect multiple days
+      if (process.env.GOOGLE_PLACES_API_KEY) {
+        updated = await enrichTransportTimes(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
+      }
+
       await itineraryRef.update({ stops: updated.stops, updatedAt: FieldValue.serverTimestamp() });
 
       // Fire-and-forget: extract preference signal from the user's message
@@ -896,7 +917,7 @@ export const editItineraryWithLanguageHttp = functionsV1
 
 export const optimizeDayHttp = functionsV1
   .region("us-central1")
-  .runWith({ maxInstances: 10, timeoutSeconds: 120, secrets: [anthropicApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
+  .runWith({ maxInstances: 10, timeoutSeconds: 120, secrets: [anthropicApiKey, googlePlacesApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
   .https.onRequest(async (req, res) => {
     if (corsHandler(req, res)) return;
     if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed." }); return; }
@@ -913,7 +934,13 @@ export const optimizeDayHttp = functionsV1
       const snap = await itineraryRef.get();
       if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
       logger.info("optimizeDayHttp", { uid, itineraryId, dayIndex, mode });
-      const updated = await optimizeDay({ itinerary: snap.data() as any, dayIndex, mode });
+      let updated = await optimizeDay({ itinerary: snap.data() as any, dayIndex, mode });
+
+      // Re-enrich transport for the optimized day — activities may be reordered or replaced
+      if (process.env.GOOGLE_PLACES_API_KEY) {
+        updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
+      }
+
       await itineraryRef.update({ stops: updated.stops, updatedAt: FieldValue.serverTimestamp() });
 
       // Fire-and-forget: deterministic signal from optimize mode (no LLM needed)

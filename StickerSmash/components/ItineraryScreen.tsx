@@ -43,7 +43,7 @@ import ReplaceSuggestionsSheet, { type ActivityAction, type SheetTarget } from '
 import ActivityDetailSheet from './ActivityDetailSheet';
 import SmartBanner from './SmartBanner';
 import DayOptimizeBar from './DayOptimizeBar';
-import { editItineraryWithLanguage } from '@/services/regenerateItinerary';
+import { editItineraryWithLanguage, getSuggestedReplacements } from '@/services/regenerateItinerary';
 import { analyzeDay, type ActivityInsight } from '@/utils/itineraryInsights';
 import ItineraryRefinementBar from './ItineraryRefinementBar';
 
@@ -369,6 +369,7 @@ export default function ItineraryScreen() {
   const [sheetTarget, setSheetTarget] = useState<SheetTarget | null>(null);
   const sheetRef = useRef<BottomSheet>(null);
   const [detailActivity, setDetailActivity] = useState<{ activity: ItineraryActivity; dayIndex: number; activityIndex: number } | null>(null);
+  const [preloadedSuggestions, setPreloadedSuggestions] = useState<Record<string, ItineraryActivity[]>>({});
   const [aiBarMessage, setAiBarMessage] = useState('');
   const [aiBarLoading, setAiBarLoading] = useState(false);
   const shareCardRef = useRef<View>(null);
@@ -543,6 +544,20 @@ export default function ItineraryScreen() {
       setHeroUri(url ?? undefined);
     });
   }, [itinerary?.id]);
+
+  // Prefetch "Similar" suggestions the moment an activity sheet opens so
+  // there's no loading delay when the user taps the Similar button.
+  useEffect(() => {
+    if (!detailActivity || !id || isBrowsing) return;
+    const { dayIndex, activityIndex } = detailActivity;
+    const key = `${dayIndex}-${activityIndex}`;
+    if (preloadedSuggestions[key]) return; // already cached
+    getSuggestedReplacements({ itineraryId: id, dayIndex, activityIndex, reason: 'similar_nearby', count: 3 })
+      .then(({ candidates }) => {
+        setPreloadedSuggestions((prev) => ({ ...prev, [key]: candidates }));
+      })
+      .catch(() => {}); // silent — will fetch normally on tap if this fails
+  }, [detailActivity?.dayIndex, detailActivity?.activityIndex, id]);
 
   const getDayLabel = (index: number): string => {
     if (isBrowsing || !committedTrip) return (itinerary ? getItineraryDays(itinerary)[index]?.label : null) ?? `Day ${index + 1}`;
@@ -1067,6 +1082,11 @@ export default function ItineraryScreen() {
         <ReplaceSuggestionsSheet
           itineraryId={id}
           target={sheetTarget}
+          preloadedCandidates={
+            sheetTarget?.action === 'similar_nearby'
+              ? preloadedSuggestions[`${sheetTarget.dayIndex}-${sheetTarget.activityIndex}`]
+              : undefined
+          }
           onConfirmed={handleConfirmed}
           onDismiss={() => setSheetTarget(null)}
           sheetRef={sheetRef}

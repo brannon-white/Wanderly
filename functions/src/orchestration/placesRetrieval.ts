@@ -185,10 +185,12 @@ export async function searchNearbyForActivity(
   lng: number,
   category: string,
   apiKey: string,
-  options: { hiddenGemMode?: boolean; radiusMeters?: number } = {}
+  options: { hiddenGemMode?: boolean; radiusMeters?: number; typesOverride?: string[] } = {}
 ): Promise<PlaceCandidate[]> {
-  const { hiddenGemMode = false, radiusMeters = 1500 } = options;
-  const types = hiddenGemMode ? GENERAL_TYPES : (CATEGORY_TYPES[category.toLowerCase()] ?? GENERAL_TYPES);
+  const { hiddenGemMode = false, radiusMeters = 1500, typesOverride } = options;
+  const types = hiddenGemMode
+    ? GENERAL_TYPES
+    : (typesOverride ?? CATEGORY_TYPES[category.toLowerCase()] ?? GENERAL_TYPES);
   const places = await searchNearby(lat, lng, types, apiKey, radiusMeters);
 
   if (hiddenGemMode) {

@@ -184,30 +184,37 @@ function buildPlannerPrompt(
   const isRoute = (input.tripType ?? "hub") === "route" || pools.length > 1;
   const isNationalPark = input.destinationType === "national_park";
 
-  const vibesLine = input.tripVibes?.length
-    ? `CORE TRIP PERSONALITY — "${input.tripVibes.join(" · ")}"
-   ↑ This is the soul of the trip. Every day's tone, venue choices, pacing, and energy
-     must reflect this combination. A "Romantic + Scenic + Slow Travel" trip looks
-     completely different from a "Social + Fast-Paced + Adventure" trip — honor that.`
-    : "";
-
-  const interestLine = input.includeActivities?.length
-    ? `ACTIVITIES TO PRIORITIZE: ${input.includeActivities.join(", ")}`
+  // Build a single personalization block that frames interests as a LENS, not a filter.
+  const activityList = input.includeActivities?.length
+    ? input.includeActivities
     : input.interests.length > 0
-      ? `INTERESTS: ${input.interests.join(", ")}`
-      : "INTERESTS: general sightseeing";
+      ? input.interests
+      : [];
 
-  const foodLine = input.foodPreferences?.length
-    ? `FOOD PREFERENCES: ${input.foodPreferences.join(", ")}
-   ↑ Let these shape every meal selection — breakfast spots, lunch, dinner, and evening drinks.`
-    : "";
+  const personalizationLines: string[] = [];
+  if (activityList.length || input.tripVibes?.length || input.foodPreferences?.length || input.tripPrompt) {
+    personalizationLines.push("PERSONALIZATION — use these as a LENS, not a filter:");
+    if (activityList.length) {
+      personalizationLines.push(`  Interests/activities: ${activityList.join(", ")}`);
+    }
+    if (input.tripVibes?.length) {
+      personalizationLines.push(`  Vibes: ${input.tripVibes.join(", ")}`);
+    }
+    if (input.foodPreferences?.length) {
+      personalizationLines.push(`  Food: ${input.foodPreferences.join(", ")} — let these shape every meal selection`);
+    }
+    if (input.tripPrompt) {
+      personalizationLines.push(`  User's own words: "${input.tripPrompt}" ← weight this heavily`);
+    }
+    personalizationLines.push(`  ↑ These shape HOW the trip feels and which version of things you choose — NOT what gets included.`);
+    personalizationLines.push(`    A hiker in Rome still visits the Colosseum — they just walk the scenic route there.`);
+    personalizationLines.push(`    A foodie in Tokyo still visits Shibuya — they just know the best izakaya nearby.`);
+    personalizationLines.push(`    Interests guide emphasis and secondary choices. They never replace iconic destinations.`);
+  }
+  const personalizationBlock = personalizationLines.join("\n");
 
   const avoidLine = input.avoidActivities?.length
     ? `NEVER INCLUDE: ${input.avoidActivities.join(", ")}`
-    : "";
-
-  const promptLine = input.tripPrompt
-    ? `USER'S OWN WORDS: "${input.tripPrompt}"  ← weight this heavily over generic preferences`
     : "";
 
   const tasteBlock = formatTasteProfile(input.tasteProfile);
@@ -245,10 +252,7 @@ DURATION: ${durationDays} days
 PARTY: ${input.party}
 BUDGET: ${input.budget}
 TRIP TYPE: ${isRoute ? "ROAD TRIP (multi-stop)" : "HUB (single base)"}
-${vibesLine}
-${interestLine}
-${foodLine}
-${promptLine}
+${personalizationBlock}
 ${avoidLine}
 
 ${tasteBlock}
@@ -288,11 +292,16 @@ HARD CONSTRAINTS:
 8. CATEGORY field: "food" for all meals, "adventure" for hikes/trails, "nightlife" for bars, "culture" for museums, "nature" for parks/viewpoints, "attraction" otherwise.
 9. TRANSPORT array describes how to reach the NEXT activity (mode + realistic time). Last activity = empty array.
 10. GOOGLE MAPS URLs: https://www.google.com/maps/search/?api=1&query=Place+Name+City
+11. TOP ATTRACTIONS ARE NOT OPTIONAL: Every stop must include at least one iconic landmark, cultural site, or
+    must-see local experience — even when the user's interests are narrow (e.g. only hiking selected). User
+    interests emphasize and frame; they do not exclude. If the ATTRACTIONS pool has highly-rated venues, use them.
+    The itinerary must reflect the DESTINATION, not just the user's hobby.
 
 DESIGN PRINCIPLES (how a great planner thinks):
 
 A. CONTRAST DAYS — vary anchor type day to day. Don't put two big hikes back-to-back. If Day 1 is a major hike,
-   Day 2 should be cultural / urban / food-driven.
+   Day 2 should be cultural / urban / food-driven. Even for users who selected only one interest (e.g. hiking),
+   contrast is mandatory — it makes the trip feel like a journey, not a single-activity training camp.
 
 B. ENERGY CURVE — across a 5-day trip, alternate intensities. Schedule the most demanding day mid-trip,
    not on the arrival day.
@@ -305,10 +314,11 @@ D. ANCHOR PLACEMENT — each day has ONE memorable centerpiece. Sunrise hikes / 
 
 E. GEOGRAPHIC COHERENCE — build days outward from the anchor. No criss-crossing the city.
 
-F. HONOR THE CORE PERSONALITY — the CORE TRIP PERSONALITY vibes above define the character of the entire trip,
-   not just individual activities. "Luxury + Romantic + Scenic" means curated venues, intimate settings, and
-   visual moments at every turn — even the breakfast spot should feel special. "Social + Fast-Paced + Adventure"
-   means high-energy back-to-back experiences with group-friendly venues. Let vibes bleed into every decision.
+F. HONOR THE PERSONALITY — the vibes and interests define the CHARACTER of the trip, not a whitelist of allowed
+   activities. "Luxury + Romantic + Scenic" means curated venues, intimate settings, and visual moments at every
+   turn — even the breakfast spot should feel special. "Hiking + Adventure" means you find the most scenic,
+   physically engaging version of each day — but you still visit the museum, the waterfall, the old town.
+   Let the personality bleed into HOW you plan every day, not into WHAT you omit.
    Also respect the user's own words — if they wrote "we love craft breweries", put a brewery in every stop's
    late-afternoon slot. If they said "no museums", omit them.
 

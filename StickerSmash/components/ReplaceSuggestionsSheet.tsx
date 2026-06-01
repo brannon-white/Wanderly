@@ -54,6 +54,7 @@ export interface SheetTarget {
 interface Props {
   itineraryId: string;
   target: SheetTarget | null;
+  preloadedCandidates?: ItineraryActivity[];
   onConfirmed: (updatedItinerary: GeneratedItinerary) => void;
   onDismiss: () => void;
   sheetRef: React.RefObject<BottomSheet | null>;
@@ -65,6 +66,7 @@ type SheetState = 'idle' | 'loading' | 'ready' | 'confirming';
 export default function ReplaceSuggestionsSheet({
   itineraryId,
   target,
+  preloadedCandidates,
   onConfirmed,
   onDismiss,
   sheetRef,
@@ -79,10 +81,23 @@ export default function ReplaceSuggestionsSheet({
   useEffect(() => {
     if (!target) return;
     currentTarget.current = target;
-    setState('loading');
     setCandidates([]);
     setCandidateImages({});
 
+    // If results were pre-fetched before the user tapped, skip the loading spinner entirely.
+    if (preloadedCandidates && preloadedCandidates.length > 0) {
+      setCandidates(preloadedCandidates);
+      setState('ready');
+      preloadedCandidates.forEach((item, idx) => {
+        if (!item.name) return;
+        searchPhoto(item.name).then((uri) => {
+          if (uri) setCandidateImages((prev) => ({ ...prev, [idx]: uri }));
+        }).catch(() => {});
+      });
+      return;
+    }
+
+    setState('loading');
     const reason = REASON_FOR_ACTION[target.action];
     getSuggestedReplacements({
       itineraryId,
@@ -142,13 +157,11 @@ export default function ReplaceSuggestionsSheet({
     onDismiss();
   }, [onDismiss, sheetRef]);
 
-  const snapPoints = ['65%', '90%'];
-
   return (
     <BottomSheet
       ref={sheetRef}
       index={-1}
-      snapPoints={snapPoints}
+      snapPoints={['55%', '80%']}
       enablePanDownToClose
       onClose={onDismiss}
       backgroundStyle={styles.sheetBg}
@@ -156,13 +169,13 @@ export default function ReplaceSuggestionsSheet({
     >
       <BottomSheetView style={styles.container}>
         <View style={styles.header}>
-          <View>
+          <View style={{ flex: 1, marginRight: 12 }}>
             <Text style={styles.headerTitle}>
-              {target ? `${ACTION_LABELS[target.action]}` : 'Suggestions'}
+              {target ? ACTION_LABELS[target.action] : 'Suggestions'}
             </Text>
             {target && (
               <Text style={styles.headerSubtitle} numberOfLines={1}>
-                {target.activityName}
+                Replacing: {target.activityName}
               </Text>
             )}
           </View>
@@ -180,8 +193,7 @@ export default function ReplaceSuggestionsSheet({
 
         {(state === 'ready' || state === 'confirming') && (
           <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.candidateList}
           >
             {candidates.map((candidate, idx) => (
@@ -201,50 +213,52 @@ export default function ReplaceSuggestionsSheet({
                   </View>
                 ) : null}
 
-                <View style={styles.candidateImageWrapper}>
-                  {candidateImages[idx] ? (
-                    <Image
-                      source={{ uri: candidateImages[idx] }}
-                      style={styles.candidateImage}
-                      contentFit="cover"
-                    />
-                  ) : (
-                    <View style={[styles.candidateImage, styles.candidateImagePlaceholder]}>
-                      <Ionicons name="image-outline" size={28} color="#C4BFDF" />
-                    </View>
-                  )}
-                </View>
+                {/* Thumbnail */}
+                {candidateImages[idx] ? (
+                  <Image
+                    source={{ uri: candidateImages[idx] }}
+                    style={styles.thumbnail}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
+                    <Ionicons name="image-outline" size={22} color="#C4BFDF" />
+                  </View>
+                )}
 
+                {/* Content */}
                 <View style={styles.candidateInfo}>
                   <Text style={styles.candidateName} numberOfLines={2}>
                     {candidate.name}
                   </Text>
-
-                  {candidate.category ? (
-                    <View style={styles.categoryPill}>
-                      <Text style={styles.categoryPillText}>{candidate.category}</Text>
-                    </View>
-                  ) : null}
-
-                  <View style={styles.candidateMeta}>
+                  <View style={styles.metaRow}>
                     {candidate.rating ? (
                       <View style={styles.ratingRow}>
                         <Ionicons name="star" size={11} color="#F5A623" />
                         <Text style={styles.ratingText}>{candidate.rating.toFixed(1)}</Text>
                       </View>
                     ) : null}
+                    {candidate.category ? (
+                      <Text style={styles.metaDot}>·</Text>
+                    ) : null}
+                    {candidate.category ? (
+                      <Text style={styles.categoryText}>{candidate.category}</Text>
+                    ) : null}
                     {candidate.cost ? (
-                      <Text style={styles.costText}>{candidate.cost}</Text>
+                      <>
+                        <Text style={styles.metaDot}>·</Text>
+                        <Text style={styles.costText}>{candidate.cost}</Text>
+                      </>
                     ) : null}
                   </View>
-
                   {candidate.time ? (
                     <Text style={styles.timeText}>{candidate.time}</Text>
                   ) : null}
+                </View>
 
-                  <View style={styles.tapHint}>
-                    <Text style={styles.tapHintText}>Tap to select</Text>
-                  </View>
+                {/* Select arrow */}
+                <View style={styles.selectBtn}>
+                  <Ionicons name="arrow-forward" size={16} color="#6A62B7" />
                 </View>
               </TouchableOpacity>
             ))}
@@ -267,7 +281,6 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingBottom: 32,
   },
   header: {
     flexDirection: 'row',
@@ -275,17 +288,17 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     paddingHorizontal: 20,
     paddingTop: 4,
-    paddingBottom: 16,
+    paddingBottom: 14,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     color: '#1A1A2E',
     fontFamily: 'SourceSans3-Regular',
   },
   headerSubtitle: {
-    fontSize: 13,
-    color: '#888',
+    fontSize: 12,
+    color: '#999',
     marginTop: 2,
     fontFamily: 'SourceSans3-Regular',
   },
@@ -303,74 +316,61 @@ const styles = StyleSheet.create({
   },
   candidateList: {
     paddingHorizontal: 16,
-    paddingBottom: 8,
-    gap: 12,
+    paddingBottom: 24,
+    gap: 10,
   },
   candidateCard: {
-    width: 180,
+    flexDirection: 'row',
+    alignItems: 'center',
     borderRadius: 14,
     backgroundColor: '#fff',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    elevation: 2,
     overflow: 'hidden',
+    gap: 12,
+    paddingRight: 14,
   },
   candidateCardConfirming: {
-    opacity: 0.7,
+    opacity: 0.65,
   },
   confirmingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(106,98,183,0.6)',
+    backgroundColor: 'rgba(106,98,183,0.55)',
     zIndex: 10,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
   },
-  candidateImageWrapper: {
-    width: '100%',
-    height: 110,
+  thumbnail: {
+    width: 80,
+    height: 80,
+    flexShrink: 0,
   },
-  candidateImage: {
-    width: '100%',
-    height: 110,
-  },
-  candidateImagePlaceholder: {
+  thumbnailPlaceholder: {
     backgroundColor: '#E8E6F5',
     alignItems: 'center',
     justifyContent: 'center',
   },
   candidateInfo: {
-    padding: 10,
-    gap: 4,
+    flex: 1,
+    paddingVertical: 10,
+    gap: 3,
   },
   candidateName: {
     fontSize: 14,
     fontWeight: '600',
     color: '#1A1A2E',
-    lineHeight: 18,
+    lineHeight: 19,
     fontFamily: 'SourceSans3-Regular',
   },
-  categoryPill: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#EDE9FF',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    marginTop: 2,
-  },
-  categoryPillText: {
-    fontSize: 10,
-    color: '#6A62B7',
-    fontFamily: 'SourceSans3-Regular',
-    textTransform: 'capitalize',
-  },
-  candidateMeta: {
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 2,
+    gap: 4,
+    flexWrap: 'wrap',
   },
   ratingRow: {
     flexDirection: 'row',
@@ -382,28 +382,34 @@ const styles = StyleSheet.create({
     color: '#555',
     fontFamily: 'SourceSans3-Regular',
   },
+  metaDot: {
+    fontSize: 11,
+    color: '#bbb',
+    fontFamily: 'SourceSans3-Regular',
+  },
+  categoryText: {
+    fontSize: 11,
+    color: '#888',
+    fontFamily: 'SourceSans3-Regular',
+    textTransform: 'capitalize',
+  },
   costText: {
     fontSize: 11,
     color: '#3D9970',
     fontFamily: 'SourceSans3-Regular',
   },
   timeText: {
-    fontSize: 10,
-    color: '#999',
-    fontFamily: 'SourceSans3-Regular',
-    marginTop: 2,
-  },
-  tapHint: {
-    marginTop: 6,
-    backgroundColor: '#6A62B7',
-    borderRadius: 8,
-    paddingVertical: 5,
-    alignItems: 'center',
-  },
-  tapHintText: {
-    color: '#fff',
     fontSize: 11,
-    fontWeight: '600',
+    color: '#aaa',
     fontFamily: 'SourceSans3-Regular',
+  },
+  selectBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F0EEFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
 });
