@@ -306,17 +306,17 @@ export default function ActivityDetailSheet({
               <>
                 <View style={styles.divider} />
                 <View style={styles.actionsGrid}>
-                  <TouchableOpacity style={styles.actionTile} onPress={() => triggerAction('replace')}>
-                    <Ionicons name="refresh-outline" size={20} color={PURPLE} />
-                    <Text style={styles.actionTileText}>Replace</Text>
+                  <TouchableOpacity style={styles.actionTile} onPress={() => triggerAction('similar_nearby')}>
+                    <Ionicons name="location-outline" size={20} color={PURPLE} />
+                    <Text style={styles.actionTileText}>Similar</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.actionTile} onPress={() => triggerAction('cheaper')}>
                     <Ionicons name="cash-outline" size={20} color={PURPLE} />
                     <Text style={styles.actionTileText}>Cheaper</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionTile} onPress={() => triggerAction('similar_nearby')}>
-                    <Ionicons name="location-outline" size={20} color={PURPLE} />
-                    <Text style={styles.actionTileText}>Nearby Alt</Text>
+                  <TouchableOpacity style={styles.actionTile} onPress={() => triggerAction('hidden_gem')}>
+                    <Ionicons name="diamond-outline" size={20} color={PURPLE} />
+                    <Text style={styles.actionTileText}>Hidden Gem</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.actionTile, styles.actionTileDestructive]}

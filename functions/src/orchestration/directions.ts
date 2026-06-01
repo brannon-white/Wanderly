@@ -1,5 +1,5 @@
 import * as logger from "firebase-functions/logger";
-import { type GeneratedItinerary, getAllDays, mapAllDays } from "../itinerarySchemas";
+import { type GeneratedItinerary, getAllDays, mapAllDays, updateDayByIndex } from "../itinerarySchemas";
 
 // Routes API v2 — same Google Cloud project/key as Places API (New).
 // The legacy Distance Matrix API is a separate product that needs separate enablement.
@@ -90,6 +90,57 @@ async function fetchSegmentTimes(
     logger.warn("Routes API fetch failed", { error });
     return segments.map(() => null);
   }
+}
+
+// Re-enrich transport times for a single day — used after individual activity mutations.
+export async function enrichDayTransportTimes(
+  itinerary: GeneratedItinerary,
+  dayIndex: number,
+  apiKey: string
+): Promise<GeneratedItinerary> {
+  const days = getAllDays(itinerary);
+  const day = days[dayIndex];
+  if (!day) return itinerary;
+
+  const segments = day.activities.flatMap((activity, i) => {
+    if (i === day.activities.length - 1) return [];
+    const next = day.activities[i + 1];
+    const hasCoords = activity.coordinates && next.coordinates;
+    const transportMode = activity.transport?.[0]?.mode ?? "";
+    const skip = !hasCoords || !activity.transport?.length || transportMode === "ferry";
+    return [{
+      activityIndex: i,
+      fromLat: activity.coordinates?.latitude ?? 0,
+      fromLng: activity.coordinates?.longitude ?? 0,
+      toLat: next.coordinates?.latitude ?? 0,
+      toLng: next.coordinates?.longitude ?? 0,
+      mode: transportModeToGoogle(transportMode) as GoogleTravelMode,
+      skip,
+    }];
+  });
+
+  const activeSeg = segments.map((s) => s.skip ? null : s);
+  const activeOnly = activeSeg.filter((s): s is typeof segments[number] => s !== null);
+  if (activeOnly.length === 0) return itinerary;
+
+  const times = await fetchSegmentTimes(activeOnly, apiKey);
+
+  let activeIdx = 0;
+  const results = activeSeg.map((s) => {
+    if (s === null) return null;
+    return times[activeIdx++] ?? null;
+  });
+
+  const updatedActivities = day.activities.map((activity, i) => {
+    const realTime = results[i];
+    if (!realTime || !activity.transport?.length) return activity;
+    return {
+      ...activity,
+      transport: activity.transport.map((t, ti) => ti === 0 ? { ...t, time: realTime } : t),
+    };
+  });
+
+  return updateDayByIndex(itinerary, dayIndex, { ...day, activities: updatedActivities });
 }
 
 export async function enrichTransportTimes(
