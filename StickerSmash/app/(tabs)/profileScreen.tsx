@@ -262,6 +262,9 @@ export default function ProfileScreen() {
                     {usageStatus.regensLeft} of {FREE_MONTHLY_REGEN_LIMIT} regenerations remaining
                   </Text>
                 </View>
+                <Text style={subscriptionStyles.resetLabel}>
+                  Resets {usageStatus.resetDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+                </Text>
                 <TouchableOpacity
                   style={subscriptionStyles.upgradeBtn}
                   onPress={() => setShowPaywall(true)}
@@ -412,6 +415,12 @@ const subscriptionStyles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'SourceSans3-Regular',
     color: '#444',
+  },
+  resetLabel: {
+    marginTop: 6,
+    fontSize: 12,
+    fontFamily: 'SourceSans3-Regular',
+    color: '#999',
   },
   upgradeBtn: {
     marginTop: 16,

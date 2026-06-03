@@ -23,6 +23,8 @@ import { generateItinerary } from '@/services/generateItinerary';
 import { requestPermissionAndSaveToken } from '@/services/notifications';
 import { getUsageStatus } from '@/services/purchases';
 import PaywallModal from '@/components/PaywallModal';
+import { logItineraryGenerated } from '@/services/analytics';
+import * as StoreReview from 'expo-store-review';
 import { getUserProfile } from '@/utils/getUserProfile';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
@@ -129,7 +131,9 @@ export default function TripReviewScreen() {
     // Capture values now — they'll be valid in the closure even after navigation
     const genPayload = {
       destinationId,
-      destinationName: destination.name,
+      destinationName: destination.state
+        ? `${destination.name}, ${destination.state}`
+        : destination.name,
       country: destination.country,
       party,
       startDate: startDate.toISOString(),
@@ -176,6 +180,14 @@ export default function TripReviewScreen() {
         destinationName: savedDestName,
         country: savedCountry,
       });
+      logItineraryGenerated({
+        destinationName: savedDestName,
+        days: startDate && endDate ? Math.round((endDate.getTime() - startDate.getTime()) / 86400000) : 0,
+        budget: savedBudget,
+      });
+      StoreReview.isAvailableAsync().then((available) => {
+        if (available) StoreReview.requestReview();
+      }).catch(() => {});
       setPendingGeneration(null);
 
       if (!userNavigatedAway.current) {
@@ -245,12 +257,12 @@ export default function TripReviewScreen() {
             </View>
             <Text style={styles.sectionLabel}>Destination</Text>
             <View style={{ flex: 1 }} />
-            <EditIcon onPress={() => navigation.navigate('DestinationScreen', { searchedDestination: { id: destination.id, name: destination.name, country: destination.country, flag: destination.flag, imageUrl: destination.imageUrl, gallery: [], destinationType: destinationSnapshot?.destinationType ?? 'city' } })} />
+            <EditIcon onPress={() => navigation.navigate('DestinationScreen', { searchedDestination: { id: destination.id, name: destination.name, state: destination.state, country: destination.country, flag: destination.flag, imageUrl: destination.imageUrl, gallery: [], destinationType: destinationSnapshot?.destinationType ?? 'city' } })} />
           </View>
           <View style={styles.destinationContent}>
             <Image source={{ uri: destination.imageUrl }} style={styles.destinationImage} />
             <View>
-              <Text style={styles.destinationName}>{destination.name}, {destination.country}</Text>
+              <Text style={styles.destinationName}>{destination.name}{destination.state ? `, ${destination.state}` : ''}</Text>
               <View style={styles.countryRow}>
                 {destination.flag ? <Text style={styles.flag}>{destination.flag}</Text> : null}
                 <Text style={styles.countryText}>{destination.country}</Text>

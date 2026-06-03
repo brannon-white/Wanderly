@@ -3,6 +3,7 @@ import { cacheGet, cacheSet } from '@/utils/cache';
 export interface LocationResult {
   id: string;
   name: string;
+  state?: string;
   country: string;
   countryCode: string;
   flag: string;
@@ -13,6 +14,7 @@ export interface LocationResult {
 export interface SearchedDestination {
   id: string;
   name: string;
+  state?: string;
   country: string;
   flag: string;
   imageUrl: string;
@@ -65,8 +67,11 @@ async function fetchLocations(query: string): Promise<LocationResult[]> {
       addr.city || addr.town || addr.village || addr.municipality || item.name;
     if (!cityName) continue;
 
+    const state: string | undefined = addr.state || undefined;
+    const stateSlug = state ? `-${state.toLowerCase().replace(/\s+/g, '-')}` : '';
+
     // Replace spaces with hyphens so multi-word park names produce valid slugs
-    const key = `${cityName.toLowerCase().replace(/\s+/g, '-')}-${addr.country_code.toLowerCase()}`;
+    const key = `${cityName.toLowerCase().replace(/\s+/g, '-')}${stateSlug}-${addr.country_code.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
@@ -83,6 +88,7 @@ async function fetchLocations(query: string): Promise<LocationResult[]> {
     results.push({
       id: key,
       name: cityName,
+      state,
       country: addr.country,
       countryCode: addr.country_code.toUpperCase(),
       flag: toFlag(addr.country_code),
@@ -97,7 +103,7 @@ async function fetchLocations(query: string): Promise<LocationResult[]> {
 }
 
 export async function searchLocations(query: string): Promise<LocationResult[]> {
-  const key = `search:${query.trim().toLowerCase()}`;
+  const key = `search:v2:${query.trim().toLowerCase()}`;
   const cached = await cacheGet<LocationResult[]>(key);
   if (cached) return cached;
 

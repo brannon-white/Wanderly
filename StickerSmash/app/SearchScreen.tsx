@@ -22,6 +22,7 @@ type NavProp = StackNavigationProp<RootStackParamList, 'SearchScreen'>;
 
 // Subset used by ResultRow and POPULAR list — destinationType is optional (defaults to 'city')
 type SearchItem = Pick<LocationResult, 'id' | 'name' | 'country' | 'flag' | 'imageUrl'> & {
+  state?: string;
   destinationType?: 'city' | 'national_park';
 };
 
@@ -134,7 +135,7 @@ function ResultRow({
       <View style={styles.rowInfo}>
         <Text style={styles.rowName}>{item.name}</Text>
         <Text style={styles.rowCountry}>
-          {item.flag}  {item.country}
+          {item.flag}{'  '}{item.state ? `${item.state}, ` : ''}{item.country}
         </Text>
       </View>
       {isLoading ? (
@@ -197,6 +198,7 @@ export default function SearchScreen() {
           searchedDestination: {
             id: item.id,
             name: item.name,
+            state: item.state,
             country: item.country,
             flag: item.flag,
             imageUrl: heroImage,

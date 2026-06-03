@@ -6,6 +6,7 @@ export type TripFlow = 'full' | 'prebuilt';
 export interface DestinationSnapshot {
   id: string;
   name: string;
+  state?: string;
   country: string;
   flag: string;
   imageUrl: string;

@@ -2,7 +2,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && request.auth.uid == userId;
+      // Clients may create their own user doc but must not pre-set monetization fields.
+      allow create: if request.auth != null && request.auth.uid == userId
+        && !request.resource.data.keys().hasAny(['subscription', 'usage']);
+      // Clients may update their own profile/preferences but may not touch monetization fields.
+      allow update: if request.auth != null && request.auth.uid == userId
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['subscription', 'usage']);
+      allow delete: if false;
       match /itineraries/{itineraryId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }

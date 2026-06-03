@@ -109,11 +109,12 @@ export interface UsageStatus {
   isPro: boolean;
   generationsLeft: number; // -1 = unlimited
   regensLeft: number;       // -1 = unlimited
+  resetDate: Date;          // when the free-tier quota resets
 }
 
 export async function getUsageStatus(): Promise<UsageStatus> {
   const user = getAuth().currentUser;
-  if (!user) return { isPro: false, generationsLeft: FREE_MONTHLY_GENERATION_LIMIT, regensLeft: FREE_MONTHLY_REGEN_LIMIT };
+  if (!user) return { isPro: false, generationsLeft: FREE_MONTHLY_GENERATION_LIMIT, regensLeft: FREE_MONTHLY_REGEN_LIMIT, resetDate: nextMonthStart() };
 
   try {
     const snap = await firestore().collection('users').doc(user.uid).get();
@@ -134,7 +135,7 @@ export async function getUsageStatus(): Promise<UsageStatus> {
     const isProTier = subscription?.tier === 'pro' && expiresAt !== null && expiresAt > new Date();
 
     if (isProTier) {
-      return { isPro: true, generationsLeft: -1, regensLeft: -1 };
+      return { isPro: true, generationsLeft: -1, regensLeft: -1, resetDate: nextMonthStart() };
     }
 
     const now = new Date();
@@ -146,13 +147,15 @@ export async function getUsageStatus(): Promise<UsageStatus> {
     const isRegenNewMonth = regenResetAt <= now;
     const regensUsed = isRegenNewMonth ? 0 : (usage?.regenCount ?? 0);
 
+    const nextReset = isNewMonth ? nextMonthStart() : resetAt;
     return {
       isPro: false,
       generationsLeft: Math.max(0, FREE_MONTHLY_GENERATION_LIMIT - generationsUsed),
       regensLeft: Math.max(0, FREE_MONTHLY_REGEN_LIMIT - regensUsed),
+      resetDate: nextReset,
     };
   } catch {
     // If Firestore fails, be permissive — backend will enforce the real limit
-    return { isPro: false, generationsLeft: FREE_MONTHLY_GENERATION_LIMIT, regensLeft: FREE_MONTHLY_REGEN_LIMIT };
+    return { isPro: false, generationsLeft: FREE_MONTHLY_GENERATION_LIMIT, regensLeft: FREE_MONTHLY_REGEN_LIMIT, resetDate: nextMonthStart() };
   }
 }

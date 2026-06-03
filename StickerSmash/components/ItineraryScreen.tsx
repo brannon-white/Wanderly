@@ -11,6 +11,7 @@ import {
   Alert,
   TextInput,
   KeyboardAvoidingView,
+  Animated,
 } from 'react-native';
 import BottomSheet from '@gorhom/bottom-sheet';
 import DraggableFlatList, { type RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
@@ -46,6 +47,7 @@ import DayOptimizeBar from './DayOptimizeBar';
 import { editItineraryWithLanguage, getSuggestedReplacements } from '@/services/regenerateItinerary';
 import { analyzeDay, type ActivityInsight } from '@/utils/itineraryInsights';
 import ItineraryRefinementBar from './ItineraryRefinementBar';
+import { logRegenAttempted } from '@/services/analytics';
 
 let MapsModule:
   | {
@@ -373,6 +375,9 @@ export default function ItineraryScreen() {
   const [aiBarMessage, setAiBarMessage] = useState('');
   const [aiBarLoading, setAiBarLoading] = useState(false);
   const shareCardRef = useRef<View>(null);
+  const [showUpsellSnack, setShowUpsellSnack] = useState(false);
+  const snackAnim = useRef(new Animated.Value(0)).current;
+  const [showUpgradePaywall, setShowUpgradePaywall] = useState(false);
   const allDays = itinerary ? getItineraryDays(itinerary) : [];
   const activities = allDays[selectedDay]?.activities ?? [];
   const MapView = MapsModule?.default;
@@ -473,6 +478,23 @@ export default function ItineraryScreen() {
     const allResolved = day0.every((a) => !isPlaceholder(a.image) || activityImages[a.id] !== undefined);
     if (allResolved) setImagesReady(true);
   }, [itinerary?.id, activityImages]);
+
+  // Show a soft upsell snackbar for free users after their first look at a generated itinerary.
+  useEffect(() => {
+    if (!imagesReady || isBrowsing) return;
+    let timer: ReturnType<typeof setTimeout>;
+    getUsageStatus().then((usage) => {
+      if (usage.isPro) return;
+      setShowUpsellSnack(true);
+      Animated.timing(snackAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+      timer = setTimeout(() => {
+        Animated.timing(snackAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(() =>
+          setShowUpsellSnack(false)
+        );
+      }, 5000);
+    }).catch(() => {});
+    return () => clearTimeout(timer);
+  }, [imagesReady, isBrowsing]);
 
   // Load images for the selected day sequentially to avoid Unsplash rate limits.
   // Parallel fire-and-forget hits rate limits; sequential + retry ensures all images load.
@@ -625,6 +647,7 @@ export default function ItineraryScreen() {
       return;
     }
 
+    logRegenAttempted('activity');
     setSheetTarget({ dayIndex, activityIndex, activityName: activity.name, action });
     sheetRef.current?.expand();
   }, [handleRemoveActivity]);
@@ -663,6 +686,7 @@ export default function ItineraryScreen() {
       setShowRegenPaywall(true);
       return;
     }
+    logRegenAttempted('ai_bar');
     setAiBarLoading(true);
     try {
       const { itinerary: updated } = await editItineraryWithLanguage({ itineraryId: id, message: message.trim() });
@@ -1092,6 +1116,46 @@ export default function ItineraryScreen() {
           sheetRef={sheetRef}
           onPaywallNeeded={() => setShowRegenPaywall(true)}
         />
+      )}
+
+      <PaywallModal
+        visible={showUpgradePaywall}
+        reason="generation"
+        onDismiss={() => setShowUpgradePaywall(false)}
+        onSuccess={() => setShowUpgradePaywall(false)}
+      />
+
+      {showUpsellSnack && (
+        <Animated.View
+          style={{
+            position: 'absolute',
+            bottom: 32,
+            left: 16,
+            right: 16,
+            backgroundColor: '#1a1a2e',
+            borderRadius: 14,
+            paddingVertical: 14,
+            paddingHorizontal: 18,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            opacity: snackAnim,
+            transform: [{ translateY: snackAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'SourceSans3-Regular', flex: 1 }}>
+            Love it? Upgrade for unlimited trips — $4.99/mo
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              setShowUpsellSnack(false);
+              setShowUpgradePaywall(true);
+            }}
+            style={{ marginLeft: 12, backgroundColor: '#6A62B7', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 }}
+          >
+            <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'SourceSans3-Regular' }}>Go Pro</Text>
+          </TouchableOpacity>
+        </Animated.View>
       )}
     </View>
   );
