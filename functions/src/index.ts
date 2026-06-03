@@ -14,7 +14,18 @@ function getNextMonthStart(): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 }
 
-async function checkAndConsumeGenerationCredit(uid: string): Promise<void> {
+interface GenerationCreditState {
+  uid: string;
+  isNewMonth: boolean;
+  nextReset: Date;
+  currentUsageResetAt: Timestamp | null;
+  currentRegenCount: number;
+  currentRegenResetAt: Timestamp | null;
+}
+
+// Returns null for Pro users (no limit). Throws if limit reached.
+// Does NOT write — call consumeGenerationCredit only after successful generation.
+async function checkGenerationCredit(uid: string): Promise<GenerationCreditState | null> {
   const db = getFirestore();
   const userRef = db.collection("users").doc(uid);
   const snap = await userRef.get();
@@ -24,7 +35,7 @@ async function checkAndConsumeGenerationCredit(uid: string): Promise<void> {
   const expiresAt: Timestamp | null = data.subscription?.expiresAt ?? null;
   const isPro = tier === "pro" && expiresAt !== null && expiresAt.toDate() > new Date();
 
-  if (isPro) return; // pro users have no limit
+  if (isPro) return null;
 
   const now = new Date();
   const resetAt: Date = data.usage?.usageResetAt
@@ -37,15 +48,28 @@ async function checkAndConsumeGenerationCredit(uid: string): Promise<void> {
     throw Object.assign(new Error("Monthly generation limit reached"), { code: "LIMIT_REACHED" });
   }
 
-  const nextReset = getNextMonthStart();
+  return {
+    uid,
+    isNewMonth,
+    nextReset: getNextMonthStart(),
+    currentUsageResetAt: data.usage?.usageResetAt ?? null,
+    currentRegenCount: data.usage?.regenCount ?? 0,
+    currentRegenResetAt: data.usage?.regenResetAt ?? null,
+  };
+}
+
+async function consumeGenerationCredit(state: GenerationCreditState): Promise<void> {
+  const db = getFirestore();
+  const userRef = db.collection("users").doc(state.uid);
+  const nextReset = Timestamp.fromDate(state.nextReset);
   await userRef.set(
     {
       usage: {
-        generationsThisMonth: isNewMonth ? 1 : FieldValue.increment(1),
-        usageResetAt: isNewMonth ? Timestamp.fromDate(nextReset) : (data.usage?.usageResetAt ?? Timestamp.fromDate(nextReset)),
+        generationsThisMonth: state.isNewMonth ? 1 : FieldValue.increment(1),
+        usageResetAt: state.isNewMonth ? nextReset : (state.currentUsageResetAt ?? nextReset),
         totalGenerations: FieldValue.increment(1),
-        regenCount: isNewMonth ? 0 : (data.usage?.regenCount ?? 0),
-        regenResetAt: isNewMonth ? Timestamp.fromDate(nextReset) : (data.usage?.regenResetAt ?? Timestamp.fromDate(nextReset)),
+        regenCount: state.isNewMonth ? 0 : state.currentRegenCount,
+        regenResetAt: state.isNewMonth ? nextReset : (state.currentRegenResetAt ?? nextReset),
       },
     },
     { merge: true }
@@ -302,8 +326,10 @@ export const generateItineraryV1 = functionsV1
       );
     }
 
-    await checkAndConsumeGenerationCredit(uid);
-    return buildAndSaveItinerary(uid, data);
+    const creditState = await checkGenerationCredit(uid);
+    const result = await buildAndSaveItinerary(uid, data);
+    if (creditState !== null) await consumeGenerationCredit(creditState);
+    return result;
   });
 
 export const generateItineraryHttp = functionsV1
@@ -359,8 +385,9 @@ export const generateItineraryHttp = functionsV1
             ? (req.body as { country?: unknown }).country
             : undefined,
       });
-      await checkAndConsumeGenerationCredit(decodedToken.uid);
+      const creditState = await checkGenerationCredit(decodedToken.uid);
       const result = await buildAndSaveItinerary(decodedToken.uid, req.body);
+      if (creditState !== null) await consumeGenerationCredit(creditState);
       res.status(200).json(result);
     } catch (error) {
       const classifiedError = classifyHttpError(error);

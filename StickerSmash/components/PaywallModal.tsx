@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   View,
@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { purchaseMonthly, purchaseAnnual, restorePurchases } from '@/services/purchases';
+import { logPaywallShown, logPurchaseStarted, logPurchaseCompleted } from '@/services/analytics';
 
 const PRIMARY = '#6A62B7';
 const TEXT_DARK = '#1a1a2e';
@@ -34,6 +35,10 @@ export default function PaywallModal({ visible, reason = 'generation', onDismiss
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState<'monthly' | 'annual' | 'restore' | null>(null);
 
+  useEffect(() => {
+    if (visible) logPaywallShown(reason);
+  }, [visible, reason]);
+
   const headline =
     reason === 'regen'
       ? "You're out of regenerations"
@@ -45,9 +50,10 @@ export default function PaywallModal({ visible, reason = 'generation', onDismiss
 
   async function handleMonthly() {
     setLoading('monthly');
+    logPurchaseStarted('monthly');
     try {
       const success = await purchaseMonthly();
-      if (success) onSuccess();
+      if (success) { logPurchaseCompleted('monthly'); onSuccess(); }
     } catch {
       Alert.alert('Purchase failed', 'Something went wrong. Please try again.');
     } finally {
@@ -57,9 +63,10 @@ export default function PaywallModal({ visible, reason = 'generation', onDismiss
 
   async function handleAnnual() {
     setLoading('annual');
+    logPurchaseStarted('annual');
     try {
       const success = await purchaseAnnual();
-      if (success) onSuccess();
+      if (success) { logPurchaseCompleted('annual'); onSuccess(); }
     } catch {
       Alert.alert('Purchase failed', 'Something went wrong. Please try again.');
     } finally {

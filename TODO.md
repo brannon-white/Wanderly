@@ -43,7 +43,7 @@
 
 ## App Store & Google Play Setup
 
-- [ ] Add Android `package` identifier to `app.json` under `android` (currently missing — needed for Play Store)
+- [x] Add Android `package` identifier to `app.json` under `android` (currently missing — needed for Play Store)
   - e.g. `"package": "com.appsmadehere.wanderly"`
 - [ ] Create a **Google Play Console** account and app listing
 - [ ] Create **App Store Connect** listing (if not already created)
@@ -97,7 +97,7 @@ GitHub Actions runs every 30 min, picks up the queue, calls Overpass, and writes
 - [ ] Add **Firebase App Check** to protect Cloud Functions from abuse (especially `generateItineraryHttp` which calls paid APIs)
 - [ ] Set **Google Cloud billing alerts** for the Places API — set a budget cap so you don't get surprised
 - [ ] Add per-IP or per-user **rate limiting** on Cloud Functions (currently only `maxInstances: 10`)
-- [ ] Review and tighten **Firestore security rules** — ensure `subscription` and `usage` fields can only be written by Cloud Functions, not the client
+- [x] Review and tighten **Firestore security rules** — ensure `subscription` and `usage` fields can only be written by Cloud Functions, not the client
 - [ ] Rotate any exposed API keys (check git history for accidental commits)
 - [ ] Set `ADMIN_MIGRATION_SECRET` and `REVENUECAT_WEBHOOK_SECRET` as Firebase secrets before deploying
 
@@ -105,7 +105,7 @@ GitHub Actions runs every 30 min, picks up the queue, calls Overpass, and writes
 
 ## Analytics & Monitoring
 
-- [ ] Add **Firebase Analytics** events for key user actions:
+- [x] Add **Firebase Analytics** events for key user actions:
   - `itinerary_generated`, `paywall_shown`, `purchase_started`, `purchase_completed`, `regen_attempted`
 - [ ] Set up **Firebase Crashlytics** for crash reporting (the MCP tool is already configured)
 - [ ] Set up a **conversion funnel** in Firebase: search → trip review → paywall shown → purchased
@@ -126,17 +126,17 @@ GitHub Actions runs every 30 min, picks up the queue, calls Overpass, and writes
 ## Product & Polish
 
 - [ ] Add a **"Restore Purchases"** link to the Profile screen (Apple requires this to be visible — already added to PaywallModal, confirm it's also accessible without triggering the paywall)
-- [ ] Show the **subscription reset date** in Profile (e.g. "Resets June 1")
-- [ ] Add a **post-generation soft upsell snackbar** (e.g. "Love it? Upgrade for unlimited trips — $4.99/mo") — the plan described this but it wasn't implemented yet
+- [x] Show the **subscription reset date** in Profile (e.g. "Resets June 1")
+- [x] Add a **post-generation soft upsell snackbar** (e.g. "Love it? Upgrade for unlimited trips — $4.99/mo") — the plan described this but it wasn't implemented yet
 - [ ] Consider a **7-day free trial** for Pro to reduce friction on first purchase (configure in RevenueCat / App Store Connect)
-- [ ] Add **in-app review prompt** (using `expo-store-review`) after a user successfully generates their first itinerary — timing is perfect there
-- [ ] Improve the **Places cache key** to include destination + interests, so repeat searches for the same destination in the same interest category hit cache and reduce cost
-- [ ] Handle the case where generation fails mid-flight but credit was already decremented — add a refund path or only decrement on success (currently decrements before generation starts)
+- [x] Add **in-app review prompt** (using `expo-store-review`) after a user successfully generates their first itinerary — timing is perfect there
+- [x] Improve the **Places cache key** to include destination + interests, so repeat searches for the same destination in the same interest category hit cache and reduce cost
+- [x] Handle the case where generation fails mid-flight but credit was already decremented — add a refund path or only decrement on success (currently decrements before generation starts)
 
 ## Itinerary Generation
 - [ ] Fix activity pills, some of them dont make sense
 - [ ] Itinerary is sometimes reccomending random stores 
-- [ ] Do we want to make activity cards clickable to get more info?
+- [x] Do we want to make activity cards clickable to get more info?
 - [ ] Itinerary sometimes has activities halfway across the country if the city name is the same
-- [ ] Make cards draggable so they can reorder if they want
+- [x] Make cards draggable so they can reorder if they want
 - [ ] Images do not load on itinerary page sometimes

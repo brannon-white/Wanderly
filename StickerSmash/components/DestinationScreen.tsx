@@ -57,7 +57,7 @@ export default function DestinationScreen() {
   const [showSavedToast, setShowSavedToast] = useState(false);
 
   const destination = searchedDestination
-    ? { id: searchedDestination.id, name: searchedDestination.name, country: searchedDestination.country, flag: searchedDestination.flag, imageUrl: searchedDestination.imageUrl, destinationType: searchedDestination.destinationType }
+    ? { id: searchedDestination.id, name: searchedDestination.name, state: searchedDestination.state, country: searchedDestination.country, flag: searchedDestination.flag, imageUrl: searchedDestination.imageUrl, destinationType: searchedDestination.destinationType }
     : (DEMO_DESTINATIONS.find((d) => d.id === id) ?? DEMO_DESTINATIONS[0]);
 
   const demoDetail = searchedDestination
@@ -206,6 +206,7 @@ export default function DestinationScreen() {
             setDestination({
               id: destination.id,
               name: destination.name,
+              state: (destination as any).state,
               country: destination.country ?? '',
               flag: destination.flag ?? '',
               imageUrl: destination.imageUrl ?? '',
