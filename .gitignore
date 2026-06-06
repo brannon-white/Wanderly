@@ -31,6 +31,10 @@ seedFirestore.js
 # Firebase service account keys (NEVER commit these)
 *firebase-adminsdk*.json
 *serviceAccount*.json
+# Firebase local deploy cache & logs
+.firebase/
+firebase-debug.log
+*firebase-debug*.log
 # VSCode settings
 .vscode/
 

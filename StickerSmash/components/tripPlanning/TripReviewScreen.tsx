@@ -116,7 +116,10 @@ export default function TripReviewScreen() {
     // Check generation quota before starting (backend enforces this too, but checking
     // client-side avoids a wasted full round-trip and shows the paywall earlier)
     const usage = await getUsageStatus().catch(() => null);
-    if (usage && !usage.isPro && usage.generationsLeft <= 0) {
+    // Allowed if the monthly allotment (free 3 / pro 20) has room OR there are
+    // purchased credits to fall back on. Blocks free users out of free trips and
+    // Pro users who've hit the monthly cap, unless they hold credits.
+    if (usage && usage.generationsLeft <= 0 && usage.credits <= 0) {
       setShowPaywall(true);
       return;
     }

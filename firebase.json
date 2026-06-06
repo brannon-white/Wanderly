@@ -2,6 +2,11 @@
   "firestore": {
     "rules": "firestore.rules"
   },
+  "hosting": {
+    "public": "legal/public",
+    "cleanUrls": true,
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
+  },
   "functions": [
     {
       "source": "functions",

@@ -13,6 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getAuth } from '@react-native-firebase/auth';
@@ -29,7 +30,8 @@ import { clearAllCache } from '@/utils/cache';
 import { styles } from '@/styles/profileScreenStyles';
 import { getUsageStatus, restorePurchases, type UsageStatus } from '@/services/purchases';
 import PaywallModal from '@/components/PaywallModal';
-import { FREE_MONTHLY_GENERATION_LIMIT, FREE_MONTHLY_REGEN_LIMIT } from '@/types/subscription';
+import { FREE_MONTHLY_GENERATION_LIMIT, FREE_MONTHLY_REGEN_LIMIT, PRO_MONTHLY_GENERATION_LIMIT } from '@/types/subscription';
+import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL } from '@/constants/legal';
 
 type ProfileData = {
   fullName?: string;
@@ -237,6 +239,10 @@ export default function ProfileScreen() {
                   <Text style={subscriptionStyles.proBadgeText}>Pro</Text>
                 </View>
                 <Text style={subscriptionStyles.proLabel}>Wanderly Pro — Active</Text>
+                <Text style={subscriptionStyles.resetLabel}>
+                  {usageStatus.generationsLeft} of {PRO_MONTHLY_GENERATION_LIMIT} trips left this month
+                  {usageStatus.credits > 0 ? ` · ${usageStatus.credits} credits` : ''}
+                </Text>
                 <TouchableOpacity
                   onPress={async () => {
                     const restored = await restorePurchases().catch(() => false);
@@ -262,6 +268,14 @@ export default function ProfileScreen() {
                     {usageStatus.regensLeft} of {FREE_MONTHLY_REGEN_LIMIT} regenerations remaining
                   </Text>
                 </View>
+                {usageStatus.credits > 0 && (
+                  <View style={[subscriptionStyles.usageRow, { marginTop: 8 }]}>
+                    <Ionicons name="ticket-outline" size={18} color="#6A62B7" />
+                    <Text style={subscriptionStyles.usageLabel}>
+                      {usageStatus.credits} trip {usageStatus.credits === 1 ? 'credit' : 'credits'} available
+                    </Text>
+                  </View>
+                )}
                 <Text style={subscriptionStyles.resetLabel}>
                   Resets {usageStatus.resetDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
                 </Text>
@@ -270,7 +284,7 @@ export default function ProfileScreen() {
                   onPress={() => setShowPaywall(true)}
                   activeOpacity={0.85}
                 >
-                  <Text style={subscriptionStyles.upgradeBtnText}>Upgrade to Pro — $4.99 / mo</Text>
+                  <Text style={subscriptionStyles.upgradeBtnText}>Upgrade to Pro — $9.99 / mo</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -282,6 +296,17 @@ export default function ProfileScreen() {
           <Ionicons name="log-out-outline" size={22} color="#E53935" />
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
+
+        {/* ── Legal ── */}
+        <View style={subscriptionStyles.legalRow}>
+          <Text style={subscriptionStyles.legalLink} onPress={() => Linking.openURL(TERMS_OF_SERVICE_URL)}>
+            Terms of Use
+          </Text>
+          <Text style={subscriptionStyles.legalDot}>·</Text>
+          <Text style={subscriptionStyles.legalLink} onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
+            Privacy Policy
+          </Text>
+        </View>
       </ScrollView>
 
       <PaywallModal
@@ -375,6 +400,23 @@ export default function ProfileScreen() {
 }
 
 const subscriptionStyles = StyleSheet.create({
+  legalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  legalLink: {
+    color: '#6A62B7',
+    fontSize: 13,
+    textDecorationLine: 'underline',
+  },
+  legalDot: {
+    color: '#888',
+    fontSize: 13,
+  },
   proRow: {
     flexDirection: 'row',
     alignItems: 'center',

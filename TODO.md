@@ -94,8 +94,8 @@ GitHub Actions runs every 30 min, picks up the queue, calls Overpass, and writes
 
 ## Backend & Infrastructure
 
-- [ ] Add **Firebase App Check** to protect Cloud Functions from abuse (especially `generateItineraryHttp` which calls paid APIs)
-- [ ] Set **Google Cloud billing alerts** for the Places API — set a budget cap so you don't get surprised
+- [~] Add **Firebase App Check** to protect Cloud Functions from abuse — CODE DONE (soft-enforce). Remaining: register apps in Firebase Console (App Attest/Play Integrity), add simulator debug token, `firebase deploy --only functions`, rebuild app, then set `APP_CHECK_ENFORCE=true` to hard-enforce
+- [x] Set **Google Cloud billing alerts** for the Places API — $50/mo budget "Wanderly Monthly" (alerts 50/90/100%) + hard daily quota caps: SearchNearby 5,000/day, SearchText 2,000/day
 - [ ] Add per-IP or per-user **rate limiting** on Cloud Functions (currently only `maxInstances: 10`)
 - [x] Review and tighten **Firestore security rules** — ensure `subscription` and `usage` fields can only be written by Cloud Functions, not the client
 - [ ] Rotate any exposed API keys (check git history for accidental commits)
@@ -134,9 +134,9 @@ GitHub Actions runs every 30 min, picks up the queue, calls Overpass, and writes
 - [x] Handle the case where generation fails mid-flight but credit was already decremented — add a refund path or only decrement on success (currently decrements before generation starts)
 
 ## Itinerary Generation
-- [ ] Fix activity pills, some of them dont make sense
-- [ ] Itinerary is sometimes reccomending random stores 
+- [x] Fix activity pills, some of them dont make sense
+- [x] Itinerary is sometimes reccomending random stores 
 - [x] Do we want to make activity cards clickable to get more info?
-- [ ] Itinerary sometimes has activities halfway across the country if the city name is the same
+- [x] Itinerary sometimes has activities halfway across the country if the city name is the same
 - [x] Make cards draggable so they can reorder if they want
-- [ ] Images do not load on itinerary page sometimes
+- [x] Images do not load on itinerary page sometimes

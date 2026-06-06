@@ -1,8 +1,8 @@
-import Purchases, { LOG_LEVEL, type CustomerInfo } from 'react-native-purchases';
+import Purchases, { LOG_LEVEL, PURCHASE_TYPE, type CustomerInfo, type PurchasesStoreProduct } from 'react-native-purchases';
 import { getAuth } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { Platform } from 'react-native';
-import { ENTITLEMENT_PRO, FREE_MONTHLY_GENERATION_LIMIT, FREE_MONTHLY_REGEN_LIMIT, PRODUCT_IDS } from '@/types/subscription';
+import { CREDIT_PACK_AMOUNTS, CREDIT_PRODUCT_IDS, ENTITLEMENT_PRO, FREE_MONTHLY_GENERATION_LIMIT, FREE_MONTHLY_REGEN_LIMIT, PRODUCT_IDS, PRO_MONTHLY_GENERATION_LIMIT } from '@/types/subscription';
 import type { UserUsage, UserSubscription } from '@/types/subscription';
 
 // Configure these in app.config.js or as env vars once you have RevenueCat keys
@@ -98,6 +98,50 @@ export async function restorePurchases(): Promise<boolean> {
   }
 }
 
+// ─── Consumable credit packs ──────────────────────────────────────────────────
+
+export interface CreditPack {
+  productId: string;
+  credits: number;
+  priceString: string; // localized, e.g. "$9.99"
+  title: string;
+}
+
+// Fetch the credit-pack products with localized store pricing, sorted cheapest first.
+export async function getCreditPacks(): Promise<CreditPack[]> {
+  if (!initialized) return [];
+  try {
+    const ids = Object.values(CREDIT_PRODUCT_IDS);
+    const products = await Purchases.getProducts(ids, PURCHASE_TYPE.INAPP);
+    return products
+      .map((p: PurchasesStoreProduct) => ({
+        productId: p.identifier,
+        credits: CREDIT_PACK_AMOUNTS[p.identifier] ?? 0,
+        priceString: p.priceString,
+        title: p.title,
+      }))
+      .filter((p) => p.credits > 0)
+      .sort((a, b) => a.credits - b.credits);
+  } catch {
+    return [];
+  }
+}
+
+// Buy a consumable credit pack. The RevenueCat webhook grants the credits to the
+// user's Firestore balance, so on success the caller should refetch usage status.
+export async function purchaseCreditPack(productId: string): Promise<boolean> {
+  try {
+    const products = await Purchases.getProducts([productId], PURCHASE_TYPE.INAPP);
+    const product = products[0];
+    if (!product) return false;
+    await Purchases.purchaseStoreProduct(product);
+    return true;
+  } catch (e: any) {
+    if (e?.userCancelled) return false;
+    throw e;
+  }
+}
+
 // ─── Firestore-based usage helpers ───────────────────────────────────────────
 
 function nextMonthStart(): Date {
@@ -107,14 +151,15 @@ function nextMonthStart(): Date {
 
 export interface UsageStatus {
   isPro: boolean;
-  generationsLeft: number; // -1 = unlimited
-  regensLeft: number;       // -1 = unlimited
-  resetDate: Date;          // when the free-tier quota resets
+  generationsLeft: number; // remaining from the monthly allotment (free 3 / pro 20)
+  regensLeft: number;       // -1 = unlimited (pro)
+  credits: number;          // purchased trip credits, usable after the allotment runs out
+  resetDate: Date;          // when the monthly quota resets
 }
 
 export async function getUsageStatus(): Promise<UsageStatus> {
   const user = getAuth().currentUser;
-  if (!user) return { isPro: false, generationsLeft: FREE_MONTHLY_GENERATION_LIMIT, regensLeft: FREE_MONTHLY_REGEN_LIMIT, resetDate: nextMonthStart() };
+  if (!user) return { isPro: false, generationsLeft: FREE_MONTHLY_GENERATION_LIMIT, regensLeft: FREE_MONTHLY_REGEN_LIMIT, credits: 0, resetDate: nextMonthStart() };
 
   try {
     const snap = await firestore().collection('users').doc(user.uid).get();
@@ -134,28 +179,37 @@ export async function getUsageStatus(): Promise<UsageStatus> {
     const expiresAt = toDate(subscription?.expiresAt);
     const isProTier = subscription?.tier === 'pro' && expiresAt !== null && expiresAt > new Date();
 
-    if (isProTier) {
-      return { isPro: true, generationsLeft: -1, regensLeft: -1, resetDate: nextMonthStart() };
-    }
-
     const now = new Date();
     const resetAt = toDate(usage?.usageResetAt) ?? new Date(0);
     const isNewMonth = resetAt <= now;
     const generationsUsed = isNewMonth ? 0 : (usage?.generationsThisMonth ?? 0);
+    const credits = usage?.credits ?? 0;
+    const monthlyLimit = isProTier ? PRO_MONTHLY_GENERATION_LIMIT : FREE_MONTHLY_GENERATION_LIMIT;
+    const nextReset = isNewMonth ? nextMonthStart() : resetAt;
+
+    if (isProTier) {
+      return {
+        isPro: true,
+        generationsLeft: Math.max(0, monthlyLimit - generationsUsed),
+        regensLeft: -1,
+        credits,
+        resetDate: nextReset,
+      };
+    }
 
     const regenResetAt = toDate(usage?.regenResetAt) ?? new Date(0);
     const isRegenNewMonth = regenResetAt <= now;
     const regensUsed = isRegenNewMonth ? 0 : (usage?.regenCount ?? 0);
 
-    const nextReset = isNewMonth ? nextMonthStart() : resetAt;
     return {
       isPro: false,
       generationsLeft: Math.max(0, FREE_MONTHLY_GENERATION_LIMIT - generationsUsed),
       regensLeft: Math.max(0, FREE_MONTHLY_REGEN_LIMIT - regensUsed),
+      credits,
       resetDate: nextReset,
     };
   } catch {
     // If Firestore fails, be permissive — backend will enforce the real limit
-    return { isPro: false, generationsLeft: FREE_MONTHLY_GENERATION_LIMIT, regensLeft: FREE_MONTHLY_REGEN_LIMIT, resetDate: nextMonthStart() };
+    return { isPro: false, generationsLeft: FREE_MONTHLY_GENERATION_LIMIT, regensLeft: FREE_MONTHLY_REGEN_LIMIT, credits: 0, resetDate: nextMonthStart() };
   }
 }

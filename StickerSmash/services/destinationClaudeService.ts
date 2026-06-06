@@ -1,4 +1,5 @@
 import { getAuth, getIdToken } from '@react-native-firebase/auth';
+import { getAppCheckHeader } from '@/services/appCheck';
 import { cacheGet, cacheSet } from '@/utils/cache';
 
 export interface DestinationClaudeContent {
@@ -29,6 +30,7 @@ export async function fetchDestinationClaudeContent(
     if (!currentUser) return null;
 
     const idToken = await getIdToken(currentUser, false);
+    const appCheckHeader = await getAppCheckHeader();
     const res = await fetch(
       'https://us-central1-wanderly-dff52.cloudfunctions.net/getDestinationContentHttp',
       {
@@ -36,6 +38,7 @@ export async function fetchDestinationClaudeContent(
         headers: {
           Authorization: `Bearer ${idToken}`,
           'Content-Type': 'application/json',
+          ...appCheckHeader,
         },
         body: JSON.stringify({ cityName, country }),
       }

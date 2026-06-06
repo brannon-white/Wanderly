@@ -1,5 +1,6 @@
 import { getAuth } from "firebase-admin/auth";
 import { initializeApp } from "firebase-admin/app";
+import { getAppCheck } from "firebase-admin/app-check";
 import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { defineSecret } from "firebase-functions/params";
@@ -8,10 +9,42 @@ import * as logger from "firebase-functions/logger";
 
 const FREE_MONTHLY_GENERATION_LIMIT = 3;
 const FREE_MONTHLY_REGEN_LIMIT = 3;
+// Pro is capped (not unlimited) so one subscriber can't run up unbounded API cost.
+const PRO_MONTHLY_GENERATION_LIMIT = 20;
+
+// Consumable credit packs: product_id → trip credits granted. Must match
+// CREDIT_PRODUCT_IDS / CREDIT_PACK_AMOUNTS in StickerSmash/types/subscription.ts.
+const CREDIT_PACK_AMOUNTS: Record<string, number> = {
+  wanderly_credits_1: 1,
+  wanderly_credits_5: 5,
+  wanderly_credits_12: 12,
+};
 
 function getNextMonthStart(): Date {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+}
+
+// App Check: confirm the request came from our genuine app binary (App Attest /
+// Play Integrity), not a script hitting the public HTTPS endpoint with a stolen or
+// self-minted Firebase auth token. Soft by default so the backend can be deployed
+// before the client ships tokens; set the APP_CHECK_ENFORCE=true env var to reject.
+async function verifyAppCheck(req: { headers: Record<string, unknown> }): Promise<boolean> {
+  const enforce = process.env.APP_CHECK_ENFORCE === "true";
+  const header = req.headers["x-firebase-appcheck"];
+  const token = Array.isArray(header) ? header[0] : (header as string | undefined);
+  if (!token) {
+    if (enforce) return false;
+    logger.warn("App Check token missing (soft mode — allowing)");
+    return true;
+  }
+  try {
+    await getAppCheck().verifyToken(token);
+    return true;
+  } catch (e) {
+    logger.warn("App Check token invalid", { enforce, error: String(e) });
+    return !enforce;
+  }
 }
 
 interface GenerationCreditState {
@@ -21,11 +54,14 @@ interface GenerationCreditState {
   currentUsageResetAt: Timestamp | null;
   currentRegenCount: number;
   currentRegenResetAt: Timestamp | null;
+  // When true, this generation is paid for by a purchased credit, not the monthly
+  // allotment — consumeGenerationCredit decrements usage.credits instead of the counter.
+  useCredit: boolean;
 }
 
-// Returns null for Pro users (no limit). Throws if limit reached.
+// Throws LIMIT_REACHED if the user has neither monthly allotment nor credits left.
 // Does NOT write — call consumeGenerationCredit only after successful generation.
-async function checkGenerationCredit(uid: string): Promise<GenerationCreditState | null> {
+async function checkGenerationCredit(uid: string): Promise<GenerationCreditState> {
   const db = getFirestore();
   const userRef = db.collection("users").doc(uid);
   const snap = await userRef.get();
@@ -34,8 +70,7 @@ async function checkGenerationCredit(uid: string): Promise<GenerationCreditState
   const tier: string = data.subscription?.tier ?? "free";
   const expiresAt: Timestamp | null = data.subscription?.expiresAt ?? null;
   const isPro = tier === "pro" && expiresAt !== null && expiresAt.toDate() > new Date();
-
-  if (isPro) return null;
+  const monthlyLimit = isPro ? PRO_MONTHLY_GENERATION_LIMIT : FREE_MONTHLY_GENERATION_LIMIT;
 
   const now = new Date();
   const resetAt: Date = data.usage?.usageResetAt
@@ -43,12 +78,9 @@ async function checkGenerationCredit(uid: string): Promise<GenerationCreditState
     : new Date(0);
   const isNewMonth = resetAt <= now;
   const currentCount: number = isNewMonth ? 0 : (data.usage?.generationsThisMonth ?? 0);
+  const credits: number = data.usage?.credits ?? 0;
 
-  if (currentCount >= FREE_MONTHLY_GENERATION_LIMIT) {
-    throw Object.assign(new Error("Monthly generation limit reached"), { code: "LIMIT_REACHED" });
-  }
-
-  return {
+  const base = {
     uid,
     isNewMonth,
     nextReset: getNextMonthStart(),
@@ -56,12 +88,41 @@ async function checkGenerationCredit(uid: string): Promise<GenerationCreditState
     currentRegenCount: data.usage?.regenCount ?? 0,
     currentRegenResetAt: data.usage?.regenResetAt ?? null,
   };
+
+  // Prefer the included monthly allotment; fall back to purchased credits.
+  if (currentCount < monthlyLimit) {
+    return { ...base, useCredit: false };
+  }
+  if (credits > 0) {
+    return { ...base, useCredit: true };
+  }
+
+  throw Object.assign(new Error("Monthly generation limit reached"), { code: "LIMIT_REACHED" });
 }
 
 async function consumeGenerationCredit(state: GenerationCreditState): Promise<void> {
   const db = getFirestore();
   const userRef = db.collection("users").doc(state.uid);
   const nextReset = Timestamp.fromDate(state.nextReset);
+
+  // Credit-funded generation: decrement the purchased balance, leave the monthly
+  // counter untouched (but still roll it over if a new month started).
+  if (state.useCredit) {
+    await userRef.set(
+      {
+        usage: {
+          credits: FieldValue.increment(-1),
+          totalGenerations: FieldValue.increment(1),
+          ...(state.isNewMonth
+            ? { generationsThisMonth: 0, usageResetAt: nextReset, regenCount: 0, regenResetAt: nextReset }
+            : {}),
+        },
+      },
+      { merge: true }
+    );
+    return;
+  }
+
   await userRef.set(
     {
       usage: {
@@ -328,7 +389,7 @@ export const generateItineraryV1 = functionsV1
 
     const creditState = await checkGenerationCredit(uid);
     const result = await buildAndSaveItinerary(uid, data);
-    if (creditState !== null) await consumeGenerationCredit(creditState);
+    await consumeGenerationCredit(creditState);
     return result;
   });
 
@@ -343,7 +404,7 @@ export const generateItineraryHttp = functionsV1
   .https.onRequest(async (req, res) => {
     if (req.method === "OPTIONS") {
       res.set("Access-Control-Allow-Origin", "*");
-      res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+      res.set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Firebase-AppCheck");
       res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
       res.status(204).send("");
       return;
@@ -370,6 +431,7 @@ export const generateItineraryHttp = functionsV1
 
     try {
       const decodedToken = await getAuth().verifyIdToken(match[1]);
+      if (!(await verifyAppCheck(req))) { res.status(401).json({ error: "App Check verification failed." }); return; }
       logger.info("generateItineraryHttp token verified", {
         uid: decodedToken.uid,
         destinationId:
@@ -387,7 +449,7 @@ export const generateItineraryHttp = functionsV1
       });
       const creditState = await checkGenerationCredit(decodedToken.uid);
       const result = await buildAndSaveItinerary(decodedToken.uid, req.body);
-      if (creditState !== null) await consumeGenerationCredit(creditState);
+      await consumeGenerationCredit(creditState);
       res.status(200).json(result);
     } catch (error) {
       const classifiedError = classifyHttpError(error);
@@ -412,7 +474,7 @@ export const regenerateActivityHttp = functionsV1
   .https.onRequest(async (req, res) => {
     if (req.method === "OPTIONS") {
       res.set("Access-Control-Allow-Origin", "*");
-      res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+      res.set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Firebase-AppCheck");
       res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
       res.status(204).send("");
       return;
@@ -427,6 +489,7 @@ export const regenerateActivityHttp = functionsV1
 
     try {
       const decodedToken = await getAuth().verifyIdToken(match[1]);
+      if (!(await verifyAppCheck(req))) { res.status(401).json({ error: "App Check verification failed." }); return; }
       const uid = decodedToken.uid;
 
       const parsed = regenerateActivityRequestSchema.safeParse(req.body);
@@ -490,7 +553,7 @@ export const regenerateDayHttp = functionsV1
   .https.onRequest(async (req, res) => {
     if (req.method === "OPTIONS") {
       res.set("Access-Control-Allow-Origin", "*");
-      res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+      res.set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Firebase-AppCheck");
       res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
       res.status(204).send("");
       return;
@@ -505,6 +568,7 @@ export const regenerateDayHttp = functionsV1
 
     try {
       const decodedToken = await getAuth().verifyIdToken(match[1]);
+      if (!(await verifyAppCheck(req))) { res.status(401).json({ error: "App Check verification failed." }); return; }
       const uid = decodedToken.uid;
 
       const parsed = regenerateDayRequestSchema.safeParse(req.body);
@@ -593,7 +657,7 @@ export const getDestinationContentHttp = functionsV1
   .https.onRequest(async (req, res) => {
     if (req.method === "OPTIONS") {
       res.set("Access-Control-Allow-Origin", "*");
-      res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+      res.set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Firebase-AppCheck");
       res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
       res.status(204).send("");
       return;
@@ -615,6 +679,7 @@ export const getDestinationContentHttp = functionsV1
 
     try {
       await getAuth().verifyIdToken(match[1]);
+      if (!(await verifyAppCheck(req))) { res.status(401).json({ error: "App Check verification failed." }); return; }
 
       const { cityName, country } = req.body as { cityName?: string; country?: string };
       if (!cityName) {
@@ -699,14 +764,16 @@ export const revenueCatWebhook = functionsV1
     try {
       const event = req.body as {
         event: {
+          id?: string;
           type: string;
           app_user_id: string;
           expiration_at_ms?: number;
           product_id?: string;
+          transaction_id?: string;
         };
       };
 
-      const { type, app_user_id: uid, expiration_at_ms, product_id } = event.event;
+      const { id: eventId, type, app_user_id: uid, expiration_at_ms, product_id, transaction_id } = event.event;
       if (!uid) {
         res.status(400).json({ error: "Missing app_user_id." });
         return;
@@ -716,6 +783,29 @@ export const revenueCatWebhook = functionsV1
       const userRef = db.collection("users").doc(uid);
 
       logger.info("revenueCatWebhook", { type, uid, product_id });
+
+      // Consumable credit-pack purchase. RevenueCat retries webhooks, so dedup on
+      // the unique event/transaction id before granting credits.
+      if (type === "NON_RENEWING_PURCHASE" && product_id) {
+        const creditAmount = CREDIT_PACK_AMOUNTS[product_id];
+        if (!creditAmount) {
+          logger.warn("revenueCatWebhook unknown credit product", { product_id });
+          res.status(200).json({ ok: true });
+          return;
+        }
+        const dedupId = eventId ?? transaction_id ?? `${uid}-${product_id}-${Date.now()}`;
+        const eventRef = db.collection("processedPurchaseEvents").doc(dedupId);
+        const granted = await db.runTransaction(async (tx) => {
+          const seen = await tx.get(eventRef);
+          if (seen.exists) return false;
+          tx.set(eventRef, { uid, product_id, creditAmount, processedAt: FieldValue.serverTimestamp() });
+          tx.set(userRef, { usage: { credits: FieldValue.increment(creditAmount) } }, { merge: true });
+          return true;
+        });
+        logger.info("revenueCatWebhook credits", { uid, product_id, creditAmount, granted });
+        res.status(200).json({ ok: true });
+        return;
+      }
 
       if (type === "INITIAL_PURCHASE" || type === "RENEWAL" || type === "UNCANCELLATION") {
         const expiresAt = expiration_at_ms
@@ -796,6 +886,7 @@ export const migrateUsersToSubscriptionSchema = functionsV1
             totalGenerations,
             regenCount: 0,
             regenResetAt: nextReset,
+            credits: 0,
           },
         },
         { merge: true }
@@ -813,7 +904,7 @@ export const migrateUsersToSubscriptionSchema = functionsV1
 function corsHandler(req: any, res: any): boolean {
   if (req.method === "OPTIONS") {
     res.set("Access-Control-Allow-Origin", "*");
-    res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    res.set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Firebase-AppCheck");
     res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
     res.status(204).send("");
     return true;
@@ -837,6 +928,7 @@ export const getSuggestedReplacementsHttp = functionsV1
     if (!token) { res.status(401).json({ error: "Missing bearer token." }); return; }
     try {
       const decodedToken = await getAuth().verifyIdToken(token);
+      if (!(await verifyAppCheck(req))) { res.status(401).json({ error: "App Check verification failed." }); return; }
       const uid = decodedToken.uid;
       const parsed = getSuggestedReplacementsRequestSchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.message }); return; }
@@ -866,6 +958,7 @@ export const confirmActivityReplacementHttp = functionsV1
     if (!token) { res.status(401).json({ error: "Missing bearer token." }); return; }
     try {
       const decodedToken = await getAuth().verifyIdToken(token);
+      if (!(await verifyAppCheck(req))) { res.status(401).json({ error: "App Check verification failed." }); return; }
       const uid = decodedToken.uid;
       const parsed = confirmActivityReplacementRequestSchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.message }); return; }
@@ -909,6 +1002,7 @@ export const editItineraryWithLanguageHttp = functionsV1
     if (!token) { res.status(401).json({ error: "Missing bearer token." }); return; }
     try {
       const decodedToken = await getAuth().verifyIdToken(token);
+      if (!(await verifyAppCheck(req))) { res.status(401).json({ error: "App Check verification failed." }); return; }
       const uid = decodedToken.uid;
       const parsed = editItineraryWithLanguageRequestSchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.message }); return; }
@@ -952,6 +1046,7 @@ export const optimizeDayHttp = functionsV1
     if (!token) { res.status(401).json({ error: "Missing bearer token." }); return; }
     try {
       const decodedToken = await getAuth().verifyIdToken(token);
+      if (!(await verifyAppCheck(req))) { res.status(401).json({ error: "App Check verification failed." }); return; }
       const uid = decodedToken.uid;
       const parsed = optimizeDayRequestSchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.message }); return; }

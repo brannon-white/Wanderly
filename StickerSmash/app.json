@@ -17,8 +17,8 @@
     "android": {
       "package": "com.appsmadehere.wanderly",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#5B4DB5"
       },
       "edgeToEdgeEnabled": true
     },
