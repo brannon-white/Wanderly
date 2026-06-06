@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { buildDirectionsUrlFor } from './directionsUrl';
 
 export const BOOKING_COM_AID = '';    // sign up at booking.com/affiliate-program
 export const OPENTABLE_AID = '';     // sign up at cj.com → search "OpenTable" advertiser
@@ -68,40 +69,15 @@ export function buildOpenTableUrl(
 
 interface MapLocation {
   name: string;
+  placeId?: string;
   coordinates?: { latitude: number; longitude: number };
 }
 
 // Opens turn-by-turn directions between two activities.
 // Uses Apple Maps on iOS (native, no app required) and Google Maps URL on Android.
-// Coordinates are used when available; falls back to place name search.
+// Resolution prefers place_id / place name over raw coordinates — see directionsUrl.ts.
 export function buildDirectionsUrl(from: MapLocation, to: MapLocation, transportMode: string): string {
-  const m = transportMode.toLowerCase();
-
-  if (Platform.OS === 'ios') {
-    const dirflg = m === 'walk' ? 'w'
-      : m === 'bicycle' ? 'b'
-      : ['bus', 'train', 'subway', 'metro', 'ferry', 'boat'].includes(m) ? 'r'
-      : 'd'; // car, taxi, default
-    const saddr = from.coordinates
-      ? `${from.coordinates.latitude},${from.coordinates.longitude}`
-      : encodeURIComponent(from.name);
-    const daddr = to.coordinates
-      ? `${to.coordinates.latitude},${to.coordinates.longitude}`
-      : encodeURIComponent(to.name);
-    return `maps://?saddr=${saddr}&daddr=${daddr}&dirflg=${dirflg}`;
-  } else {
-    const travelmode = m === 'walk' ? 'walking'
-      : m === 'bicycle' ? 'bicycling'
-      : ['bus', 'train', 'subway', 'metro', 'ferry', 'boat'].includes(m) ? 'transit'
-      : 'driving';
-    const origin = from.coordinates
-      ? `${from.coordinates.latitude},${from.coordinates.longitude}`
-      : encodeURIComponent(from.name);
-    const dest = to.coordinates
-      ? `${to.coordinates.latitude},${to.coordinates.longitude}`
-      : encodeURIComponent(to.name);
-    return `https://www.google.com/maps/dir/${origin}/${dest}/?travelmode=${travelmode}`;
-  }
+  return buildDirectionsUrlFor(Platform.OS === 'ios' ? 'ios' : 'android', from, to, transportMode);
 }
 
 // GetYourGuide search — clearly a search, not a guaranteed listing

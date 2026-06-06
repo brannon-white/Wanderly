@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import { cacheGet, cacheSet } from '@/utils/cache';
 
-const CACHE_KEY = 'featured:itinerary:v4';
+const CACHE_KEY = 'featured:itinerary:v5';
 
 export function useFeaturedItinerary() {
   const [featuredTrip, setFeaturedTrip] = useState<any>(null);
@@ -23,9 +23,18 @@ export function useFeaturedItinerary() {
           return;
         }
 
-        const featuredSnap = await firestore().collection('featuredTrips').limit(1).get();
-        if (!featuredSnap || featuredSnap.empty) throw new Error('No featured trip found');
-        const featuredData = featuredSnap.docs[0].data();
+        // The weekly rotation (rotateFeaturedTripWeekly cloud function) keeps the
+        // current spotlight in featuredTrips/current. Fall back to any doc in the
+        // collection for safety if rotation hasn't seeded it yet.
+        let featuredData: any = null;
+        const currentDoc = await firestore().collection('featuredTrips').doc('current').get();
+        if (currentDoc.exists) {
+          featuredData = currentDoc.data();
+        } else {
+          const featuredSnap = await firestore().collection('featuredTrips').limit(1).get();
+          if (!featuredSnap || featuredSnap.empty) throw new Error('No featured trip found');
+          featuredData = featuredSnap.docs[0].data();
+        }
         setFeaturedTrip(featuredData);
 
         const itinerarySnap = await firestore()

@@ -95,6 +95,7 @@ export interface EditItineraryWithLanguageResponse {
 export async function editItineraryWithLanguage(params: {
   itineraryId: string;
   message: string;
+  dayIndex?: number;
 }): Promise<EditItineraryWithLanguageResponse> {
   return callEndpoint<EditItineraryWithLanguageResponse>('editItineraryWithLanguageHttp', params);
 }

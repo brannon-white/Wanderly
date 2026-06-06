@@ -30,6 +30,7 @@ export const ACTIVITY_TOOL_INPUT_SCHEMA = {
     reviewCount: { type: "number" },
     image: { type: "string", description: "Leave as empty string" },
     mapUrl: { type: "string" },
+    placeId: { type: "string", description: "Leave unset — populated server-side from Google Places" },
     coordinates: {
       type: "object",
       required: ["latitude", "longitude"],

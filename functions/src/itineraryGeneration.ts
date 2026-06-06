@@ -19,6 +19,7 @@ import { validateItinerary } from "./orchestration/validation";
 import { enrichTransportTimes } from "./orchestration/directions";
 import { enrichWithImages } from "./orchestration/imageEnrichment";
 import { searchNearbyForActivity } from "./orchestration/placesRetrieval";
+import { reconcileItineraryPlaces, resolveActivityPlaces } from "./orchestration/placeResolution";
 import { fetchHikingTrails } from "./orchestration/trailDiscovery";
 import { type OsmHike } from "./orchestration/types";
 
@@ -214,14 +215,22 @@ export async function generateItineraryFlow(
     logger.info("Pipeline: validation passed with minor issues", { issues: result.issues });
   }
 
-  // Step 5: Enrich transport times with real Google Routes API data
+  // Step 5: Snap activities to real Google Places (accurate coords + placeId), then
+  // enrich transport times with real Google Routes API data using those coords.
   let withTransportTimes = validated;
   if (googlePlacesApiKey) {
+    try {
+      logger.info("Pipeline: reconciling activity coordinates with Google Places");
+      validated = await reconcileItineraryPlaces(validated, googlePlacesApiKey);
+    } catch (error) {
+      logger.warn("Pipeline: place reconciliation failed, keeping AI coords", { error });
+    }
     try {
       logger.info("Pipeline: enriching transport times");
       withTransportTimes = await enrichTransportTimes(validated, googlePlacesApiKey);
     } catch (error) {
       logger.warn("Pipeline: transport enrichment failed, using estimates", { error });
+      withTransportTimes = validated;
     }
   }
 
@@ -639,6 +648,13 @@ RULES:
   }
 
   const { candidates } = toolBlock.input as { candidates: GeneratedItinerary["stops"][number]["days"][number]["activities"] };
+
+  // Snap each candidate to its real Google Place so the preview coordinates,
+  // placeId, and map URL are correct before the user picks one.
+  if (googlePlacesApiKey) {
+    const { activities: resolved } = await resolveActivityPlaces(candidates, stopLocation, googlePlacesApiKey);
+    return resolved;
+  }
   return candidates;
 }
 
@@ -652,12 +668,71 @@ export type ItineraryMutation =
 export interface EditItineraryWithLanguageInput {
   itinerary: GeneratedItinerary;
   message: string;
+  // The day the user is currently viewing. When set, mutations are clamped to
+  // this day so a request that says "today" can't churn unrelated days.
+  dayIndex?: number;
+}
+
+export interface ApplyMutationsOptions {
+  // Drop any mutation that targets a different global day index.
+  scopeDayIndex?: number;
+  // Activity indices (within scopeDayIndex's day) that must not be replaced or
+  // removed — used by optimizeDay to honour locked activities.
+  lockedActivityIndices?: number[];
+}
+
+// Pure reducer: apply a list of mutations to an itinerary. Extracted from the
+// edit/optimize flows so the mutation semantics are unit-testable without the
+// LLM. reorder never drops activities — indices missing from newOrder are
+// appended in their original order.
+export function applyMutations(
+  itinerary: GeneratedItinerary,
+  mutations: ItineraryMutation[],
+  options: ApplyMutationsOptions = {}
+): GeneratedItinerary {
+  const { scopeDayIndex, lockedActivityIndices = [] } = options;
+  const locked = new Set(lockedActivityIndices);
+  let result = itinerary;
+
+  for (const mutation of mutations) {
+    if (scopeDayIndex !== undefined && mutation.dayIndex !== scopeDayIndex) continue;
+
+    const day = getAllDays(result)[mutation.dayIndex];
+    if (!day) continue;
+
+    if (mutation.op === "replace_activity") {
+      const { activityIndex, activity } = mutation;
+      if (locked.has(activityIndex)) continue;
+      if (!day.activities[activityIndex]) continue;
+      result = updateDayByIndex(result, mutation.dayIndex, {
+        ...day,
+        activities: day.activities.map((a, ai) => (ai === activityIndex ? activity : a)),
+      });
+    } else if (mutation.op === "remove_activity") {
+      const { activityIndex } = mutation;
+      if (locked.has(activityIndex)) continue;
+      result = updateDayByIndex(result, mutation.dayIndex, {
+        ...day,
+        activities: day.activities.filter((_, i) => i !== activityIndex),
+      });
+    } else if (mutation.op === "reorder_day") {
+      const original = day.activities;
+      const safeOrder = mutation.newOrder.filter((i) => i >= 0 && i < original.length);
+      const missing = original.map((_, i) => i).filter((i) => !safeOrder.includes(i));
+      result = updateDayByIndex(result, mutation.dayIndex, {
+        ...day,
+        activities: [...safeOrder, ...missing].map((i) => original[i]),
+      });
+    }
+  }
+
+  return result;
 }
 
 export async function editItineraryWithLanguage(
   input: EditItineraryWithLanguageInput
 ): Promise<GeneratedItinerary> {
-  const { itinerary, message } = input;
+  const { itinerary, message, dayIndex } = input;
   const days = getAllDays(itinerary);
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -702,6 +777,10 @@ export async function editItineraryWithLanguage(
       day.activities.map((a, ai) => `  [${di},${ai}] ${a.time} — ${a.name} (${a.category ?? "general"})`).join("\n");
   }).join("\n\n");
 
+  const viewingDayHint = dayIndex !== undefined
+    ? `\nThe user is currently viewing Day ${dayIndex + 1}. Unless the request clearly refers to other days or the whole trip, only mutate Day ${dayIndex + 1} (dayIndex ${dayIndex}).`
+    : "";
+
   const prompt = `You are an AI travel assistant helping a user modify their itinerary through natural language.
 
 ITINERARY: ${itinerary.destinationName}${itinerary.country ? `, ${itinerary.country}` : ""}
@@ -712,7 +791,7 @@ CURRENT SCHEDULE:
 ${itinerarySummary}
 
 USER REQUEST: "${message}"
-
+${viewingDayHint}
 Analyze the request and return the minimal set of mutations needed.
 - dayIndex uses global 0-based numbering across all stops
 - For replace_activity, generate a real replacement in the same location as the original day
@@ -737,42 +816,7 @@ Analyze the request and return the minimal set of mutations needed.
 
   const { mutations } = toolBlock.input as { mutations: ItineraryMutation[] };
 
-  let result = itinerary;
-
-  for (const mutation of mutations) {
-    // Re-derive the current day from the accumulated result on every iteration
-    // so that multiple mutations on the same day compose correctly.
-    if (mutation.op === "replace_activity") {
-      const { dayIndex, activityIndex, activity } = mutation;
-      const day = getAllDays(result)[dayIndex];
-      if (day?.activities[activityIndex]) {
-        result = updateDayByIndex(result, dayIndex, {
-          ...day,
-          activities: day.activities.map((a, ai) => (ai === activityIndex ? activity : a)),
-        });
-      }
-    } else if (mutation.op === "remove_activity") {
-      const { dayIndex, activityIndex } = mutation;
-      const day = getAllDays(result)[dayIndex];
-      if (day) {
-        result = updateDayByIndex(result, dayIndex, {
-          ...day,
-          activities: day.activities.filter((_, i) => i !== activityIndex),
-        });
-      }
-    } else if (mutation.op === "reorder_day") {
-      const { dayIndex, newOrder } = mutation;
-      const day = getAllDays(result)[dayIndex];
-      if (day) {
-        const reordered = newOrder
-          .filter((i) => i >= 0 && i < day.activities.length)
-          .map((i) => day.activities[i]);
-        result = updateDayByIndex(result, dayIndex, { ...day, activities: reordered });
-      }
-    }
-  }
-
-  return result;
+  return applyMutations(itinerary, mutations, { scopeDayIndex: dayIndex });
 }
 
 // ─── Optimize a single day ───────────────────────────────────────────────────
@@ -958,39 +1002,12 @@ RULES:
 
   const { mutations } = toolBlock.input as { mutations: ItineraryMutation[] };
 
-  let result = itinerary;
+  // The model is instructed that every op targets this day; force dayIndex so an
+  // omitted/incorrect value can't redirect a mutation elsewhere.
+  const dayScoped = mutations.map((m) => ({ ...m, dayIndex }));
 
-  for (const mutation of mutations) {
-    const currentDay = getAllDays(result)[dayIndex];
-    if (!currentDay) continue;
-
-    if (mutation.op === "replace_activity") {
-      const { activityIndex, activity } = mutation;
-      if (lockedActivities.includes(activityIndex)) continue;
-      if (currentDay.activities[activityIndex]) {
-        result = updateDayByIndex(result, dayIndex, {
-          ...currentDay,
-          activities: currentDay.activities.map((a, ai) => (ai === activityIndex ? activity : a)),
-        });
-      }
-    } else if (mutation.op === "remove_activity") {
-      const { activityIndex } = mutation;
-      if (lockedActivities.includes(activityIndex)) continue;
-      result = updateDayByIndex(result, dayIndex, {
-        ...currentDay,
-        activities: currentDay.activities.filter((_, i) => i !== activityIndex),
-      });
-    } else if (mutation.op === "reorder_day") {
-      const { newOrder } = mutation;
-      const original = currentDay.activities;
-      const safeOrder = newOrder.filter((i) => i >= 0 && i < original.length);
-      const missing = original.map((_, i) => i).filter((i) => !safeOrder.includes(i));
-      result = updateDayByIndex(result, dayIndex, {
-        ...currentDay,
-        activities: [...safeOrder, ...missing].map((i) => original[i]),
-      });
-    }
-  }
-
-  return result;
+  return applyMutations(itinerary, dayScoped, {
+    scopeDayIndex: dayIndex,
+    lockedActivityIndices: lockedActivities,
+  });
 }

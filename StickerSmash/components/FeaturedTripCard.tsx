@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { styles } from '@/styles/discoverScreenStyles';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -13,6 +14,8 @@ export default function FeaturedTripCard({ itinerary, featuredTrip }: { itinerar
   const tripId = featuredTrip.tripId ?? itinerary.id;
   const durationDays = itinerary.durationDays ?? featuredTrip.durationDays;
   const badge: string | undefined = featuredTrip.badge;
+  const rating = itinerary.rating ?? featuredTrip.rating;
+  const reviewCount = itinerary.reviewCount ?? featuredTrip.reviewCount;
   const summaryItems: string[] = Array.isArray(itinerary.summary) ? itinerary.summary : [];
   const interestTags: string[] = Array.isArray(itinerary.interests) ? itinerary.interests : [];
 
@@ -25,14 +28,8 @@ export default function FeaturedTripCard({ itinerary, featuredTrip }: { itinerar
           resizeMode="cover"
         />
         {badge ? (
-          <View style={{
-            position: 'absolute', top: 12, left: 12,
-            backgroundColor: '#6A62B7', borderRadius: 12,
-            paddingHorizontal: 10, paddingVertical: 4,
-          }}>
-            <Text style={{ color: '#fff', fontSize: 12, fontFamily: 'SourceSans3-Regular', fontWeight: '700' }}>
-              {badge}
-            </Text>
+          <View style={styles.featuredBadge}>
+            <Text style={styles.featuredBadgeText}>{badge}</Text>
           </View>
         ) : null}
       </View>
@@ -40,23 +37,36 @@ export default function FeaturedTripCard({ itinerary, featuredTrip }: { itinerar
       <View style={styles.featuredTripContent}>
         <Text style={styles.featuredTripTitle}>{itinerary.title || featuredTrip.title}</Text>
 
-        {durationDays ? (
-          <Text style={{ fontSize: 13, color: '#6A62B7', marginBottom: 10, fontFamily: 'SourceSans3-Regular' }}>
-            {durationDays} days
-          </Text>
+        {/* Rating · duration meta row */}
+        {(rating || durationDays) ? (
+          <View style={styles.featuredMetaRow}>
+            {rating ? (
+              <>
+                <Ionicons name="star" size={14} color="#f5a623" />
+                <Text style={styles.featuredRatingText}>{rating}</Text>
+                {reviewCount ? (
+                  <Text style={styles.featuredReviewText}>({Number(reviewCount).toLocaleString()})</Text>
+                ) : null}
+              </>
+            ) : null}
+            {rating && durationDays ? <Text style={styles.featuredMetaDot}>•</Text> : null}
+            {durationDays ? (
+              <Text style={styles.featuredDurationText}>{durationDays} days</Text>
+            ) : null}
+          </View>
         ) : null}
 
         <Text style={styles.featuredTripSubtitle}>
           {summaryItems.length > 0
             ? summaryItems.map((item: string) => `• ${item}`).join('\n')
-            : featuredTrip.description ?? ''}
+            : featuredTrip.description ?? featuredTrip.subtitle ?? ''}
         </Text>
 
         {interestTags.length > 0 && (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+          <View style={styles.featuredTagsRow}>
             {interestTags.map((tag: string) => (
-              <View key={tag} style={{ backgroundColor: '#f0eeff', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}>
-                <Text style={{ color: '#6A62B7', fontSize: 12, fontFamily: 'SourceSans3-Regular' }}>{tag}</Text>
+              <View key={tag} style={styles.featuredTag}>
+                <Text style={styles.featuredTagText}>{tag}</Text>
               </View>
             ))}
           </View>

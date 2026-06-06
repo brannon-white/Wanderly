@@ -3,23 +3,180 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Wanderly — Legal</title>
+<title>Wanderly — AI-Powered Travel Itineraries</title>
+<meta name="description" content="Wanderly builds personalized day-by-day travel itineraries tailored to your taste — then helps you book hotels, restaurants, and experiences in a tap.">
+<meta property="og:title" content="Wanderly — AI-Powered Travel Itineraries">
+<meta property="og:description" content="Personalized day-by-day travel itineraries, tailored to your taste.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="/icon.png">
+<link rel="icon" href="/icon.png">
 <style>
-  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
-    background:#f4f2ff; color:#1a1a2e;
+  :root {
+    --purple:#5B4DB5; --purple-2:#6A62B7; --gold:#F2B544; --gold-deep:#E0A22E;
+    --ink:#1a1a2e; --muted:#5b5b6e; --bg:#f4f2ff; --card:#ffffff;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--ink); line-height:1.6;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
-  .card { background:#fff; border-radius:20px; padding:40px 48px; text-align:center;
-    box-shadow:0 2px 18px rgba(106,98,183,0.12); }
-  h1 { color:#6A62B7; margin:0 0 20px; }
-  a { display:block; margin:10px 0; color:#6A62B7; font-size:18px; text-decoration:none; }
-  a:hover { text-decoration:underline; }
+  a { color:var(--purple-2); }
+
+  /* Hero */
+  .hero { background:linear-gradient(160deg,#5B4DB5 0%,#7A6FD0 100%); color:#fff;
+    padding:64px 24px 80px; text-align:center; position:relative; overflow:hidden; }
+  .hero .logo { width:96px; height:96px; border-radius:22px; box-shadow:0 8px 30px rgba(0,0,0,0.25); }
+  .hero h1 { font-size:clamp(32px,6vw,52px); margin:24px 0 8px; letter-spacing:-0.5px; }
+  .hero .tagline { font-size:clamp(17px,3vw,22px); color:#ece9ff; max-width:620px;
+    margin:0 auto 32px; }
+  .badge { display:inline-block; background:rgba(255,255,255,0.15); color:#fff;
+    padding:6px 14px; border-radius:999px; font-size:13px; font-weight:600;
+    letter-spacing:0.3px; margin-bottom:8px; border:1px solid rgba(255,255,255,0.25); }
+  .cta { display:inline-block; background:var(--gold); color:#3a2d00; font-weight:700;
+    padding:14px 30px; border-radius:999px; text-decoration:none; font-size:17px;
+    box-shadow:0 6px 20px rgba(242,181,68,0.4); transition:transform .12s ease; }
+  .cta:hover { transform:translateY(-2px); }
+  .cta.secondary { background:transparent; color:#fff; border:1.5px solid rgba(255,255,255,0.6);
+    box-shadow:none; margin-left:10px; }
+
+  /* Sections */
+  .wrap { max-width:980px; margin:0 auto; padding:0 24px; }
+  section { padding:64px 0; }
+  h2 { font-size:clamp(24px,4vw,34px); text-align:center; margin:0 0 8px; color:var(--ink); }
+  .sub { text-align:center; color:var(--muted); max-width:600px; margin:0 auto 40px; font-size:17px; }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:20px; }
+  .feature { background:var(--card); border-radius:18px; padding:28px 24px;
+    box-shadow:0 2px 18px rgba(91,77,181,0.08); }
+  .feature .emoji { font-size:30px; }
+  .feature h3 { margin:12px 0 6px; font-size:19px; color:var(--purple-2); }
+  .feature p { margin:0; color:var(--muted); font-size:15.5px; }
+
+  /* Steps */
+  .steps { counter-reset:step; max-width:680px; margin:0 auto; }
+  .step { display:flex; gap:18px; align-items:flex-start; padding:18px 0;
+    border-bottom:1px solid #e7e3ff; }
+  .step:last-child { border-bottom:none; }
+  .step .num { flex:0 0 40px; height:40px; width:40px; border-radius:50%;
+    background:var(--purple); color:#fff; display:flex; align-items:center;
+    justify-content:center; font-weight:700; }
+  .step h3 { margin:4px 0 4px; font-size:18px; }
+  .step p { margin:0; color:var(--muted); font-size:15.5px; }
+
+  /* Screenshots */
+  #screens { background:#fff; }
+  .shots { display:flex; gap:24px; justify-content:center; flex-wrap:wrap; }
+  .shot { width:230px; max-width:60vw; border-radius:32px; padding:10px;
+    background:#1a1a2e; box-shadow:0 12px 36px rgba(91,77,181,0.22); }
+  .shot img { width:100%; display:block; border-radius:24px; background:#ece9ff; }
+
+  /* CTA band */
+  .band { background:linear-gradient(160deg,#5B4DB5 0%,#7A6FD0 100%); color:#fff;
+    text-align:center; border-radius:24px; padding:48px 24px; margin:24px; }
+  .band h2 { color:#fff; }
+  .band p { color:#ece9ff; max-width:480px; margin:0 auto 26px; }
+
+  /* Footer */
+  footer { text-align:center; padding:40px 24px 56px; color:var(--muted); font-size:14px; }
+  footer a { color:var(--purple-2); margin:0 10px; text-decoration:none; }
+  footer a:hover { text-decoration:underline; }
+  .disclosure { max-width:680px; margin:18px auto 0; font-size:12.5px; color:#9a98ad; }
 </style>
 </head>
 <body>
-<div class="card">
-<h1>Wanderly</h1>
-<a href="/privacy">Privacy Policy</a>
-<a href="/terms">Terms of Service</a>
+
+<header class="hero">
+  <img src="/icon.png" alt="Wanderly app icon" class="logo">
+  <h1>Wanderly</h1>
+  <p class="tagline">AI-powered travel itineraries, personalized to your taste — then booked in a tap.</p>
+  <div>
+    <a class="cta" href="#features">See how it works</a>
+    <a class="cta secondary" href="#get">Get the app</a>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Travel planning that actually knows you</h2>
+    <p class="sub">Wanderly learns what you love and builds a day-by-day plan around it — no more generic top-10 lists.</p>
+    <div class="grid">
+      <div class="feature">
+        <div class="emoji">🧭</div>
+        <h3>Personalized to your taste</h3>
+        <p>A few swipes teach Wanderly your style. Every itinerary is biased toward the food, pace, and experiences you actually want.</p>
+      </div>
+      <div class="feature">
+        <div class="emoji">🗓️</div>
+        <h3>Smart day-by-day plans</h3>
+        <p>Activities, restaurants, and downtime arranged by time and location — with travel between stops figured out for you.</p>
+      </div>
+      <div class="feature">
+        <div class="emoji">✨</div>
+        <h3>Refine on the fly</h3>
+        <p>Swap an activity, adjust the vibe, or tweak the budget and Wanderly re-plans around it instantly.</p>
+      </div>
+      <div class="feature">
+        <div class="emoji">🏨</div>
+        <h3>Book it in a tap</h3>
+        <p>Jump straight from your itinerary to reserve hotels, tables, and experiences — no copy-pasting.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="background:#fff;">
+  <div class="wrap">
+    <h2>How it works</h2>
+    <p class="sub">From idea to a bookable plan in minutes.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <div><h3>Tell us about your trip</h3><p>Destination, dates, who's coming, and your budget — plus anything special you have in mind.</p></div>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <div><h3>Swipe your taste profile</h3><p>Quick swipes on places and activities tune Wanderly to what you love.</p></div>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <div><h3>Get a personalized itinerary</h3><p>A complete, time-aware day-by-day plan built just for you.</p></div>
+      </div>
+      <div class="step">
+        <div class="num">4</div>
+        <div><h3>Book and go</h3><p>Reserve hotels, restaurants, and experiences directly from your plan.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="screens">
+  <div class="wrap">
+    <h2>See Wanderly in action</h2>
+    <p class="sub">A peek at the app — from planning your trip to your finished itinerary.</p>
+    <div class="shots">
+      <!-- SCREENSHOTS: drop PNGs named shot1.png … shot3.png into legal/public/ -->
+      <div class="shot"><img src="/shot1.png" alt="Wanderly Discover screen with a featured trip" loading="lazy"></div>
+      <div class="shot"><img src="/shot2.png" alt="Wanderly personalized itinerary screen" loading="lazy"></div>
+      <div class="shot"><img src="/shot3.png" alt="Wanderly activity detail screen" loading="lazy"></div>
+    </div>
+  </div>
+</section>
+
+<div class="band" id="get">
+  <h2>Plan your next trip with Wanderly</h2>
+  <p>Personalized itineraries that are ready to book. Coming soon to the App Store.</p>
+  <a class="cta" href="mailto:brannonwhite01@gmail.com?subject=Wanderly%20early%20access">Request early access</a>
 </div>
+
+<footer>
+  <div>
+    <a href="/privacy">Privacy Policy</a> ·
+    <a href="/terms">Terms of Service</a> ·
+    <a href="mailto:brannonwhite01@gmail.com">Contact</a>
+  </div>
+  <p style="margin-top:14px;">© 2026 Wanderly · Brannon White</p>
+  <p class="disclosure">Wanderly may participate in affiliate programs with travel and hospitality partners.
+    Where it does, Wanderly may earn a commission when you book through links in the app, at no additional cost to you.</p>
+</footer>
+
 </body>
 </html>
