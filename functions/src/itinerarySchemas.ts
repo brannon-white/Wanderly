@@ -67,6 +67,7 @@ export const itineraryActivitySchema = z.object({
   reviewCount: z.union([z.number(), z.string()]).optional(),
   image: z.string().default(""),
   mapUrl: z.string().optional(),
+  placeId: z.string().optional(),
   coordinates: itineraryCoordinatesSchema.optional(),
   transport: z.array(itineraryTransportOptionSchema).default([]),
   locked: z.boolean().optional(),
@@ -192,6 +193,7 @@ export const confirmActivityReplacementRequestSchema = z.object({
 export const editItineraryWithLanguageRequestSchema = z.object({
   itineraryId: z.string().min(1),
   message: z.string().min(1).max(500),
+  dayIndex: z.number().int().nonnegative().optional(),
 });
 
 export const optimizeDayRequestSchema = z.object({

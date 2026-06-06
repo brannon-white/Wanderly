@@ -44,7 +44,7 @@ import ReplaceSuggestionsSheet, { type ActivityAction, type SheetTarget } from '
 import ActivityDetailSheet from './ActivityDetailSheet';
 import SmartBanner from './SmartBanner';
 import DayOptimizeBar from './DayOptimizeBar';
-import { editItineraryWithLanguage, getSuggestedReplacements } from '@/services/regenerateItinerary';
+import { editItineraryWithLanguage, getSuggestedReplacements, optimizeDay } from '@/services/regenerateItinerary';
 import { analyzeDay, type ActivityInsight } from '@/utils/itineraryInsights';
 import ItineraryRefinementBar from './ItineraryRefinementBar';
 import { logRegenAttempted } from '@/services/analytics';
@@ -224,8 +224,8 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, onPress, onLon
 
   const handleTransportPress = firstTransport && nextActivity
     ? () => Linking.openURL(buildDirectionsUrl(
-        { name: activity.name, coordinates: activity.coordinates },
-        { name: nextActivity.name, coordinates: nextActivity.coordinates },
+        { name: activity.name, placeId: activity.placeId, coordinates: activity.coordinates },
+        { name: nextActivity.name, placeId: nextActivity.placeId, coordinates: nextActivity.coordinates },
         firstTransport.mode ?? 'walk',
       ))
     : undefined;
@@ -689,7 +689,7 @@ export default function ItineraryScreen() {
     logRegenAttempted('ai_bar');
     setAiBarLoading(true);
     try {
-      const { itinerary: updated } = await editItineraryWithLanguage({ itineraryId: id, message: message.trim() });
+      const { itinerary: updated } = await editItineraryWithLanguage({ itineraryId: id, message: message.trim(), dayIndex: selectedDay });
       setRemoteItinerary(updated);
     } catch (err) {
       if (err instanceof Error && /regen_limit_reached/i.test(err.message)) {
@@ -700,7 +700,32 @@ export default function ItineraryScreen() {
     } finally {
       setAiBarLoading(false);
     }
-  }, [id, aiBarLoading]);
+  }, [id, aiBarLoading, selectedDay]);
+
+  // Whole-day "Reduce Walking" — reorders the day to minimize walking (keeps meals
+  // in place). Distinct from the between-activity reduce_walking, which swaps a venue.
+  const handleReduceWalkingDay = useCallback(async () => {
+    if (!id || aiBarLoading) return;
+    const usage = await getUsageStatus().catch(() => null);
+    if (usage && !usage.isPro && usage.regensLeft <= 0) {
+      setShowRegenPaywall(true);
+      return;
+    }
+    logRegenAttempted('day');
+    setAiBarLoading(true);
+    try {
+      const { itinerary: updated } = await optimizeDay({ itineraryId: id, dayIndex: selectedDay, mode: 'minimize_walking' });
+      setRemoteItinerary(updated);
+    } catch (err) {
+      if (err instanceof Error && /regen_limit_reached/i.test(err.message)) {
+        setShowRegenPaywall(true);
+      } else {
+        Alert.alert('Could not reduce walking', err instanceof Error ? err.message : 'Please try again.');
+      }
+    } finally {
+      setAiBarLoading(false);
+    }
+  }, [id, aiBarLoading, selectedDay]);
 
   const handleAiBarSubmit = useCallback(() => {
     const message = aiBarMessage.trim();
@@ -919,8 +944,8 @@ export default function ItineraryScreen() {
             key={`top-insight-${i}`}
             insight={ins}
             onAction={(actionType) => {
-              if (actionType === 'reduce_walking' && id) {
-                handleAction(selectedDay, 0, activities[0], 'replace');
+              if (actionType === 'reduce_walking') {
+                handleReduceWalkingDay();
               }
             }}
           />
@@ -981,7 +1006,7 @@ export default function ItineraryScreen() {
                         if (!message) return;
                         setAiBarLoading(true);
                         try {
-                          const { itinerary: updated } = await editItineraryWithLanguage({ itineraryId: id, message });
+                          const { itinerary: updated } = await editItineraryWithLanguage({ itineraryId: id, message, dayIndex: selectedDay });
                           setRemoteItinerary(updated);
                         } catch {
                           Alert.alert('Could not apply changes', 'Please try again.');

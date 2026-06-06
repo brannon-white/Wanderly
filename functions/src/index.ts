@@ -6,6 +6,7 @@ import { getMessaging } from "firebase-admin/messaging";
 import { defineSecret } from "firebase-functions/params";
 import * as functionsV1 from "firebase-functions/v1";
 import * as logger from "firebase-functions/logger";
+import { rotateFeatured } from "./featuredRotation";
 
 const FREE_MONTHLY_GENERATION_LIMIT = 3;
 const FREE_MONTHLY_REGEN_LIMIT = 3;
@@ -203,6 +204,7 @@ import {
 } from "./itinerarySchemas";
 import { getAllDays, updateDayByIndex, type GeneratedItinerary } from "./itinerarySchemas";
 import { enrichDayTransportTimes, enrichTransportTimes } from "./orchestration/directions";
+import { reconcileItineraryPlaces } from "./orchestration/placeResolution";
 
 initializeApp();
 
@@ -515,8 +517,10 @@ export const regenerateActivityHttp = functionsV1
 
       let updated = await regenerateActivity({ itinerary: currentItinerary, dayIndex, activityIndex, reason });
 
-      // Re-enrich transport times for the affected day so travel legs stay accurate
+      // Snap the new activity to its real Google Place (correct coords + placeId),
+      // then re-enrich transport times for the affected day so travel legs stay accurate
       if (process.env.GOOGLE_PLACES_API_KEY) {
+        updated = await reconcileItineraryPlaces(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
         updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
       }
 
@@ -592,7 +596,13 @@ export const regenerateDayHttp = functionsV1
 
       logger.info("regenerateDayHttp", { uid, itineraryId, dayIndex, modifications });
 
-      const updated = await regenerateDay({ itinerary: currentItinerary, dayIndex, modifications });
+      let updated = await regenerateDay({ itinerary: currentItinerary, dayIndex, modifications });
+
+      // Snap the regenerated day's activities to real Google Places, then enrich travel legs
+      if (process.env.GOOGLE_PLACES_API_KEY) {
+        updated = await reconcileItineraryPlaces(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
+        updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
+      }
 
       await itineraryRef.update({
         stops: updated.stops,
@@ -975,8 +985,10 @@ export const confirmActivityReplacementHttp = functionsV1
       };
       let updated = updateDayByIndex(current, dayIndex, updatedDay);
 
-      // Re-enrich transport times for the affected day so legs stay accurate after the swap
+      // Snap the swapped-in activity to its real Google Place, then re-enrich
+      // transport times for the affected day so legs stay accurate after the swap
       if (process.env.GOOGLE_PLACES_API_KEY) {
+        updated = await reconcileItineraryPlaces(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
         updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
       }
 
@@ -1006,16 +1018,18 @@ export const editItineraryWithLanguageHttp = functionsV1
       const uid = decodedToken.uid;
       const parsed = editItineraryWithLanguageRequestSchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.message }); return; }
-      const { itineraryId, message } = parsed.data;
+      const { itineraryId, message, dayIndex } = parsed.data;
       await checkAndConsumeRegenCredit(uid);
       const itineraryRef = getFirestore().collection("users").doc(uid).collection("itineraries").doc(itineraryId);
       const snap = await itineraryRef.get();
       if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
-      logger.info("editItineraryWithLanguageHttp", { uid, itineraryId, message });
-      let updated = await editItineraryWithLanguage({ itinerary: snap.data() as any, message });
+      logger.info("editItineraryWithLanguageHttp", { uid, itineraryId, message, dayIndex });
+      let updated = await editItineraryWithLanguage({ itinerary: snap.data() as any, message, dayIndex });
 
-      // Re-enrich transport for all days — natural language edits can affect multiple days
+      // Snap any new/changed activities to real Google Places, then re-enrich
+      // transport for all days — natural language edits can affect multiple days
       if (process.env.GOOGLE_PLACES_API_KEY) {
+        updated = await reconcileItineraryPlaces(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
         updated = await enrichTransportTimes(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
       }
 
@@ -1058,8 +1072,10 @@ export const optimizeDayHttp = functionsV1
       logger.info("optimizeDayHttp", { uid, itineraryId, dayIndex, mode });
       let updated = await optimizeDay({ itinerary: snap.data() as any, dayIndex, mode });
 
-      // Re-enrich transport for the optimized day — activities may be reordered or replaced
+      // Snap any newly swapped-in activities to real Google Places, then re-enrich
+      // transport for the optimized day — activities may be reordered or replaced
       if (process.env.GOOGLE_PLACES_API_KEY) {
+        updated = await reconcileItineraryPlaces(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
         updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
       }
 
@@ -1077,4 +1093,21 @@ export const optimizeDayHttp = functionsV1
       logger.error("optimizeDayHttp failed", { ...e, rawError: error });
       res.status(e.status).json(e);
     }
+  });
+
+// ─── Featured Trip weekly rotation ────────────────────────────────────────────
+// Advances the spotlighted prebuilt itinerary (featuredTrips/current) one step
+// through FEATURED_POOL every Monday — sequential round-robin so each of the 9
+// trips is featured before any repeats. Backed by Cloud Scheduler + Pub/Sub.
+export const rotateFeaturedTripWeekly = functionsV1
+  .region("us-central1")
+  .runWith({
+    serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
+  })
+  .pubsub.schedule("7 13 * * 1") // Mondays 13:07 America/New_York
+  .timeZone("America/New_York")
+  .onRun(async () => {
+    const result = await rotateFeatured(getFirestore());
+    logger.info("Rotated featured trip", result);
+    return null;
   });

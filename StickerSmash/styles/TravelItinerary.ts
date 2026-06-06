@@ -104,35 +104,40 @@ export const styles = StyleSheet.create({
 
   // ── Date tabs ─────────────────────────────────────────────────────────
   dateSelector: {
-    paddingVertical: 10,
+    paddingVertical: 14,
   },
 
   dateSelectorContent: {
-    paddingHorizontal: 16,
-    gap: 8,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    gap: 10,
   },
 
   dateBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    paddingVertical: 13,
+    paddingHorizontal: 24,
+    borderRadius: 26,
+    backgroundColor: '#F4F2FB',
   },
 
   dateBtnActive: {
     backgroundColor: PURPLE,
+    shadowColor: PURPLE,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.32,
+    shadowRadius: 8,
+    elevation: 4,
   },
 
   dateBtnText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#555',
-    fontFamily: 'SourceSans3-Regular',
+    fontSize: 15,
+    color: '#6E6A85',
+    fontFamily: 'SourceSans3-SemiBold',
   },
 
   dateBtnTextActive: {
     color: '#fff',
-    fontWeight: '600',
+    fontFamily: 'SourceSans3-SemiBold',
   },
 
   // ── Activity cards ────────────────────────────────────────────────────
@@ -375,11 +380,11 @@ export const styles = StyleSheet.create({
   },
 
   dayTitle: {
-    fontSize: 15,
-    color: '#888',
-    fontFamily: 'SourceSans3-Regular',
-    paddingHorizontal: 56,
-    paddingBottom: 12,
+    fontSize: 17,
+    color: '#3D3555',
+    fontFamily: 'SourceSans3-SemiBold',
+    paddingHorizontal: 20,
+    paddingBottom: 14,
     paddingTop: 2,
   },
 

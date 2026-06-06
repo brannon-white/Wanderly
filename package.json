@@ -1,5 +1,8 @@
 {
   "name": "Wanderly",
+  "scripts": {
+    "test": "vitest run"
+  },
   "dependencies": {
     "@react-navigation/native": "^7.1.14",
     "@react-navigation/stack": "^7.4.2",
@@ -7,6 +10,7 @@
     "react-native-screens": "^4.11.1"
   },
   "devDependencies": {
-    "@react-native-community/cli": "latest"
+    "@react-native-community/cli": "latest",
+    "vitest": "^2.1.9"
   }
 }

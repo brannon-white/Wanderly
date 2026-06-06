@@ -107,6 +107,7 @@ export interface ItineraryActivity {
   reviewCount?: number | string;
   image: string;
   mapUrl?: string;
+  placeId?: string;
   coordinates?: ItineraryCoordinates;
   transport: ItineraryTransportOption[];
   locked?: boolean;

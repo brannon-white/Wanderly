@@ -231,7 +231,7 @@ export default function ProfileScreen() {
 
         {/* ── Subscription ── */}
         {!isDemoMode && usageStatus && (
-          <View style={styles.section}>
+          <View style={[styles.section, subscriptionStyles.subscriptionSection]}>
             {usageStatus.isPro ? (
               <View style={subscriptionStyles.proRow}>
                 <View style={subscriptionStyles.proBadge}>
@@ -400,6 +400,9 @@ export default function ProfileScreen() {
 }
 
 const subscriptionStyles = StyleSheet.create({
+  subscriptionSection: {
+    padding: 16,
+  },
   legalRow: {
     flexDirection: 'row',
     alignItems: 'center',
