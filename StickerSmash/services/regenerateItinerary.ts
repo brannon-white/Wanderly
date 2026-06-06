@@ -1,4 +1,5 @@
 import { getAuth, getIdToken } from '@react-native-firebase/auth';
+import { getAppCheckHeader } from '@/services/appCheck';
 import type { FirestoreItineraryDocument, GeneratedItinerary, ItineraryActivity } from '@/types/itinerary';
 
 const BASE_URL = 'https://us-central1-wanderly-dff52.cloudfunctions.net';
@@ -11,11 +12,13 @@ async function getBearerToken(): Promise<string> {
 
 async function callEndpoint<T>(endpoint: string, body: Record<string, unknown>): Promise<T> {
   const idToken = await getBearerToken();
+  const appCheckHeader = await getAppCheckHeader();
   const response = await fetch(`${BASE_URL}/${endpoint}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${idToken}`,
       'Content-Type': 'application/json',
+      ...appCheckHeader,
     },
     body: JSON.stringify(body),
   });

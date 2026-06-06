@@ -1,4 +1,5 @@
 import { getAuth, getIdToken } from '@react-native-firebase/auth';
+import { getAppCheckHeader } from '@/services/appCheck';
 
 import type {
   FirestoreItineraryDocument,
@@ -20,6 +21,7 @@ export async function generateItinerary(
   }
 
   const idToken = await getIdToken(currentUser, true);
+  const appCheckHeader = await getAppCheckHeader();
   const response = await fetch(
     'https://us-central1-wanderly-dff52.cloudfunctions.net/generateItineraryHttp',
     {
@@ -27,6 +29,7 @@ export async function generateItinerary(
       headers: {
         Authorization: `Bearer ${idToken}`,
         'Content-Type': 'application/json',
+        ...appCheckHeader,
       },
       body: JSON.stringify(payload),
     }

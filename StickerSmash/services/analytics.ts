@@ -16,11 +16,11 @@ export function logPaywallShown(reason: 'generation' | 'regen') {
   log('paywall_shown', { reason });
 }
 
-export function logPurchaseStarted(plan: 'monthly' | 'annual') {
+export function logPurchaseStarted(plan: 'monthly' | 'annual' | 'credits') {
   log('purchase_started', { plan });
 }
 
-export function logPurchaseCompleted(plan: 'monthly' | 'annual') {
+export function logPurchaseCompleted(plan: 'monthly' | 'annual' | 'credits') {
   log('purchase_completed', { plan });
 }
 

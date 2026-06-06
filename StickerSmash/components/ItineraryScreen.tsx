@@ -1144,7 +1144,7 @@ export default function ItineraryScreen() {
           }}
         >
           <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'SourceSans3-Regular', flex: 1 }}>
-            Love it? Upgrade for unlimited trips — $4.99/mo
+            Love it? Go Pro for 20 trips a month — $9.99/mo
           </Text>
           <TouchableOpacity
             onPress={() => {

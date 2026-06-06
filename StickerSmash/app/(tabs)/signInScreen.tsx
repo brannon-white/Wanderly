@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ImageBackground, TextInput, Alert, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { styles } from '@/styles/signInScreenStyles';
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signInWithCredential, signOut as firebaseSignOut, GoogleAuthProvider } from '@react-native-firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signInWithCredential, GoogleAuthProvider } from '@react-native-firebase/auth';
 import { useDemo } from '@/context/DemoContext';
 import { userExists } from '@/hooks/useSaveUserProfile';
 import { getOnboardingStepData } from '@/utils/onboardingStorage';
@@ -13,15 +13,15 @@ import { RootStackParamList } from '@/app/_layout'; // GoogleSignin.configure() 
 export default function SignInScreen({ onSignIn }: { onSignIn?: () => void }) {
   const { isDemoMode } = useDemo();
   const [loading, setLoading] = useState(false);
-  const [user, setUser] = useState<any>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   
   useEffect(() => {
     const subscriber = onAuthStateChanged(getAuth(), firebaseUser => {
-      setUser(firebaseUser);
-
+      if (firebaseUser) {
+        navigation.navigate('Index');
+      }
     });
     return subscriber;
   }, []);
@@ -90,16 +90,6 @@ async function signInWithGoogle() {
   }
 }
 
-  async function handleSignOut() {
-    try {
-      await GoogleSignin.revokeAccess();
-      await firebaseSignOut(getAuth());
-      Alert.alert('Signed Out', 'You have been signed out.');
-    } catch (error: any) {
-      Alert.alert('Error', `Could not sign out: ${error.message}`);
-    }
-  }
-
   return (
     <ImageBackground
       source={require('@/assets/images/OnboardingPurpleBinoculars.png')}
@@ -120,60 +110,51 @@ async function signInWithGoogle() {
       >
         <View style={styles.card}>
           <Text style={styles.welcome}>Welcome{'\n'}Back</Text>
-          {user ? (
-            <View>
-              <Text style={styles.label}>Signed in as: {user.displayName || user.email}</Text>
-              <TouchableOpacity style={styles.signInButton} onPress={handleSignOut}>
-                <Text style={styles.signInButtonText}>Sign Out</Text>
-              </TouchableOpacity>
+          <>
+            <TouchableOpacity
+              style={styles.googleButton}
+              onPress={signInWithGoogle}
+              disabled={loading}
+              activeOpacity={0.85}
+            >
+              <Image source={require('@/assets/images/google-logo.png')} style={styles.googleButtonIcon} />
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
+            </TouchableOpacity>
+            {loading && <ActivityIndicator size="large" color="#0000ff" />}
+            <View style={styles.dividerRow}>
+              <View style={styles.divider} />
+              <Text style={styles.orText}>Or</Text>
+              <View style={styles.divider} />
             </View>
-          ) : (
-            <>
-              <TouchableOpacity
-                style={styles.googleButton}
-                onPress={signInWithGoogle}
-                disabled={loading}
-                activeOpacity={0.85}
-              >
-                <Image source={require('@/assets/images/google-logo.png')} style={styles.googleButtonIcon} />
-                <Text style={styles.googleButtonText}>Continue with Google</Text>
-              </TouchableOpacity>
-              {loading && <ActivityIndicator size="large" color="#0000ff" />}
-              <View style={styles.dividerRow}>
-                <View style={styles.divider} />
-                <Text style={styles.orText}>Or</Text>
-                <View style={styles.divider} />
-              </View>
-              <Text style={styles.label}>Email</Text>
-              <View style={styles.inputRow}>
-                <Text style={styles.inputIcon}>📧</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Email"
-                  placeholderTextColor="#aaa"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  value={email}
-                  onChangeText={setEmail}
-                />
-              </View>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.inputRow}>
-                <Text style={styles.inputIcon}>🔒</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Password"
-                  placeholderTextColor="#aaa"
-                  secureTextEntry
-                  value={password}
-                  onChangeText={setPassword}
-                />
-              </View>
-              <TouchableOpacity style={styles.signInButton} onPress={signInWithEmail}>
-                <Text style={styles.signInButtonText}>Sign In</Text>
-              </TouchableOpacity>
-            </>
-          )}
+            <Text style={styles.label}>Email</Text>
+            <View style={styles.inputRow}>
+              <Text style={styles.inputIcon}>📧</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor="#aaa"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
+              />
+            </View>
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.inputRow}>
+              <Text style={styles.inputIcon}>🔒</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor="#aaa"
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+              />
+            </View>
+            <TouchableOpacity style={styles.signInButton} onPress={signInWithEmail}>
+              <Text style={styles.signInButtonText}>Sign In</Text>
+            </TouchableOpacity>
+          </>
         </View>
       </KeyboardAvoidingView>
     </ImageBackground>
