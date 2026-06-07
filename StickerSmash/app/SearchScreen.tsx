@@ -99,6 +99,13 @@ const POPULAR: Array<SearchItem> = [
   },
 ];
 
+// Include state so same-named cities in different states (e.g. Chattanooga TN
+// vs OK) don't resolve to the same photo.
+function photoQuery(item: SearchItem): string {
+  const parts = [item.name, item.state, item.country].filter(Boolean);
+  return `${parts.join(' ')} travel`;
+}
+
 function ResultRow({
   item,
   onPress,
@@ -112,7 +119,7 @@ function ResultRow({
 
   useEffect(() => {
     if (!imgUrl) {
-      searchPhoto(`${item.name} ${item.country} travel`).then((url) => {
+      searchPhoto(photoQuery(item)).then((url) => {
         if (url) setImgUrl(url);
       });
     }
@@ -190,7 +197,7 @@ export default function SearchScreen() {
       if (selectingId) return;
       setSelectingId(item.id);
       try {
-        const photos = await searchPhotos(`${item.name} ${item.country} travel`, 4);
+        const photos = await searchPhotos(photoQuery(item), 4);
         const heroImage = item.imageUrl || photos[0] || '';
         const gallery = item.imageUrl ? photos.slice(0, 3) : photos.slice(1, 4);
 

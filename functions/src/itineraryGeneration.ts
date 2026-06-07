@@ -12,7 +12,7 @@ import {
   type GeneratedItinerary,
 } from "./itinerarySchemas";
 
-import { planStops, planItinerary, repairItinerary } from "./orchestration/tripPlanning";
+import { planStops, planItinerary, repairDay, parseAffectedDayNumbers } from "./orchestration/tripPlanning";
 import { scoreCandidatePool } from "./orchestration/candidateScoring";
 import { buildStopPools, geocodeStop } from "./orchestration/contextBuilder";
 import { validateItinerary } from "./orchestration/validation";
@@ -21,9 +21,17 @@ import { enrichWithImages } from "./orchestration/imageEnrichment";
 import { searchNearbyForActivity } from "./orchestration/placesRetrieval";
 import { reconcileItineraryPlaces, resolveActivityPlaces } from "./orchestration/placeResolution";
 import { fetchHikingTrails } from "./orchestration/trailDiscovery";
-import { type OsmHike } from "./orchestration/types";
+import { type OsmHike, type StopPool } from "./orchestration/types";
 
 export { MODEL_NAME, PROMPT_VERSION };
+
+// ─── Repair-pass budgeting ───────────────────────────────────────────────────
+// The HTTP function is capped at 540s. After validation we still have to
+// reconcile Places coords, enrich transport times, fetch images, and save —
+// budget ~90s for that, so repair work must stop by ~450s of wall-clock time.
+const REPAIR_DEADLINE_MS = 450_000;
+// Re-validate after fixing the flagged days; a second pass catches stragglers.
+const MAX_REPAIR_ATTEMPTS = 2;
 
 // ─── Stamp OSM trail data onto matched hiking activities ─────────────────────
 
@@ -76,11 +84,74 @@ function stampOsmTrailData(
 
 // ─── Main orchestration pipeline ────────────────────────────────────────────
 
+/**
+ * Repair only the days validation flagged, in place, on the raw planner output.
+ * Each day is a small focused Sonnet call (see repairDay); we stop early if the
+ * shared wall-clock budget runs out so the caller ships best-effort rather than
+ * letting the function time out. Returns the same (mutated) raw object.
+ */
+async function repairFlaggedDays(
+  raw: Record<string, unknown>,
+  dayNumbers: number[],
+  fatalIssues: string[],
+  input: GenerateItineraryRequest,
+  pools: StopPool[],
+  startedAt: number,
+): Promise<Record<string, unknown>> {
+  const stops = Array.isArray(raw.stops) ? (raw.stops as Array<Record<string, unknown>>) : [];
+
+  // Map each global day index → (stopIndex, localIndex), in the same stop→day order
+  // validation walks, so "Day N" lines line up with pools[stopIndex].
+  const dayLocations: Array<{ stopIndex: number; localIndex: number }> = [];
+  stops.forEach((stop, stopIndex) => {
+    const days = Array.isArray(stop.days) ? stop.days : [];
+    days.forEach((_d, localIndex) => dayLocations.push({ stopIndex, localIndex }));
+  });
+
+  const venueNamesIn = (day: Record<string, unknown>): string[] =>
+    (Array.isArray(day.activities) ? (day.activities as Array<Record<string, unknown>>) : [])
+      .map((a) => a.name)
+      .filter((n): n is string => typeof n === "string");
+
+  const allVenueNames = (): string[] => {
+    const names: string[] = [];
+    for (const stop of stops) {
+      const days = Array.isArray(stop.days) ? (stop.days as Array<Record<string, unknown>>) : [];
+      for (const day of days) names.push(...venueNamesIn(day));
+    }
+    return names;
+  };
+
+  for (const dayNumber of dayNumbers) {
+    if (Date.now() - startedAt > REPAIR_DEADLINE_MS) {
+      logger.warn("Pipeline: repair budget hit mid-pass — stopping", { stoppedBeforeDay: dayNumber });
+      break;
+    }
+    const loc = dayLocations[dayNumber - 1];
+    if (!loc) continue;
+    const pool = pools[loc.stopIndex];
+    if (!pool) continue;
+
+    const days = stops[loc.stopIndex].days as Array<Record<string, unknown>>;
+    const badDay = days[loc.localIndex];
+    if (!badDay) continue;
+
+    const dayIssues = fatalIssues.filter((s) => s.startsWith(`Day ${dayNumber}:`));
+    const ownNames = new Set(venueNamesIn(badDay));
+    const usedVenues = [...new Set(allVenueNames())].filter((n) => !ownNames.has(n));
+
+    days[loc.localIndex] = await repairDay(badDay, dayNumber, dayIssues, input, pool, usedVenues);
+  }
+
+  return raw;
+}
+
 export async function generateItineraryFlow(
   input: GenerateItineraryRequest,
   googlePlacesApiKey?: string
 ): Promise<GeneratedItinerary> {
   generateItineraryRequestSchema.parse(input);
+  const startedAt = Date.now();
 
   const durationDays = (() => {
     if (input.startDate && input.endDate) {
@@ -174,43 +245,47 @@ export async function generateItineraryFlow(
     return stampOsmTrailData(parsed, allTrails);
   };
 
-  // Step 4: Validate; on fatal failures, one LLM repair pass.
+  // Step 4: Validate; on fatal failures, repair ONLY the flagged days. Each day is
+  // a small focused Sonnet call, and we stop once the wall-clock budget is spent so
+  // a slow multi-stop trip ships best-effort instead of hitting the function timeout.
   let withTrailData = finaliseAndStamp(rawItinerary);
   let { itinerary: validated, result } = validateItinerary(withTrailData);
 
-  if (!result.isValid) {
-    logger.warn("Pipeline: validation failed — running repair pass", {
+  let repairAttempt = 0;
+  while (!result.isValid && repairAttempt < MAX_REPAIR_ATTEMPTS) {
+    if (Date.now() - startedAt > REPAIR_DEADLINE_MS) {
+      logger.warn("Pipeline: repair budget exhausted — shipping best-effort", {
+        elapsedMs: Date.now() - startedAt,
+        remainingFatal: result.fatalIssues,
+      });
+      break;
+    }
+
+    const affectedDays = parseAffectedDayNumbers(result.fatalIssues); // 1-based global
+    if (affectedDays.length === 0) break; // fatal issue not tied to a specific day
+
+    logger.warn("Pipeline: validation failed — day-scoped repair pass", {
+      attempt: repairAttempt + 1,
+      affectedDays,
       fatalIssues: result.fatalIssues,
     });
-    try {
-      rawItinerary = await repairItinerary(rawItinerary, result.fatalIssues, input, pools, durationDays);
-      withTrailData = finaliseAndStamp(rawItinerary);
-      ({ itinerary: validated, result } = validateItinerary(withTrailData));
 
-      if (!result.isValid) {
-        logger.warn("Pipeline: first repair pass incomplete — running second repair attempt", {
-          remainingFatal: result.fatalIssues,
-        });
-        try {
-          rawItinerary = await repairItinerary(rawItinerary, result.fatalIssues, input, pools, durationDays);
-          withTrailData = finaliseAndStamp(rawItinerary);
-          ({ itinerary: validated, result } = validateItinerary(withTrailData));
-          if (!result.isValid) {
-            logger.warn("Pipeline: shipping best-effort after 2 repair attempts", {
-              remainingFatal: result.fatalIssues,
-            });
-          } else {
-            logger.info("Pipeline: second repair pass succeeded");
-          }
-        } catch (error) {
-          logger.warn("Pipeline: second repair pass failed — shipping first repair output", { error });
-        }
-      } else {
-        logger.info("Pipeline: repair pass succeeded");
-      }
+    try {
+      rawItinerary = await repairFlaggedDays(
+        rawItinerary, affectedDays, result.fatalIssues, input, pools, startedAt,
+      );
     } catch (error) {
-      logger.warn("Pipeline: repair pass failed — shipping original output", { error });
+      logger.warn("Pipeline: day-scoped repair failed — shipping current best", { error });
+      break;
     }
+
+    withTrailData = finaliseAndStamp(rawItinerary);
+    ({ itinerary: validated, result } = validateItinerary(withTrailData));
+    repairAttempt++;
+  }
+
+  if (!result.isValid) {
+    logger.warn("Pipeline: shipping best-effort after repair", { remainingFatal: result.fatalIssues });
   } else if (result.issues.length > 0) {
     logger.info("Pipeline: validation passed with minor issues", { issues: result.issues });
   }

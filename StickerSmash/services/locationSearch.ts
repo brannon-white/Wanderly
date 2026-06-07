@@ -30,68 +30,73 @@ function toFlag(countryCode: string): string {
     .join('');
 }
 
+// OSM place values we treat as cities/towns (Photon `osm_value`)
 const PLACE_TYPES = new Set([
   'city', 'town', 'village', 'municipality', 'suburb', 'borough',
 ]);
 
+// OSM values (on leisure/boundary keys) we treat as national parks / protected areas
+const PARK_VALUES = new Set([
+  'national_park', 'nature_reserve', 'protected_area',
+]);
+
+// Classify a Photon feature into one of our destination types, or null to skip
+// it (streets, houses, shops, golf courses, etc.).
+function classify(p: any): 'city' | 'national_park' | 'region' | null {
+  const key = p.osm_key;
+  const value = p.osm_value;
+
+  if ((key === 'leisure' || key === 'boundary') && PARK_VALUES.has(value)) {
+    return 'national_park';
+  }
+  if (key === 'place' && PLACE_TYPES.has(value)) return 'city';
+  if (p.type === 'city') return 'city';
+  if (p.type === 'state' || p.type === 'county') return 'region';
+  return null;
+}
+
 async function fetchLocations(query: string): Promise<LocationResult[]> {
+  // Photon (komoot) is an OSM-based geocoder built for typeahead — unlike
+  // Nominatim's /search it does prefix matching, so partial names like
+  // "olympic nation" surface "Olympic National Park" instead of nothing.
   const url =
-    `https://nominatim.openstreetmap.org/search` +
+    `https://photon.komoot.io/api/` +
     `?q=${encodeURIComponent(query)}` +
-    `&format=json&addressdetails=1&limit=10&accept-language=en`;
+    `&limit=15&lang=en`;
 
   const res = await fetch(url, {
     headers: { 'User-Agent': 'WanderlyTravelApp/1.0' },
   });
-  const data: any[] = await res.json();
+  const data = await res.json();
+  const features: any[] = data?.features ?? [];
 
   const results: LocationResult[] = [];
   const seen = new Set<string>();
 
-  for (const item of data) {
-    const addr = item.address;
-    if (!addr?.country || !addr?.country_code) continue;
+  for (const feature of features) {
+    const p = feature.properties;
+    if (!p?.name || !p?.country || !p?.countrycode) continue;
 
-    const isNationalPark =
-      (item.class === 'boundary' && item.type === 'national_park') ||
-      (item.class === 'leisure' && item.type === 'nature_reserve' && Number(item.importance ?? 0) > 0.4);
+    const destinationType = classify(p);
+    if (!destinationType) continue;
 
-    const isPlace = item.class === 'place' && PLACE_TYPES.has(item.type);
-    const isBoundary = item.class === 'boundary' &&
-      (item.type === 'administrative' || item.type === 'national_park');
-    const isLeisurePark = item.class === 'leisure' && item.type === 'nature_reserve';
-
-    if (!isPlace && !isBoundary && !isLeisurePark) continue;
-
-    const cityName =
-      addr.city || addr.town || addr.village || addr.municipality || item.name;
-    if (!cityName) continue;
-
-    const state: string | undefined = addr.state || undefined;
+    const name: string = p.name;
+    const state: string | undefined = p.state || undefined;
+    const countryCode: string = p.countrycode.toLowerCase();
     const stateSlug = state ? `-${state.toLowerCase().replace(/\s+/g, '-')}` : '';
 
     // Replace spaces with hyphens so multi-word park names produce valid slugs
-    const key = `${cityName.toLowerCase().replace(/\s+/g, '-')}${stateSlug}-${addr.country_code.toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    // A state/region boundary has no city-level address — it's a boundary
-    // where the matched name IS the region itself (state, province, county)
-    const hasCityAddress = !!(addr.city || addr.town || addr.village || addr.municipality);
-    const isRegionBoundary = isBoundary && !isNationalPark && !hasCityAddress;
-
-    const destinationType: 'city' | 'national_park' | 'region' =
-      (isNationalPark || isLeisurePark) ? 'national_park'
-      : isRegionBoundary ? 'region'
-      : 'city';
+    const id = `${name.toLowerCase().replace(/\s+/g, '-')}${stateSlug}-${countryCode}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
 
     results.push({
-      id: key,
-      name: cityName,
+      id,
+      name,
       state,
-      country: addr.country,
-      countryCode: addr.country_code.toUpperCase(),
-      flag: toFlag(addr.country_code),
+      country: p.country,
+      countryCode: countryCode.toUpperCase(),
+      flag: toFlag(countryCode),
       imageUrl: null,
       destinationType,
     });
@@ -103,7 +108,7 @@ async function fetchLocations(query: string): Promise<LocationResult[]> {
 }
 
 export async function searchLocations(query: string): Promise<LocationResult[]> {
-  const key = `search:v2:${query.trim().toLowerCase()}`;
+  const key = `search:v3:${query.trim().toLowerCase()}`;
   const cached = await cacheGet<LocationResult[]>(key);
   if (cached) return cached;
 

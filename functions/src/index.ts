@@ -399,7 +399,10 @@ export const generateItineraryHttp = functionsV1
   .region("us-central1")
   .runWith({
     maxInstances: 10,
-    timeoutSeconds: 300,
+    // 540s is the gen-1 HTTP max. Full-trip generation can need a repair pass on
+    // top of the initial Sonnet call; the pipeline self-imposes a tighter wall-clock
+    // budget (REPAIR_DEADLINE_MS) so it ships best-effort well before this hard cap.
+    timeoutSeconds: 540,
     secrets: [anthropicApiKey, googlePlacesApiKey],
     serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
   })
