@@ -208,17 +208,34 @@ export default function TripReviewScreen() {
       }
     } catch (error) {
       console.warn('generateItinerary failed', error);
-      setPendingGeneration(null);
-      if (!userNavigatedAway.current) {
+
+      if (error instanceof Error && /limit_reached/i.test(error.message)) {
+        setPendingGeneration(null);
+        if (!userNavigatedAway.current) setShowConfirmation(false);
+        setShowPaywall(true);
+        return;
+      }
+
+      const message =
+        error instanceof Error && /unauth/i.test(error.message)
+          ? 'Your sign-in session was not attached to the request. Sign out, sign in again, and retry.'
+          : 'The itinerary could not be generated right now. Please try again.';
+
+      if (userNavigatedAway.current) {
+        // User already left for My Trips — surface the failure on the pending
+        // banner instead of clearing it silently.
+        setPendingGeneration({
+          destName: savedDestName,
+          heroImage: savedHeroImage,
+          party: savedParty,
+          startDate: savedStartDate,
+          endDate: savedEndDate,
+          status: 'failed',
+          errorMessage: message,
+        });
+      } else {
+        setPendingGeneration(null);
         setShowConfirmation(false);
-        if (error instanceof Error && /limit_reached/i.test(error.message)) {
-          setShowPaywall(true);
-          return;
-        }
-        const message =
-          error instanceof Error && /unauth/i.test(error.message)
-            ? 'Your sign-in session was not attached to the request. Sign out, sign in again, and retry.'
-            : 'The itinerary could not be generated right now. Please try again.';
         Alert.alert('Generation failed', message);
       }
     }

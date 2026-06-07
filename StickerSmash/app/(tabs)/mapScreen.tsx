@@ -97,7 +97,26 @@ function TripCard({ trip }: { trip: CommittedTrip }) {
   );
 }
 
-function GeneratingCard({ gen }: { gen: PendingGeneration }) {
+function GeneratingCard({ gen, onDismiss }: { gen: PendingGeneration; onDismiss: () => void }) {
+  if (gen.status === 'failed') {
+    return (
+      <View style={[generatingStyles.card, generatingStyles.failedCard]}>
+        <View style={generatingStyles.left}>
+          <Ionicons name="alert-circle" size={22} color="#c0392b" style={{ marginRight: 12 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={generatingStyles.title}>{gen.destName}</Text>
+            <Text style={generatingStyles.failedSubtitle}>
+              {gen.errorMessage || 'The itinerary could not be generated. Please try again.'}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={onDismiss} hitSlop={10} style={{ paddingLeft: 8 }}>
+            <Ionicons name="close" size={20} color="#c0392b" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={generatingStyles.card}>
       <View style={generatingStyles.left}>
@@ -122,6 +141,16 @@ const generatingStyles = StyleSheet.create({
     borderColor: '#e0d9ff',
     padding: 16,
     gap: 8,
+  },
+  failedCard: {
+    backgroundColor: '#fdecea',
+    borderColor: '#f3c6bf',
+  },
+  failedSubtitle: {
+    fontSize: 13,
+    fontFamily: 'SourceSans3-Regular',
+    color: '#a33529',
+    marginTop: 2,
   },
   left: {
     flexDirection: 'row',
@@ -148,7 +177,7 @@ const generatingStyles = StyleSheet.create({
 
 export default function MyTripsScreen() {
   const [activeTab, setActiveTab] = useState<Tab>('Active');
-  const { trips, pendingGeneration } = useMyTrips();
+  const { trips, pendingGeneration, setPendingGeneration } = useMyTrips();
   const navigation = useNavigation<NavProp>();
 
   const filtered = trips.filter((t) =>
@@ -165,7 +194,9 @@ export default function MyTripsScreen() {
         </TouchableOpacity>
       </View>
 
-      {pendingGeneration && <GeneratingCard gen={pendingGeneration} />}
+      {pendingGeneration && (
+        <GeneratingCard gen={pendingGeneration} onDismiss={() => setPendingGeneration(null)} />
+      )}
 
       {trips.length === 0 && !pendingGeneration ? (
         <View style={styles.emptyState}>

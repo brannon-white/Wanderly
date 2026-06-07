@@ -30,6 +30,11 @@ export interface PendingGeneration {
   party: string;
   startDate: string;
   endDate: string;
+  // 'generating' (default) shows the spinner card; 'failed' shows a dismissible
+  // error card so a generation that errored after the user left the review screen
+  // doesn't just silently vanish.
+  status?: 'generating' | 'failed';
+  errorMessage?: string;
 }
 
 interface MyTripsContextType {

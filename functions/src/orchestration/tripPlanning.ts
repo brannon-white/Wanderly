@@ -4,6 +4,7 @@ import {
   MODEL_NAME,
   FAST_MODEL_NAME,
   ITINERARY_TOOL_INPUT_SCHEMA,
+  ACTIVITY_TOOL_INPUT_SCHEMA,
   MIN_ACTIVITIES_PER_DAY,
 } from "../constants";
 import { type GenerateItineraryRequest, type TasteProfile } from "../itinerarySchemas";
@@ -371,57 +372,124 @@ export async function planItinerary(
   return toolBlock.input as Record<string, unknown>;
 }
 
-// ─── 3. Repair pass — called when validation fails ────────────────────────────
+// ─── 3. Day-scoped repair — fix only the days validation flagged ──────────────
+//
+// An earlier version re-planned the ENTIRE trip in one giant Sonnet call on any
+// validation failure, which on multi-stop route trips took 3–4 minutes — long
+// enough to blow the function timeout when stacked on the initial generation.
+// This repairs a single
+// day at a time with a small, focused prompt (≈one regenerateDay-sized call), so a
+// 7-day trip with 4 broken days costs four fast calls instead of one slow re-plan,
+// and the caller can stop between days when its time budget runs out.
 
-export async function repairItinerary(
-  badItinerary: Record<string, unknown>,
-  issues: string[],
+/**
+ * Pull the distinct global day numbers (1-based, as they appear in validation
+ * messages like "Day 3: missing dinner…") out of a list of issue strings.
+ */
+export function parseAffectedDayNumbers(issues: string[]): number[] {
+  const seen = new Set<number>();
+  for (const issue of issues) {
+    const m = issue.match(/^Day (\d+):/);
+    if (m) seen.add(Number(m[1]));
+  }
+  return [...seen].sort((a, b) => a - b);
+}
+
+const DAY_REPAIR_SCHEMA = {
+  type: "object" as const,
+  required: ["label", "title", "activities"],
+  properties: {
+    label: { type: "string" },
+    title: { type: "string" },
+    isDriveDay: { type: "boolean" },
+    activities: {
+      type: "array",
+      minItems: MIN_ACTIVITIES_PER_DAY,
+      items: ACTIVITY_TOOL_INPUT_SCHEMA,
+    },
+  },
+};
+
+/**
+ * Repair a single day. Returns the corrected day object (label/title/activities),
+ * ready to splice back into the itinerary by global index.
+ *
+ * @param badDay       the current (broken) day object
+ * @param dayNumber    1-based global day number, for the prompt/logging
+ * @param dayIssues    validation issues that mention this day
+ * @param input        original generation request (for budget/personalization)
+ * @param pool         the candidate pool for the stop this day belongs to
+ * @param usedVenues   venue names used on OTHER days, to avoid duplicates
+ */
+export async function repairDay(
+  badDay: Record<string, unknown>,
+  dayNumber: number,
+  dayIssues: string[],
   input: GenerateItineraryRequest,
-  pools: StopPool[],
-  durationDays: number,
+  pool: StopPool,
+  usedVenues: string[],
 ): Promise<Record<string, unknown>> {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const basePrompt = buildPlannerPrompt(input, pools, durationDays);
 
-  const repairPrompt = `${basePrompt}
+  const prompt = `You are repairing ONE day of a travel itinerary that failed validation.
+Fix every listed issue while keeping the parts of the day that already work.
 
-═══════════════════════════════════════════════════════════════
-REPAIR PASS
+TRIP CONTEXT:
+- Destination / stop: ${pool.location}${input.country ? `, ${input.country}` : ""}
+- Budget: ${input.budget}
+- This is Day ${dayNumber} of the trip.
 
-You produced the itinerary below and it FAILED validation. Return a corrected
-full itinerary that fixes every issue while preserving the parts that are
-already good. Don't reshuffle valid days for no reason.
+ISSUES TO FIX (all must be resolved):
+${dayIssues.map((s, i) => `  ${i + 1}. ${s}`).join("\n")}
 
-ISSUES TO FIX:
-${issues.map((s, i) => `  ${i + 1}. ${s}`).join("\n")}
+DO NOT reuse any of these venues (already used on other days):
+${usedVenues.length ? usedVenues.join(", ") : "(none yet)"}
 
-PREVIOUS OUTPUT:
-${JSON.stringify(badItinerary, null, 2)}
+CANDIDATE POOL for this stop — prefer these real venues, never invent when the
+relevant bucket has options:
+${formatStopPool(pool)}
 
-REPAIR RULES:
-- For days flagged as too short / ending too early: ADD activities in the missing slots.
-- For missing meals: slot them into the correct window using a pool venue.
-- For duplicate venues: swap the duplicate for a different pool venue.
-- For time overlaps: shift times so consecutive activities don't conflict.
-- Output the FULL corrected itinerary (every stop, every day) — not a diff.`;
+SLOT GRID — every non-drive day must fill these and end no earlier than 20:30:
 
-  logger.info("Trip planner: repair pass", { issueCount: issues.length });
+  08:00–09:30  BREAKFAST   ★ required — pick from BREAKFAST POOL
+  09:30–12:00  MORNING     ★ required — major anchor experience
+  12:00–14:00  LUNCH       ★ required — pick from FOOD POOL
+  14:00–17:00  AFTERNOON   ★ required — museum / gallery / walk / scenic stop
+  17:00–18:30  LATE AFTERNOON ★ required — sunset spot, brewery, coffee, dessert
+  18:30–20:30  DINNER      ★ required — pick from FOOD POOL (different from lunch)
+  20:30–22:30  EVENING     ★ required — pick from NIGHTLIFE POOL; substitute dessert / stroll if sparse
+
+RULES:
+1. Minimum ${MIN_ACTIVITIES_PER_DAY} activities. Specific named places only.
+2. Realistic timing with transit between activities — no overlaps. Format times as "09:00 AM - 10:30 AM".
+3. category: "food" for meals, "adventure" for hikes/trails, "nightlife" for bars, "culture" for museums, "nature" for parks/viewpoints, "attraction" otherwise.
+4. transport array describes how to reach the NEXT activity; the last activity = empty array.
+5. One major hike per day max; trails cannot start after 15:00.
+6. Outdoor activities must start before 15:00.
+7. Use real coordinates for venues in ${pool.location}.
+
+CURRENT (BROKEN) DAY:
+${JSON.stringify(badDay, null, 2)}
+
+Return the FULL corrected day.`;
+
+  logger.info("Trip planner: day-scoped repair", { dayNumber, issueCount: dayIssues.length });
 
   const response = await client.messages.create({
     model: MODEL_NAME,
-    max_tokens: 16000,
+    max_tokens: 4096,
     tools: [{
-      name: "create_itinerary",
-      description: "Return the corrected full itinerary",
-      input_schema: ITINERARY_TOOL_INPUT_SCHEMA,
+      name: "repair_day",
+      description: "Return the corrected full day",
+      input_schema: DAY_REPAIR_SCHEMA,
     }],
-    tool_choice: { type: "tool", name: "create_itinerary" },
-    messages: [{ role: "user", content: repairPrompt }],
+    tool_choice: { type: "tool", name: "repair_day" },
+    messages: [{ role: "user", content: prompt }],
   });
 
   const toolBlock = response.content.find((b) => b.type === "tool_use");
   if (!toolBlock || toolBlock.type !== "tool_use") {
-    throw new Error("Repair pass failed: Claude did not return a structured itinerary");
+    throw new Error(`Day repair failed: Claude did not return a structured day (day ${dayNumber})`);
   }
 
   return toolBlock.input as Record<string, unknown>;
