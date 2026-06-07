@@ -21,6 +21,8 @@ interface TripPlanningState {
   templateId: string;
   templateTitle: string;
   templateHeroImage: string;
+  // Prebuilt itinerary id to seed generation with (set when building a prebuilt trip).
+  seedItineraryId: string | null;
   party: string;
   startDate: Date | null;
   endDate: Date | null;
@@ -43,6 +45,7 @@ interface TripPlanningContextType extends TripPlanningState {
   setTemplateId: (id: string) => void;
   setTemplateTitle: (title: string) => void;
   setTemplateHeroImage: (url: string) => void;
+  setSeedItineraryId: (id: string | null) => void;
   setParty: (party: string) => void;
   setStartDate: (date: Date | null) => void;
   setEndDate: (date: Date | null) => void;
@@ -66,6 +69,7 @@ const defaultState: TripPlanningState = {
   templateId: '',
   templateTitle: '',
   templateHeroImage: '',
+  seedItineraryId: null,
   party: '',
   startDate: null,
   endDate: null,
@@ -89,6 +93,7 @@ const TripPlanningContext = createContext<TripPlanningContextType>({
   setTemplateId: () => {},
   setTemplateTitle: () => {},
   setTemplateHeroImage: () => {},
+  setSeedItineraryId: () => {},
   setParty: () => {},
   setStartDate: () => {},
   setEndDate: () => {},
@@ -114,6 +119,7 @@ export function TripPlanningProvider({ children }: { children: React.ReactNode }
   const setTemplateId = (templateId: string) => setState(s => ({ ...s, templateId }));
   const setTemplateTitle = (templateTitle: string) => setState(s => ({ ...s, templateTitle }));
   const setTemplateHeroImage = (templateHeroImage: string) => setState(s => ({ ...s, templateHeroImage }));
+  const setSeedItineraryId = (seedItineraryId: string | null) => setState(s => ({ ...s, seedItineraryId }));
   const setParty = (party: string) => setState(s => ({ ...s, party }));
   const setStartDate = (startDate: Date | null) => setState(s => ({ ...s, startDate }));
   const setEndDate = (endDate: Date | null) => setState(s => ({ ...s, endDate }));
@@ -133,6 +139,7 @@ export function TripPlanningProvider({ children }: { children: React.ReactNode }
       value={{
         ...state,
         setFlow, setEditingTripId, setDestinationId, setDestination, setTemplateId, setTemplateTitle, setTemplateHeroImage,
+        setSeedItineraryId,
         setParty, setStartDate, setEndDate, setInterests, setBudget,
         setTripPrompt, setTripVibes, setIncludeActivities, setAvoidActivities, setFoodPreferences,
         setTripType, setTravelPace,

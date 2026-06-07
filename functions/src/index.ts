@@ -190,6 +190,7 @@ import {
   MODEL_NAME,
   PROMPT_VERSION,
 } from "./itineraryGeneration";
+import { extractSeedDays, type SeedDay } from "./orchestration/tripPlanning";
 import { FAST_MODEL_NAME } from "./constants";
 import {
   callableGenerateItineraryResponseSchema,
@@ -302,7 +303,34 @@ async function buildAndSaveItinerary(
   const effectiveProfile = getEffectiveTasteProfile(input.tasteProfile, learned);
   const enrichedInput = effectiveProfile ? { ...input, tasteProfile: effectiveProfile } : input;
 
-  const itinerary = await generateItineraryFlow(enrichedInput, process.env.GOOGLE_PLACES_API_KEY);
+  // When seeded from a prebuilt trip, load its activities so the pipeline expands
+  // them instead of planning from scratch. A missing/invalid seed degrades to a
+  // normal generation rather than failing the request.
+  let seedDays: SeedDay[] | undefined;
+  if (input.seedItineraryId) {
+    try {
+      const seedSnap = await firestore.collection("prebuiltItineraries").doc(input.seedItineraryId).get();
+      const days = extractSeedDays(seedSnap.exists ? (seedSnap.data() as Record<string, unknown>) : undefined);
+      if (days.length > 0) {
+        seedDays = days;
+        logger.info("Seeding generation from prebuilt itinerary", {
+          seedItineraryId: input.seedItineraryId,
+          seedDayCount: days.length,
+        });
+      } else {
+        logger.warn("Seed itinerary had no usable days — generating fresh", {
+          seedItineraryId: input.seedItineraryId,
+        });
+      }
+    } catch (error) {
+      logger.warn("Failed to load seed itinerary — generating fresh", {
+        seedItineraryId: input.seedItineraryId,
+        error,
+      });
+    }
+  }
+
+  const itinerary = await generateItineraryFlow(enrichedInput, process.env.GOOGLE_PLACES_API_KEY, seedDays);
   logger.info("Itinerary generated from model", {
     uid,
     destinationId: input.destinationId,

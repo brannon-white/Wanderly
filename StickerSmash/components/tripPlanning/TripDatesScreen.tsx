@@ -124,8 +124,8 @@ function MonthGrid({ year, month, startDate, endDate, onSelect }: MonthGridProps
 export default function TripDatesScreen() {
   const navigation = useNavigation<NavProp>();
   const insets = useSafeAreaInsets();
-  const { flow, startDate, endDate, setStartDate, setEndDate } = useTripPlanning();
-  const progressWidth = flow === 'prebuilt' ? '50%' : '40%';
+  const { startDate, endDate, setStartDate, setEndDate } = useTripPlanning();
+  const progressWidth = '40%';
 
   const months = useMemo(() => {
     const now = new Date();
@@ -213,7 +213,7 @@ export default function TripDatesScreen() {
         <TouchableOpacity
           style={[shared.continueBtn, !canContinue && shared.continueBtnDisabled]}
           disabled={!canContinue}
-          onPress={() => navigation.navigate(flow === 'prebuilt' ? 'TripBasics' : 'TripStyle')}
+          onPress={() => navigation.navigate('TripStyle')}
           activeOpacity={0.85}
         >
           <Text style={shared.continueBtnText}>Continue</Text>

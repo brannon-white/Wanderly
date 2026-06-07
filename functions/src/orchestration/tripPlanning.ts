@@ -372,6 +372,128 @@ export async function planItinerary(
   return toolBlock.input as Record<string, unknown>;
 }
 
+// ─── 2b. Seeded planner — expand a prebuilt itinerary instead of planning fresh ─
+//
+// Prebuilt itineraries are hand-seeded and thin (~3 activities/day). When a user
+// builds one, we run the SAME pipeline as a new trip but seed this planning step
+// with the prebuilt's existing activities: keep them as the day's backbone and
+// expand each day to the full slot grid using the candidate pools. Validation +
+// day-scoped repair downstream still enforce the 7/day + meal/evening rules, and
+// reconcileItineraryPlaces snaps every activity (kept or added) to real Places data.
+
+export interface SeedDay {
+  label?: string;
+  title?: string;
+  activities: Array<{ name?: string; category?: string; time?: string; description?: string }>;
+}
+
+/**
+ * Flatten a prebuilt itinerary Firestore doc into the per-day seed used to expand
+ * generation. Walks stops→days→activities and keeps only the fields the seeded
+ * planner prompt needs. Returns [] for a missing/malformed doc so callers can fall
+ * back to a normal (unseeded) generation.
+ */
+export function extractSeedDays(doc: Record<string, unknown> | undefined | null): SeedDay[] {
+  const stops = Array.isArray(doc?.stops) ? (doc!.stops as Array<Record<string, unknown>>) : [];
+  const days: SeedDay[] = [];
+  for (const stop of stops) {
+    const stopDays = Array.isArray(stop.days) ? (stop.days as Array<Record<string, unknown>>) : [];
+    for (const day of stopDays) {
+      const activities = (Array.isArray(day.activities) ? (day.activities as Array<Record<string, unknown>>) : [])
+        .map((a) => ({
+          name: typeof a.name === "string" ? a.name : undefined,
+          category: typeof a.category === "string" ? a.category : undefined,
+          time: typeof a.time === "string" ? a.time : undefined,
+          description: typeof a.description === "string" ? a.description : undefined,
+        }));
+      days.push({
+        label: typeof day.label === "string" ? day.label : undefined,
+        title: typeof day.title === "string" ? day.title : undefined,
+        activities,
+      });
+    }
+  }
+  return days;
+}
+
+function formatSeedDays(seedDays: SeedDay[]): string {
+  return seedDays
+    .map((day, i) => {
+      const header = `Day ${i + 1}${day.title ? ` — ${day.title}` : ""}`;
+      const acts = (day.activities ?? [])
+        .filter((a) => a && typeof a.name === "string" && a.name.trim())
+        .map((a) => {
+          const cat = a.category ? ` [${a.category}]` : "";
+          const time = a.time ? ` (${a.time})` : "";
+          return `    • ${a.name}${cat}${time}`;
+        });
+      return acts.length
+        ? `  ${header}:\n${acts.join("\n")}`
+        : `  ${header}: (no activities — plan this day fresh)`;
+    })
+    .join("\n");
+}
+
+export async function expandSeededItinerary(
+  input: GenerateItineraryRequest,
+  pools: StopPool[],
+  durationDays: number,
+  seedDays: SeedDay[],
+): Promise<Record<string, unknown>> {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const basePrompt = buildPlannerPrompt(input, pools, durationDays);
+
+  const seededPrompt = `${basePrompt}
+
+═══════════════════════════════════════════════════════════════
+SEED ITINERARY — expand this, don't start from scratch
+
+This trip is based on a curated starter itinerary. KEEP its activities as the
+backbone of each day, then EXPAND every day to satisfy all the rules above
+(≥ ${MIN_ACTIVITIES_PER_DAY} activities, full breakfast/lunch/late-afternoon/dinner/evening slots,
+day ends no earlier than 20:30).
+
+SEED ACTIVITIES (by day):
+${formatSeedDays(seedDays)}
+
+SEED RULES:
+- PRESERVE the seed activities — keep their names; you may refine times/descriptions
+  and reorder within a day so the schedule flows, but don't drop them.
+- FILL the gaps: add the missing meals, late-afternoon, and evening slots from the
+  candidate pools so each day meets the full slot grid and minimum count.
+- The trip is ${durationDays} day(s) long. If that's MORE than the seed has, plan the
+  extra days fresh from the pools (matching the trip's style). If FEWER, keep the best
+  ${durationDays} seed day(s) and drop the rest.
+- No repeated venues across the whole trip — seed venues count toward that.
+- Output the FULL itinerary (every stop, every day) in the standard format.`;
+
+  logger.info("Trip planner: seeded expand", {
+    seedDayCount: seedDays.length,
+    durationDays,
+    stopCount: pools.length,
+    promptTokens: Math.round(seededPrompt.length / 4),
+  });
+
+  const response = await client.messages.create({
+    model: MODEL_NAME,
+    max_tokens: 16000,
+    tools: [{
+      name: "create_itinerary",
+      description: "Create a structured travel itinerary with stops and daily plans",
+      input_schema: ITINERARY_TOOL_INPUT_SCHEMA,
+    }],
+    tool_choice: { type: "tool", name: "create_itinerary" },
+    messages: [{ role: "user", content: seededPrompt }],
+  });
+
+  const toolBlock = response.content.find((b) => b.type === "tool_use");
+  if (!toolBlock || toolBlock.type !== "tool_use") {
+    throw new Error("Seeded expand failed: Claude did not return a structured itinerary");
+  }
+
+  return toolBlock.input as Record<string, unknown>;
+}
+
 // ─── 3. Day-scoped repair — fix only the days validation flagged ──────────────
 //
 // An earlier version re-planned the ENTIRE trip in one giant Sonnet call on any
