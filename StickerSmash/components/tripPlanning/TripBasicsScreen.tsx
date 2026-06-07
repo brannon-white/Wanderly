@@ -9,7 +9,6 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '@/app/_layout';
 import { shared, PRIMARY, TEXT_DARK, TEXT_GRAY, BORDER_COLOR, PRIMARY_LIGHT } from '@/styles/tripPlanningStyles';
 import { useTripPlanning } from '@/context/TripPlanningContext';
-import { useMyTrips } from '@/context/MyTripsContext';
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 
@@ -31,31 +30,12 @@ const BUDGET_OPTIONS: { id: string; icon: LucideIcon; description: string }[] = 
 export default function TripBasicsScreen() {
   const navigation = useNavigation<NavProp>();
   const insets = useSafeAreaInsets();
-  const { flow, party, setParty, budget, setBudget, templateId, templateTitle, templateHeroImage, startDate, endDate, reset, destinationSnapshot } = useTripPlanning();
-  const { addTrip } = useMyTrips();
+  const { party, setParty, budget, setBudget } = useTripPlanning();
 
-  const isPrebuilt = flow === 'prebuilt';
-  const canContinue = isPrebuilt ? !!party : !!party && !!budget;
+  const canContinue = !!party && !!budget;
 
   const handleContinue = () => {
-    if (isPrebuilt) {
-      addTrip({
-        id: `committed-${Date.now()}`,
-        templateId,
-        title: templateTitle,
-        heroImage: templateHeroImage,
-        party,
-        startDate: startDate!.toISOString(),
-        endDate: endDate!.toISOString(),
-        origin: 'prebuilt',
-        destinationName: destinationSnapshot?.name,
-        country: destinationSnapshot?.country,
-      });
-      reset();
-      navigation.navigate('Index' as any, { screen: 'MyTrips' } as any);
-    } else {
-      navigation.navigate('TripDates');
-    }
+    navigation.navigate('TripDates');
   };
 
   return (
@@ -65,7 +45,7 @@ export default function TripBasicsScreen() {
           <Ionicons name="arrow-back" size={20} color="#222" />
         </TouchableOpacity>
         <View style={shared.progressBarTrack}>
-          <View style={[shared.progressBarFill, { width: isPrebuilt ? '100%' : '20%' }]} />
+          <View style={[shared.progressBarFill, { width: '20%' }]} />
         </View>
       </View>
 
@@ -74,14 +54,8 @@ export default function TripBasicsScreen() {
         contentContainerStyle={[shared.scrollContent, { paddingBottom: 120 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={shared.heading}>
-          {isPrebuilt ? "Who's coming along?" : "Let's start with the basics"}
-        </Text>
-        <Text style={shared.subheading}>
-          {isPrebuilt
-            ? "Last step — let us know who you're traveling with."
-            : "Who's going and what's your budget?"}
-        </Text>
+        <Text style={shared.heading}>Let's start with the basics</Text>
+        <Text style={shared.subheading}>Who's going and what's your budget?</Text>
 
         <Text style={styles.sectionLabel}>WHO'S TRAVELING?</Text>
         <View style={styles.partyGrid}>
@@ -109,31 +83,27 @@ export default function TripBasicsScreen() {
           })}
         </View>
 
-        {!isPrebuilt && (
-          <>
-            <Text style={[styles.sectionLabel, { marginTop: 28 }]}>YOUR BUDGET</Text>
-            <View style={styles.budgetGrid}>
-              {BUDGET_OPTIONS.map((option) => {
-                const selected = budget === option.id;
-                const OptionIcon = option.icon;
-                return (
-                  <TouchableOpacity
-                    key={option.id}
-                    style={[styles.budgetCard, selected && styles.budgetCardSelected]}
-                    onPress={() => setBudget(option.id)}
-                    activeOpacity={0.75}
-                  >
-                    <OptionIcon size={20} color={selected ? PRIMARY : TEXT_GRAY} />
-                    <Text style={[styles.budgetLabel, selected && styles.budgetLabelSelected]}>
-                      {option.id}
-                    </Text>
-                    <Text style={styles.budgetDesc}>{option.description}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </>
-        )}
+        <Text style={[styles.sectionLabel, { marginTop: 28 }]}>YOUR BUDGET</Text>
+        <View style={styles.budgetGrid}>
+          {BUDGET_OPTIONS.map((option) => {
+            const selected = budget === option.id;
+            const OptionIcon = option.icon;
+            return (
+              <TouchableOpacity
+                key={option.id}
+                style={[styles.budgetCard, selected && styles.budgetCardSelected]}
+                onPress={() => setBudget(option.id)}
+                activeOpacity={0.75}
+              >
+                <OptionIcon size={20} color={selected ? PRIMARY : TEXT_GRAY} />
+                <Text style={[styles.budgetLabel, selected && styles.budgetLabelSelected]}>
+                  {option.id}
+                </Text>
+                <Text style={styles.budgetDesc}>{option.description}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </ScrollView>
 
       <View style={[shared.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
@@ -143,9 +113,7 @@ export default function TripBasicsScreen() {
           onPress={handleContinue}
           activeOpacity={0.85}
         >
-          <Text style={shared.continueBtnText}>
-            {isPrebuilt ? 'Add to My Trips' : 'Continue'}
-          </Text>
+          <Text style={shared.continueBtnText}>Continue</Text>
         </TouchableOpacity>
       </View>
     </View>

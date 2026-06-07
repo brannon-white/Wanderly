@@ -40,6 +40,9 @@ export const generateItineraryRequestSchema = z.object({
   destinationType: z.enum(['city', 'national_park', 'region']).optional(),
   tripType: z.enum(['hub', 'route']).default('hub'),
   travelPace: z.enum(['every_night', 'every_few_days', 'few_stops', 'flexible']).optional(),
+  // When set, the pipeline seeds generation with the activities of this prebuilt
+  // itinerary (keep + enrich + expand) instead of planning the trip from scratch.
+  seedItineraryId: z.string().optional(),
 });
 
 export type TasteProfile = NonNullable<z.infer<typeof tasteProfileSchema>>;

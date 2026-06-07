@@ -12,7 +12,10 @@ import {
   type GeneratedItinerary,
 } from "./itinerarySchemas";
 
-import { planStops, planItinerary, repairDay, parseAffectedDayNumbers } from "./orchestration/tripPlanning";
+import {
+  planStops, planItinerary, expandSeededItinerary, repairDay, parseAffectedDayNumbers,
+  type SeedDay,
+} from "./orchestration/tripPlanning";
 import { scoreCandidatePool } from "./orchestration/candidateScoring";
 import { buildStopPools, geocodeStop } from "./orchestration/contextBuilder";
 import { validateItinerary } from "./orchestration/validation";
@@ -148,7 +151,8 @@ async function repairFlaggedDays(
 
 export async function generateItineraryFlow(
   input: GenerateItineraryRequest,
-  googlePlacesApiKey?: string
+  googlePlacesApiKey?: string,
+  seedDays?: SeedDay[],
 ): Promise<GeneratedItinerary> {
   generateItineraryRequestSchema.parse(input);
   const startedAt = Date.now();
@@ -219,9 +223,13 @@ export async function generateItineraryFlow(
     }
   }
 
-  // Step 3: ONE Sonnet call produces the full itinerary.
-  logger.info("Pipeline: planning itinerary (single Sonnet call)");
-  let rawItinerary = await planItinerary(input, pools, durationDays);
+  // Step 3: ONE Sonnet call produces the full itinerary. When seeded from a prebuilt
+  // trip, expand its activities instead of planning from scratch.
+  const hasSeed = Array.isArray(seedDays) && seedDays.length > 0;
+  logger.info("Pipeline: planning itinerary (single Sonnet call)", { seeded: hasSeed });
+  let rawItinerary = hasSeed
+    ? await expandSeededItinerary(input, pools, durationDays, seedDays as SeedDay[])
+    : await planItinerary(input, pools, durationDays);
 
   const finaliseAndStamp = (raw: Record<string, unknown>): GeneratedItinerary => {
     const parsed = generatedItinerarySchema.parse({

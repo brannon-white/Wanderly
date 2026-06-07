@@ -344,6 +344,8 @@ export default function ItineraryScreen() {
   const {
     reset,
     setFlow,
+    setDestination,
+    setSeedItineraryId,
     setTemplateId,
     setTemplateTitle,
     setTemplateHeroImage,
@@ -592,12 +594,27 @@ export default function ItineraryScreen() {
 
   const handlePlanThisTrip = () => {
     if (!itinerary) return;
+    // Prebuilt trips now run the SAME full builder + generation flow as a new trip,
+    // just with the destination pre-filled and the prebuilt attached as a seed. The
+    // pipeline keeps the seed's activities, snaps them to real Places data, and
+    // expands each day to the full structure. Mirror DestinationScreen's entry so the
+    // downstream screens behave identically to a freshly-picked destination.
     reset();
-    setFlow('prebuilt');
+    setFlow('full');
+    setDestination({
+      id: (itinerary as any).destinationId ?? itinerary.id,
+      name: (itinerary as any).destinationName ?? itinerary.title,
+      state: (itinerary as any).state,
+      country: (itinerary as any).country ?? '',
+      flag: (itinerary as any).flag ?? '',
+      imageUrl: heroUri ?? itinerary.heroImage ?? '',
+      destinationType: (itinerary as any).destinationType === 'national_park' ? 'national_park' : 'city',
+    });
+    setSeedItineraryId(itinerary.id);
     setTemplateId(itinerary.id);
     setTemplateTitle(itinerary.title);
     setTemplateHeroImage(heroUri ?? itinerary.heroImage);
-    navigation.navigate('TripDates');
+    navigation.navigate('TripBasics');
   };
 
   const handleDeleteTrip = () => {

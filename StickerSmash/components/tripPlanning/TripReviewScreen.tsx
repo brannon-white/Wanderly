@@ -72,6 +72,7 @@ export default function TripReviewScreen() {
     foodPreferences,
     tripType,
     travelPace,
+    seedItineraryId,
     reset,
   } = useTripPlanning();
   const isEditing = !!editingTripId;
@@ -152,6 +153,7 @@ export default function TripReviewScreen() {
       destinationType: destinationSnapshot?.destinationType ?? 'city',
       tripType: tripType ?? 'hub',
       travelPace: travelPace || undefined,
+      seedItineraryId: seedItineraryId || undefined,
     };
     const savedHeroImage = templateHeroImage;
     const savedParty = party;

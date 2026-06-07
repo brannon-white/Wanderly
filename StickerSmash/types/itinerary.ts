@@ -83,6 +83,8 @@ export interface GenerateItineraryRequest {
   destinationType?: 'city' | 'national_park' | 'region';
   tripType?: TripType;
   travelPace?: TravelPace;
+  // Prebuilt itinerary id to seed generation with (keep + enrich + expand its activities).
+  seedItineraryId?: string;
 }
 
 export interface ItineraryCoordinates {
