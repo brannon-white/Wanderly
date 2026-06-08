@@ -205,7 +205,7 @@ import {
 } from "./itinerarySchemas";
 import { getAllDays, updateDayByIndex, type GeneratedItinerary } from "./itinerarySchemas";
 import { enrichDayTransportTimes, enrichTransportTimes } from "./orchestration/directions";
-import { reconcileItineraryPlaces } from "./orchestration/placeResolution";
+import { reconcileItineraryPlaces, enforceVerifiedPlacesBySearch } from "./orchestration/placeResolution";
 
 initializeApp();
 
@@ -549,9 +549,10 @@ export const regenerateActivityHttp = functionsV1
       let updated = await regenerateActivity({ itinerary: currentItinerary, dayIndex, activityIndex, reason });
 
       // Snap the new activity to its real Google Place (correct coords + placeId),
-      // then re-enrich transport times for the affected day so travel legs stay accurate
+      // reject any still-unverified (hallucinated) place, then re-enrich transport
       if (process.env.GOOGLE_PLACES_API_KEY) {
         updated = await reconcileItineraryPlaces(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
+        updated = await enforceVerifiedPlacesBySearch(updated, process.env.GOOGLE_PLACES_API_KEY, { dayIndex }).then((g) => g.itinerary).catch(() => updated);
         updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
       }
 
@@ -629,9 +630,10 @@ export const regenerateDayHttp = functionsV1
 
       let updated = await regenerateDay({ itinerary: currentItinerary, dayIndex, modifications });
 
-      // Snap the regenerated day's activities to real Google Places, then enrich travel legs
+      // Snap to real Google Places, reject any still-unverified place, then enrich legs
       if (process.env.GOOGLE_PLACES_API_KEY) {
         updated = await reconcileItineraryPlaces(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
+        updated = await enforceVerifiedPlacesBySearch(updated, process.env.GOOGLE_PLACES_API_KEY, { dayIndex }).then((g) => g.itinerary).catch(() => updated);
         updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
       }
 
@@ -1016,10 +1018,11 @@ export const confirmActivityReplacementHttp = functionsV1
       };
       let updated = updateDayByIndex(current, dayIndex, updatedDay);
 
-      // Snap the swapped-in activity to its real Google Place, then re-enrich
-      // transport times for the affected day so legs stay accurate after the swap
+      // Snap the swapped-in activity to its real Google Place, reject any unverified
+      // place, then re-enrich transport times for the affected day
       if (process.env.GOOGLE_PLACES_API_KEY) {
         updated = await reconcileItineraryPlaces(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
+        updated = await enforceVerifiedPlacesBySearch(updated, process.env.GOOGLE_PLACES_API_KEY, { dayIndex }).then((g) => g.itinerary).catch(() => updated);
         updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
       }
 
@@ -1057,10 +1060,11 @@ export const editItineraryWithLanguageHttp = functionsV1
       logger.info("editItineraryWithLanguageHttp", { uid, itineraryId, message, dayIndex });
       let updated = await editItineraryWithLanguage({ itinerary: snap.data() as any, message, dayIndex });
 
-      // Snap any new/changed activities to real Google Places, then re-enrich
-      // transport for all days — natural language edits can affect multiple days
+      // Snap any new/changed activities to real Google Places, reject unverified
+      // places, then re-enrich transport — language edits can affect multiple days
       if (process.env.GOOGLE_PLACES_API_KEY) {
         updated = await reconcileItineraryPlaces(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
+        updated = await enforceVerifiedPlacesBySearch(updated, process.env.GOOGLE_PLACES_API_KEY, { dayIndex }).then((g) => g.itinerary).catch(() => updated);
         updated = await enrichTransportTimes(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
       }
 

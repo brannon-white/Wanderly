@@ -794,7 +794,6 @@ const styles = StyleSheet.create({
   },
   question: {
     fontSize: 24,
-    fontWeight: 'bold',
     fontFamily: 'Merriweather_36pt-Bold',
     color: '#1a1a1a',
     marginBottom: 24,
@@ -831,7 +830,6 @@ const styles = StyleSheet.create({
   },
   panelHeadline: {
     fontSize: 17,
-    fontWeight: '700',
     fontFamily: 'Merriweather_36pt-Bold',
     color: '#1a1a1a',
     marginBottom: 10,

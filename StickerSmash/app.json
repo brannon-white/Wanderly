@@ -12,7 +12,13 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.appsmadehere.wanderly",
-      "googleServicesFile": "./GoogleService-Info.plist"
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "entitlements": {
+        "aps-environment": "development"
+      },
+      "infoPlist": {
+        "UIBackgroundModes": ["remote-notification"]
+      }
     },
     "android": {
       "package": "com.appsmadehere.wanderly",

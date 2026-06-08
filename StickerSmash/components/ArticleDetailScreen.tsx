@@ -52,7 +52,7 @@ function AffiliateCard({ item }: { item: AffiliateItem }) {
           onPress={() => openBrowserAsync(item.url)}
           activeOpacity={0.8}
         >
-          <Text style={s.affiliateBtnText}>Shop Now →</Text>
+          <Text style={s.affiliateBtnText}>{item.cta || 'Shop Now →'}</Text>
         </TouchableOpacity>
       </View>
     </View>

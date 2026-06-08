@@ -11,19 +11,42 @@ const REVENUECAT_API_KEY_ANDROID = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KE
 
 let initialized = false;
 
+// RevenueCat public SDK keys are platform-prefixed: iOS "appl_", Android "goog_".
+// We only reject an empty/placeholder key here (anything with the right prefix and
+// some length is treated as real — key lengths vary). The configure() call itself
+// is wrapped in try/catch below so a rejected key can't crash startup.
+function looksLikeValidKey(apiKey: string): boolean {
+  const prefix = Platform.OS === 'ios' ? 'appl_' : 'goog_';
+  return apiKey.startsWith(prefix) && apiKey.length > prefix.length + 8;
+}
+
 export function initPurchases() {
   if (initialized) return;
   initialized = true;
 
   const apiKey = Platform.OS === 'ios' ? REVENUECAT_API_KEY_IOS : REVENUECAT_API_KEY_ANDROID;
-  if (!apiKey) return; // skip in dev if keys not set yet
+  if (!apiKey) return; // keys not set yet
 
-  Purchases.setLogLevel(LOG_LEVEL.ERROR);
-  Purchases.configure({ apiKey });
+  if (!looksLikeValidKey(apiKey)) {
+    // Don't call configure() with a malformed/placeholder key — RevenueCat would
+    // throw "configuration is not valid". Skip purchases instead; the rest of the
+    // app runs normally and paywalls degrade gracefully (offerings come back empty).
+    console.warn('[purchases] RevenueCat key missing or malformed — skipping configure (IAP disabled).');
+    initialized = false; // allow a retry after a real key is provided + rebuild
+    return;
+  }
 
-  const user = getAuth().currentUser;
-  if (user) {
-    Purchases.logIn(user.uid).catch(() => {});
+  try {
+    Purchases.setLogLevel(LOG_LEVEL.ERROR);
+    Purchases.configure({ apiKey });
+
+    const user = getAuth().currentUser;
+    if (user) {
+      Purchases.logIn(user.uid).catch(() => {});
+    }
+  } catch (e) {
+    console.warn('[purchases] RevenueCat configure failed — IAP disabled for this session.', e);
+    initialized = false;
   }
 }
 

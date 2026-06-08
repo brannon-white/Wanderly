@@ -22,7 +22,9 @@ export const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
+    // No fontWeight: the Merriweather "-Bold" file already supplies the weight.
+    // Adding fontWeight makes iOS synthesize faux-bold, which widens glyphs and
+    // clips the last character of headings ("Discover" → "Discove") on iOS 17+.
     color: '#222',
     fontFamily: 'Merriweather_36pt-Bold',
   },
@@ -57,7 +59,6 @@ export const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
     color: '#222',
     marginLeft: 20,
     marginBottom: 10,
@@ -65,7 +66,6 @@ export const styles = StyleSheet.create({
   },
   sectionTitleFeatured: {
     fontSize: 20,
-    fontWeight: 'bold',
     color: '#222',
     marginLeft: 20,
     marginBottom: 10,
@@ -357,7 +357,6 @@ popularCardImage: {
   featuredTripButtonText: {
     color: '#fff',
     fontSize: 17,
-    fontWeight: 'bold',
     fontFamily: 'Merriweather_36pt-Bold',
   },
   // Add to your discoverScreenStyles.js or .ts

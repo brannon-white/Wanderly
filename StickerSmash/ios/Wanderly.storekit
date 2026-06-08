@@ -1,0 +1,125 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "961CEA15-7975-40A3-A7DF-8666D47B0DB6",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "1.99",
+      "familyShareable" : false,
+      "internalID" : "B0A4EFDA-3002-4148-8D5D-A120C6E6D062",
+      "localizations" : [
+        {
+          "description" : "1 trip credit — generate one full itinerary.",
+          "displayName" : "1 Trip Credit",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "wanderly_credits_1",
+      "referenceName" : "1 Trip Credit",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "7.99",
+      "familyShareable" : false,
+      "internalID" : "F59665CF-624B-4410-9CD9-4E4A43DA52F5",
+      "localizations" : [
+        {
+          "description" : "5 trip credits — generate five full itineraries.",
+          "displayName" : "5 Trip Credits",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "wanderly_credits_5",
+      "referenceName" : "5 Trip Credits",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "15.99",
+      "familyShareable" : false,
+      "internalID" : "D7364996-033E-4798-915B-22F0ED396369",
+      "localizations" : [
+        {
+          "description" : "12 trip credits — generate twelve full itineraries.",
+          "displayName" : "12 Trip Credits",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "wanderly_credits_12",
+      "referenceName" : "12 Trip Credits",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "",
+    "_developerTeamID" : "",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 0,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "02547913-C914-44BF-A2B2-683778009756",
+      "localizations" : [],
+      "name" : "Wanderly Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "4.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "C9270D57-6EA0-4AD1-AF77-4B63EE0EA3F2",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Wanderly Pro — 20 itinerary generations per month plus refinements.",
+              "displayName" : "Pro Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "wanderly_pro_monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Pro Monthly",
+          "subscriptionGroupID" : "02547913-C914-44BF-A2B2-683778009756",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "39.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "07D93729-BAA2-4EFF-82FF-4BE3AB56EEDD",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Wanderly Pro — a full year of unlimited-feel planning, billed annually.",
+              "displayName" : "Pro Annual",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "wanderly_pro_annual",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Pro Annual",
+          "subscriptionGroupID" : "02547913-C914-44BF-A2B2-683778009756",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

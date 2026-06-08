@@ -406,7 +406,6 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 21,
-    fontWeight: '700',
     color: '#1A1A2E',
     fontFamily: 'Merriweather_36pt-Bold',
     marginBottom: 10,

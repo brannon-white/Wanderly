@@ -22,7 +22,7 @@ const STOP_PLAN_SCHEMA = {
     stops: {
       type: "array",
       minItems: 1,
-      maxItems: 5,
+      maxItems: 8,
       items: {
         type: "object",
         required: ["location", "nightCount"],
@@ -36,6 +36,100 @@ const STOP_PLAN_SCHEMA = {
   },
 };
 
+/**
+ * Does a planned stop's location refer to the origin city? We match on the bare
+ * city token (before the first comma) so "Chattanooga" matches "Chattanooga, TN".
+ */
+export function isOriginStop(stopLocation: string, origin: string): boolean {
+  const norm = (s: string) => s.split(",")[0].trim().toLowerCase();
+  return norm(stopLocation) === norm(origin);
+}
+
+/**
+ * Translate the user's pace choice into a concrete stop-count target for a trip
+ * of `durationDays` nights. The road trip ALWAYS begins at the user's selected
+ * destination (the origin) and fans outward — these counts include that first stop.
+ */
+export function paceGuidance(
+  travelPace: GenerateItineraryRequest["travelPace"],
+  durationDays: number,
+): { targetStops: number; hint: string } {
+  switch (travelPace) {
+    case "every_night":
+      // A new place each night: one stop per night (origin is night 1), capped at 8.
+      return {
+        targetStops: Math.min(8, Math.max(2, durationDays)),
+        hint: `move to a new location every night — plan ${Math.min(8, Math.max(2, durationDays))} stops of 1 night each (the first being the origin)`,
+      };
+    case "every_few_days": {
+      const target = Math.min(8, Math.max(2, Math.round(durationDays / 3)));
+      return {
+        targetStops: target,
+        hint: `2–4 nights per stop — aim for about ${target} stops`,
+      };
+    }
+    case "few_stops":
+      return {
+        targetStops: Math.min(3, Math.max(2, durationDays)),
+        hint: "2–3 stops total, meaningful time at each",
+      };
+    case "flexible":
+    default: {
+      const target = Math.min(4, Math.max(2, Math.round(durationDays / 2)));
+      return {
+        targetStops: target,
+        hint: `choose pacing based on geography — about ${target} stops`,
+      };
+    }
+  }
+}
+
+/**
+ * Make the stops' nightCounts sum to exactly `durationDays`, every stop keeping at
+ * least 1 night. Drops trailing stops if there are more stops than nights (you can't
+ * sleep <1 night somewhere), then adds/removes leftover nights from the end. Order is
+ * preserved, so the origin (stop 1) is never dropped unless durationDays is 0.
+ */
+/**
+ * Force the origin city to be the first stop. If it already appears later in the
+ * route, move it to the front; if it's missing entirely, prepend it. This is the
+ * enforcement behind "a road trip starting in X must open in X".
+ */
+export function anchorOriginFirst(stops: StopPlan[], origin: string): StopPlan[] {
+  const result = [...stops];
+  const originIdx = result.findIndex((s) => isOriginStop(s.location, origin));
+  if (originIdx > 0) {
+    const [originStop] = result.splice(originIdx, 1);
+    result.unshift(originStop);
+  } else if (originIdx === -1) {
+    result.unshift({ location: origin, nightCount: 1 });
+  }
+  return result;
+}
+
+export function normalizeNights(stops: StopPlan[], durationDays: number): StopPlan[] {
+  // Can't have more stops than nights — keep the earliest `durationDays` stops.
+  let result = stops.slice(0, Math.max(1, durationDays));
+  // Floor every stop at 1 night.
+  result = result.map((s) => ({ ...s, nightCount: Math.max(1, Math.round(s.nightCount)) }));
+
+  let total = result.reduce((sum, s) => sum + s.nightCount, 0);
+  // Too many nights: trim from the back, never below 1 per stop.
+  for (let i = result.length - 1; total > durationDays && i >= 0; ) {
+    if (result[i].nightCount > 1) {
+      result[i].nightCount -= 1;
+      total -= 1;
+    } else {
+      i -= 1;
+    }
+  }
+  // Too few nights: pile the remainder onto the last stop.
+  if (total < durationDays) {
+    result[result.length - 1].nightCount += durationDays - total;
+  }
+  return result;
+}
+
 export async function planStops(
   input: GenerateItineraryRequest,
   durationDays: number,
@@ -47,23 +141,23 @@ export async function planStops(
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  const paceHint: Record<string, string> = {
-    every_night: "move to a new location every night",
-    every_few_days: "stay 2–4 nights per stop",
-    few_stops: "2–3 stops total, meaningful time at each",
-    flexible: "choose pacing based on geography",
-  };
+  const origin = input.destinationName;
+  const { targetStops, hint } = paceGuidance(input.travelPace, durationDays);
 
   const prompt = `You are planning the geographic structure of a road trip.
 
-DESTINATION: ${input.destinationName}${input.country ? `, ${input.country}` : ""}
+STARTING POINT (origin): ${origin}${input.country ? `, ${input.country}` : ""}
 DURATION: ${durationDays} nights total
 PARTY: ${input.party}  BUDGET: ${input.budget}
-TRAVEL PACE: ${input.travelPace ? paceHint[input.travelPace] : "flexible"}
+TRAVEL PACE: ${hint}
 ${input.tripPrompt ? `USER'S OWN WORDS: "${input.tripPrompt}"` : ""}
 
-Pick 2–4 stops that form a logical geographic route. No backtracking.
-Each stop must be a SPECIFIC city or area (e.g. "Bend, Oregon"), never a state or region.
+The trip BEGINS at the origin above. Make the FIRST stop "${origin}" itself, then
+travel outward to other interesting, feasible places nearby (same state/region).
+Plan about ${targetStops} stops in total (including the origin as stop 1).
+Build a logical one-way route — no backtracking, each stop reasonably close to the
+previous one (ideally within a 2–3 hour drive). Each stop must be a SPECIFIC city or
+area (e.g. "Bend, Oregon"), never a whole state or region.
 Sum of nightCount across all stops MUST equal exactly ${durationDays}.`;
 
   const response = await client.messages.create({
@@ -81,23 +175,24 @@ Sum of nightCount across all stops MUST equal exactly ${durationDays}.`;
   const tool = response.content.find((b) => b.type === "tool_use");
   if (!tool || tool.type !== "tool_use") {
     // Fallback: single stop = destination
-    return [{ location: input.destinationName, nightCount: durationDays }];
+    return [{ location: origin, nightCount: durationDays }];
   }
 
   const raw = tool.input as { stops?: StopPlan[] };
-  const stops: StopPlan[] = (raw.stops ?? []).filter((s) => s.location && s.nightCount > 0);
+  let stops: StopPlan[] = (raw.stops ?? []).filter((s) => s.location && s.nightCount > 0);
   if (stops.length === 0) {
-    return [{ location: input.destinationName, nightCount: durationDays }];
+    return [{ location: origin, nightCount: durationDays }];
   }
 
-  // Force nightCount sum == durationDays by adjusting the last stop.
-  const totalNights = stops.reduce((sum, s) => sum + s.nightCount, 0);
-  if (totalNights !== durationDays) {
-    const diff = durationDays - totalNights;
-    stops[stops.length - 1].nightCount = Math.max(1, stops[stops.length - 1].nightCount + diff);
-  }
+  // Guarantee the route STARTS at the origin the user picked, then make the nights
+  // sum back to the requested duration. The model is instructed to do both, but we
+  // enforce them so the trip can never open in the wrong city or drift off-duration.
+  stops = normalizeNights(anchorOriginFirst(stops, origin), durationDays);
 
   logger.info("Trip planner: stops decided", {
+    origin,
+    pace: input.travelPace ?? "flexible",
+    targetStops,
     stops: stops.map((s) => `${s.location} (${s.nightCount}n)`),
   });
 
@@ -164,7 +259,7 @@ function formatStopPool(pool: StopPool): string {
   section("ATTRACTIONS POOL", c.attractions,
     "museums, galleries, landmarks, markets, major sights. Day anchors live here.");
   section("SCENIC / OUTDOOR POOL", c.scenic,
-    "parks, viewpoints, golden-hour spots. If sparse for a nature-heavy destination, supplement with world-knowledge landmarks (waterfalls, geysers, etc.).");
+    "parks, viewpoints, golden-hour spots. Use only what's listed here — do not invent natural landmarks; if this pool is sparse, lean on the verified trails and attractions instead.");
 
   if (pool.trails.length > 0) {
     lines.push("");
@@ -281,8 +376,7 @@ HARD CONSTRAINTS:
 1. MINIMUM ${MIN_ACTIVITIES_PER_DAY} activities per non-drive day. EVERY non-drive day MUST include late afternoon, dinner, AND an evening activity. Day MUST end no earlier than 20:30. This is non-negotiable — a day ending at 2 PM or 5 PM is a broken itinerary.
 2. NO REPEATED VENUES anywhere in the trip. Each restaurant, attraction, bar appears at most once.
 3. SPECIFIC NAMED PLACES ONLY. No "local cafe", no "downtown restaurant".
-4. POOL VENUES ARE MANDATORY when the pool is non-empty. Every meal must come from the FOOD or BREAKFAST pool if that pool has options. Every cultural anchor must come from ATTRACTIONS if that pool has options. Do NOT invent a venue name when the relevant pool already has choices. Invent only when the specific pool bucket is completely empty for that category.
-4b. NATURAL LANDMARKS EXCEPTION: For scenic/nature/adventure slots, Google Places may not index major natural features (waterfalls, geysers, glaciers, fjords, craters). For these, USE YOUR WORLD KNOWLEDGE — name the actual landmark (e.g. "Seljalandsfoss Waterfall", "Geysir Geothermal Area") and provide accurate real-world coordinates. This is expected and correct for outdoor destinations.
+4. POOL VENUES + VERIFIED TRAILS ONLY — this is a hard rule. Every activity name MUST come from the candidate pools above (BREAKFAST/FOOD/NIGHTLIFE/ATTRACTIONS/SCENIC) or the VERIFIED HIKING TRAILS list. NEVER invent, guess, or recall a place name from your own knowledge — not for restaurants, not for landmarks, not for natural features. Any name you make up will be rejected and replaced downstream, producing a worse trip. If a bucket is empty, use a venue from another pool bucket or leave that slot to the verified options you do have; do not fabricate.
 5. TIME FEASIBILITY: consecutive activities can't overlap. Account for transit time between coordinates.
    Format times as "09:00 AM - 10:30 AM" (12-hour, leading zero).
 6. REALISTIC DURATIONS:
@@ -567,8 +661,9 @@ ${dayIssues.map((s, i) => `  ${i + 1}. ${s}`).join("\n")}
 DO NOT reuse any of these venues (already used on other days):
 ${usedVenues.length ? usedVenues.join(", ") : "(none yet)"}
 
-CANDIDATE POOL for this stop — prefer these real venues, never invent when the
-relevant bucket has options:
+CANDIDATE POOL for this stop — use ONLY these real venues (or the trip's verified
+trails) to fill slots. Never invent, guess, or recall a place name yourself; any
+fabricated name is rejected downstream:
 ${formatStopPool(pool)}
 
 SLOT GRID — every non-drive day must fill these and end no earlier than 20:30:

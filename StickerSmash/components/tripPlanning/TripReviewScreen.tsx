@@ -218,6 +218,36 @@ export default function TripReviewScreen() {
         return;
       }
 
+      // A network-level failure (request timeout, dropped connection) does NOT
+      // mean generation failed: the server keeps running for up to ~9 min and
+      // can still finish, after which the "itinerary ready" push fires and
+      // ItineraryReadyReconciler commits the trip to My Trips. So don't show a
+      // scary "failed" — keep a pending card the push will resolve, and tell the
+      // user we'll notify them. (Definitive server errors come back as a parsed
+      // error message below and are treated as real failures.)
+      const isNetworkError =
+        error instanceof Error &&
+        /network request failed|timeout|timed out|aborted|network error/i.test(error.message);
+
+      if (isNetworkError) {
+        setPendingGeneration({
+          destName: savedDestName,
+          heroImage: savedHeroImage,
+          party: savedParty,
+          startDate: savedStartDate,
+          endDate: savedEndDate,
+          status: 'generating',
+        });
+        if (!userNavigatedAway.current) {
+          setShowConfirmation(false);
+          Alert.alert(
+            'Still working on it',
+            "This itinerary is taking a little longer than usual. We'll notify you the moment it's ready — feel free to keep exploring in the meantime.",
+          );
+        }
+        return;
+      }
+
       const message =
         error instanceof Error && /unauth/i.test(error.message)
           ? 'Your sign-in session was not attached to the request. Sign out, sign in again, and retry.'

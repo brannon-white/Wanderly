@@ -22,7 +22,7 @@ import { validateItinerary } from "./orchestration/validation";
 import { enrichTransportTimes } from "./orchestration/directions";
 import { enrichWithImages } from "./orchestration/imageEnrichment";
 import { searchNearbyForActivity } from "./orchestration/placesRetrieval";
-import { reconcileItineraryPlaces, resolveActivityPlaces } from "./orchestration/placeResolution";
+import { reconcileItineraryPlaces, resolveActivityPlaces, enforceVerifiedPlaces } from "./orchestration/placeResolution";
 import { fetchHikingTrails } from "./orchestration/trailDiscovery";
 import { type OsmHike, type StopPool } from "./orchestration/types";
 
@@ -307,6 +307,14 @@ export async function generateItineraryFlow(
       validated = await reconcileItineraryPlaces(validated, googlePlacesApiKey);
     } catch (error) {
       logger.warn("Pipeline: place reconciliation failed, keeping AI coords", { error });
+    }
+    // Hard gate: drop/replace any activity we couldn't verify against a real Place
+    // or trail, so an AI-hallucinated location never reaches the user.
+    try {
+      const gated = enforceVerifiedPlaces(validated, pools);
+      validated = gated.itinerary;
+    } catch (error) {
+      logger.warn("Pipeline: verified-places gate failed, keeping reconciled itinerary", { error });
     }
     try {
       logger.info("Pipeline: enriching transport times");

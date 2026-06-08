@@ -22,7 +22,6 @@ export const styles = StyleSheet.create({
   },
   heading: {
     fontSize: 32,
-    fontWeight: 'bold',
     color: '#222',
     textAlign: 'center',
     marginBottom: 18,
@@ -48,7 +47,6 @@ export const styles = StyleSheet.create({
   buttonText: {
     color: '#fff',
     fontSize: 22,
-    fontWeight: 'bold',
     fontFamily: 'Merriweather_36pt-Bold',
   },
 });

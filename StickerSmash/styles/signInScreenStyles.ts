@@ -18,7 +18,6 @@ export const styles = StyleSheet.create({
     left: 24,
     color: '#fff',
     fontSize: 36,
-    fontWeight: 'bold',
     fontFamily: 'Merriweather_36pt-Bold',
   },
   card: {
@@ -33,7 +32,6 @@ export const styles = StyleSheet.create({
   },
   welcome: {
     fontSize: 32,
-    fontWeight: 'bold',
     fontFamily: 'Merriweather_36pt-Bold',
     marginBottom: 24,
     color: '#222',
