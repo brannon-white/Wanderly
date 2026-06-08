@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, View, Text } from 'react-native';
+import { ActivityIndicator, Alert, Linking, View, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import messaging from '@react-native-firebase/messaging';
 import { useNavigationContainerRef } from 'expo-router';
@@ -22,6 +22,7 @@ import { DemoProvider, useDemo } from '@/context/DemoContext';
 import { SavedProvider } from '@/context/SavedContext';
 import { TripPlanningProvider } from '@/context/TripPlanningContext';
 import { MyTripsProvider } from '@/context/MyTripsContext';
+import ItineraryReadyReconciler from '@/components/ItineraryReadyReconciler';
 import { useFonts } from 'expo-font';
 import { getOnboardingProgress } from '@/utils/onboardingStorage';
 import { userExists } from '@/hooks/useSaveUserProfile';
@@ -71,6 +72,16 @@ export type RootStackParamList = {
 
 const Stack = createStackNavigator<RootStackParamList>();
 
+// Registered at module scope so it's set before the app finishes mounting.
+// Required by react-native-firebase even when our messages are display
+// notifications the OS renders itself — without it RNFirebase logs a warning
+// and data-only messages are dropped.
+messaging().setBackgroundMessageHandler(async () => {
+  // No-op: "itinerary ready" pushes carry a `notification` payload, so iOS/Android
+  // display them in the system tray on their own. Tap handling lives in
+  // onNotificationOpenedApp / getInitialNotification below.
+});
+
 function DemoAwareAuth({ navigation }: any) {
   const { enableDemoMode } = useDemo();
   return (
@@ -97,6 +108,34 @@ export default function RootLayout() {
     'Merriweather_36pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_36pt-Bold.ttf'),
     'Merriweather_24pt-Bold': require('@/assets/fonts/Merriweather/static/Merriweather_24pt-Bold.ttf'),
   });
+
+  // Foreground messages are NOT displayed by the OS — RNFirebase just fires
+  // onMessage. Since users are told to "explore in the meantime", the app is
+  // usually foregrounded when the itinerary finishes, so surface an in-app
+  // prompt that lets them jump straight to the finished trip.
+  useEffect(() => {
+    const unsubscribe = messaging().onMessage(remoteMessage => {
+      const itineraryId = remoteMessage.data?.itineraryId as string | undefined;
+      const title = remoteMessage.notification?.title ?? 'Your itinerary is ready!';
+      const body = remoteMessage.notification?.body ?? 'Tap to view your trip.';
+      Alert.alert(title, body, [
+        { text: 'Later', style: 'cancel' },
+        {
+          text: 'View',
+          onPress: () => {
+            if (itineraryId && navigationRef.isReady()) {
+              (navigationRef as any).navigate('ItineraryScreen', {
+                id: itineraryId,
+                source: 'mytrips',
+                committedTripId: remoteMessage.data?.committedTripId as string | undefined,
+              });
+            }
+          },
+        },
+      ]);
+    });
+    return unsubscribe;
+  }, [navigationRef]);
 
   // Handle notification tap when app is in background (not quit)
   useEffect(() => {
@@ -224,6 +263,7 @@ const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
     <DemoProvider>
       <SavedProvider>
         <MyTripsProvider>
+          <ItineraryReadyReconciler />
           <TripPlanningProvider>
             <OnboardingProvider>
               <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>

@@ -118,8 +118,11 @@ export function MyTripsProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(STORAGE_KEY(), JSON.stringify(trips)).catch(() => {});
   }, [trips, isDemoMode, loaded]);
 
+  // Idempotent by id: the same committed trip can be added twice — once by the
+  // synchronous generate response and again by the "itinerary ready" push that
+  // reconciles trips when the request timed out. Don't duplicate it.
   const addTrip = (trip: CommittedTrip) => {
-    setTrips(prev => [trip, ...prev]);
+    setTrips(prev => (prev.some(t => t.id === trip.id) ? prev : [trip, ...prev]));
   };
 
   const removeTrip = (id: string) => {

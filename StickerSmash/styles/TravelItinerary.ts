@@ -66,7 +66,6 @@ export const styles = StyleSheet.create({
 
   heroTitle: {
     fontSize: 26,
-    fontWeight: 'bold',
     color: '#fff',
     fontFamily: 'Merriweather_36pt-Bold',
     marginBottom: 6,
@@ -169,7 +168,6 @@ export const styles = StyleSheet.create({
 
   itemTitle: {
     fontSize: 17,
-    fontWeight: '700',
     color: '#222',
     fontFamily: 'Merriweather_36pt-Bold',
     marginBottom: 8,

@@ -284,7 +284,13 @@ export default function ProfileScreen() {
                   onPress={() => setShowPaywall(true)}
                   activeOpacity={0.85}
                 >
-                  <Text style={subscriptionStyles.upgradeBtnText}>Upgrade to Pro — $9.99 / mo</Text>
+                  <Text
+                    style={subscriptionStyles.upgradeBtnText}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    Upgrade to Pro — $9.99/mo
+                  </Text>
                 </TouchableOpacity>
               </>
             )}
@@ -472,6 +478,7 @@ const subscriptionStyles = StyleSheet.create({
     backgroundColor: '#6A62B7',
     borderRadius: 14,
     paddingVertical: 14,
+    paddingHorizontal: 16,
     alignItems: 'center',
   },
   upgradeBtnText: {

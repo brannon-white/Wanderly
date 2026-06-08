@@ -58,5 +58,27 @@ target 'Wanderly' do
         end
       end
     end
+
+    # This Apple clang advertises __cpp_consteval, so fmt enables consteval, but
+    # it then mis-evaluates fmt's compile-time format strings: "call to consteval
+    # function ... is not a constant expression" in fmt/format-inl.h. fmt's
+    # detection block in base.h is an unguarded #if/#elif cascade, so an external
+    # -DFMT_USE_CONSTEVAL=0 can't override it — we patch the header to force it off.
+    fmt_base = File.join(__dir__, 'Pods', 'fmt', 'include', 'fmt', 'base.h')
+    if File.exist?(fmt_base)
+      contents = File.read(fmt_base)
+      unless contents.include?('// patched: force-disable consteval')
+        contents = contents.sub(
+          /#if FMT_USE_CONSTEVAL\n#  define FMT_CONSTEVAL consteval/,
+          "#undef FMT_USE_CONSTEVAL  // patched: force-disable consteval\n" \
+          "#define FMT_USE_CONSTEVAL 0\n" \
+          "#if FMT_USE_CONSTEVAL\n#  define FMT_CONSTEVAL consteval"
+        )
+        # CocoaPods installs pod headers read-only, so make it writable first.
+        File.chmod(0644, fmt_base) rescue nil
+        File.write(fmt_base, contents)
+        Pod::UI.puts "[fmt] patched base.h to disable consteval"
+      end
+    end
   end
 end

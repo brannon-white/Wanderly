@@ -77,7 +77,6 @@ export const styles = StyleSheet.create({
   },
   profileAvatarInitials: {
     fontSize: 20,
-    fontWeight: 'bold',
     color: '#6A62B7',
     fontFamily: 'Merriweather_36pt-Bold',
   },
@@ -202,7 +201,6 @@ export const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 17,
-    fontWeight: 'bold',
     color: '#222',
     fontFamily: 'Merriweather_36pt-Bold',
   },
@@ -242,7 +240,6 @@ export const styles = StyleSheet.create({
   },
   modalAvatarInitials: {
     fontSize: 28,
-    fontWeight: 'bold',
     color: '#6A62B7',
     fontFamily: 'Merriweather_36pt-Bold',
   },

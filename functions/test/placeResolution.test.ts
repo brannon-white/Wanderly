@@ -125,10 +125,55 @@ describe("reconcileItineraryPlaces", () => {
     ]]);
 
     const out = await reconcileItineraryPlaces(it, "KEY");
-    // Only the un-verified activity triggers a lookup.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // One stop geocode + one lookup for the single un-verified activity (the
+    // already-verified one is skipped).
+    const activityLookups = fetchMock.mock.calls.filter(
+      ([, init]: any) => JSON.parse(init.body).textQuery.startsWith("New Spot"),
+    );
+    expect(activityLookups).toHaveLength(1);
     expect(out.stops[0].days[0].activities[0].placeId).toBe("EXISTING");
     expect(out.stops[0].days[0].activities[1].placeId).toBe("NEW");
+  });
+
+  it("rejects a same-named venue far from the stop center (no multi-hour intra-day hop)", async () => {
+    // Stop center geocodes to Portland; the activity's only name match is a
+    // same-named venue ~200 km away. It must be rejected so the activity stays
+    // unverified (and gets swapped for a nearby pool venue downstream).
+    const fetchMock = vi.fn(async (_url: string, init: any) => {
+      const q: string = JSON.parse(init.body).textQuery;
+      if (q.startsWith("Joe's Diner")) {
+        // Lat/lng ~2.7° north of Portland ≈ 300 km away.
+        return placesResponse([{ id: "FAR", name: "Joe's Diner", lat: 48.2, lng: -122.68 }]) as any;
+      }
+      // Geocode of "Portland, Oregon".
+      return placesResponse([{ id: "CTR", name: "Portland", lat: 45.52, lng: -122.68 }]) as any;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const it = itinerary([[
+      activity({ name: "Joe's Diner", category: "food", coordinates: { latitude: 45.5, longitude: -122.6 } }),
+    ]]);
+    const out = await reconcileItineraryPlaces(it, "KEY");
+    const a = out.stops[0].days[0].activities[0];
+    expect(a.placeId).toBeUndefined();                              // far match rejected
+    expect(a.coordinates).toEqual({ latitude: 45.5, longitude: -122.6 }); // AI coords kept
+  });
+
+  it("accepts a same-named venue that is near the stop center", async () => {
+    const fetchMock = vi.fn(async (_url: string, init: any) => {
+      const q: string = JSON.parse(init.body).textQuery;
+      if (q.startsWith("Joe's Diner")) {
+        return placesResponse([{ id: "NEAR", name: "Joe's Diner", lat: 45.53, lng: -122.66 }]) as any;
+      }
+      return placesResponse([{ id: "CTR", name: "Portland", lat: 45.52, lng: -122.68 }]) as any;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const it = itinerary([[
+      activity({ name: "Joe's Diner", category: "food", coordinates: { latitude: 0, longitude: 0 } }),
+    ]]);
+    const out = await reconcileItineraryPlaces(it, "KEY");
+    expect(out.stops[0].days[0].activities[0].placeId).toBe("NEAR");
   });
 
   it("no-ops without an API key", async () => {

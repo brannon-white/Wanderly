@@ -4,6 +4,7 @@ export type AffiliateItem = {
   url: string;
   price?: string;
   badge?: string;
+  cta?: string; // button label, e.g. "Check Availability →" (defaults to "Shop Now →")
 };
 
 export type Article = {

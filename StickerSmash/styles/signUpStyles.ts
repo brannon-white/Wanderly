@@ -102,7 +102,6 @@ card: {
     color: '#888',
     marginBottom: 4,
     fontSize: 15,
-    fontWeight: '500',
     marginTop: 8,
     fontFamily: 'Merriweather_36pt-Bold',
   },
@@ -139,7 +138,6 @@ card: {
   signUpButtonText: {
     color: '#fff',
     fontSize: 20,
-    fontWeight: 'bold',
     fontFamily: 'Merriweather_36pt-Bold',
   },
 });

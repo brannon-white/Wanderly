@@ -1,5 +1,29 @@
 import * as logger from "firebase-functions/logger";
 import { type GeneratedItinerary, getAllDays, updateDayByIndex } from "../itinerarySchemas";
+import { type StopPool, type StopCandidatePool, type PlaceCandidate } from "./types";
+import { searchNearbyForActivity } from "./placesRetrieval";
+import { geocodeStop } from "./contextBuilder";
+
+// All of a single day's activities live in one stop city, so a real venue for an
+// activity should sit near that stop's center. Google Text Search will happily
+// return a same-named venue in another city (a "Joe's Diner" 200 km away), which is
+// how a single day ends up with a 2h45m hop to a restaurant. We reject any match
+// farther than this from the stop center and fall back to a real nearby pool venue.
+const MAX_SNAP_DISTANCE_KM = 60;
+
+function haversineKm(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number,
+): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 // Snaps AI-generated activities to the real Google Place they describe.
 //
@@ -64,11 +88,19 @@ const MATCH_THRESHOLD = 0.5;
 export async function findPlaceByText(
   name: string,
   locationBias: string,
-  apiKey: string
+  apiKey: string,
+  center?: { lat: number; lng: number } | null,
 ): Promise<ResolvedPlace | null> {
   const query = locationBias ? `${name}, ${locationBias}` : name;
   let data: { places?: TextSearchPlace[] };
   try {
+    const body: Record<string, unknown> = { textQuery: query, languageCode: "en", maxResultCount: 5 };
+    // Bias Google toward the stop center so same-named venues elsewhere rank lower.
+    if (center) {
+      body.locationBias = {
+        circle: { center: { latitude: center.lat, longitude: center.lng }, radius: 30000 },
+      };
+    }
     const response = await fetch(TEXT_SEARCH_URL, {
       method: "POST",
       headers: {
@@ -76,7 +108,7 @@ export async function findPlaceByText(
         "X-Goog-Api-Key": apiKey,
         "X-Goog-FieldMask": FIELD_MASK,
       },
-      body: JSON.stringify({ textQuery: query, languageCode: "en", maxResultCount: 5 }),
+      body: JSON.stringify(body),
     });
     if (!response.ok) {
       logger.warn("placeResolution text search non-OK", { status: response.status, query });
@@ -104,6 +136,19 @@ export async function findPlaceByText(
   }
   if (!best || bestScore < MATCH_THRESHOLD) return null;
 
+  // Hard location guard: a name match in the wrong city (e.g. a chain branch 200 km
+  // away) would put a multi-hour drive inside a single day. Reject it so the activity
+  // stays unverified and gets swapped for a real nearby venue downstream.
+  if (center) {
+    const distKm = haversineKm(center.lat, center.lng, best.location.latitude, best.location.longitude);
+    if (distKm > MAX_SNAP_DISTANCE_KM) {
+      logger.info("placeResolution: rejected far match", {
+        name, query, distKm: Math.round(distKm), matched: best.displayName.text,
+      });
+      return null;
+    }
+  }
+
   return {
     placeId: best.id,
     coordinates: { latitude: best.location.latitude, longitude: best.location.longitude },
@@ -121,7 +166,8 @@ export async function resolveActivityPlaces(
   activities: Activity[],
   location: string,
   apiKey: string,
-  cache: Map<string, ResolvedPlace | null> = new Map()
+  cache: Map<string, ResolvedPlace | null> = new Map(),
+  center?: { lat: number; lng: number } | null,
 ): Promise<{ activities: Activity[]; resolvedCount: number }> {
   let resolvedCount = 0;
   const resolved = await Promise.all(
@@ -132,7 +178,7 @@ export async function resolveActivityPlaces(
       const cacheKey = `${activity.name}|${location}`;
       let match = cache.get(cacheKey);
       if (match === undefined) {
-        match = await findPlaceByText(activity.name, location, apiKey);
+        match = await findPlaceByText(activity.name, location, apiKey, center);
         cache.set(cacheKey, match);
       }
       if (!match) return activity;                      // weak/no match → keep AI coords
@@ -168,17 +214,223 @@ export async function reconcileItineraryPlaces(
     for (let i = 0; i < stop.days.length; i++) dayLocations.push(stop.location);
   }
 
+  // Geocode each distinct stop center once. Passed to the snap so a far same-named
+  // venue gets rejected instead of dropping a multi-hour drive into a single day.
+  const centerByLocation = new Map<string, { lat: number; lng: number } | null>();
+  for (const stop of itinerary.stops) {
+    if (!centerByLocation.has(stop.location)) {
+      centerByLocation.set(stop.location, await geocodeStop(stop.location, apiKey));
+    }
+  }
+
   let result = itinerary;
   let resolvedCount = 0;
 
   for (let di = 0; di < days.length; di++) {
     const day = days[di];
     const location = dayLocations[di] ?? itinerary.destinationName;
-    const { activities, resolvedCount: n } = await resolveActivityPlaces(day.activities, location, apiKey, cache);
+    const center = centerByLocation.get(location) ?? null;
+    const { activities, resolvedCount: n } = await resolveActivityPlaces(day.activities, location, apiKey, cache, center);
     resolvedCount += n;
     result = updateDayByIndex(result, di, { ...day, activities });
   }
 
   logger.info("placeResolution complete", { resolvedCount, totalDays: days.length });
   return result;
+}
+
+// ─── Hard gate: no AI-hallucinated locations on the itinerary ─────────────────
+//
+// After reconciliation, an activity is "verified" only if it carries a real
+// Google placeId (matched in resolveActivityPlaces) or OSM trail data (matched in
+// stampOsmTrailData). Anything else is a name the model invented that we could not
+// confirm against a real source. We never ship those: each is swapped for an
+// unused, same-category venue from the stop's candidate pool (which are all real
+// Places), and dropped only if the pool has nothing left to offer.
+
+function isVerified(activity: Activity): boolean {
+  return Boolean(activity.placeId) || activity.trailDistanceMiles != null;
+}
+
+// Snap a real Place candidate onto an activity, keeping its slot (id/time/category)
+// but replacing the name/coords/placeId/description with the verified venue's.
+function applyVenueToActivity(activity: Activity, venue: PlaceCandidate): Activity {
+  return {
+    ...activity,
+    name: venue.name,
+    coordinates: { latitude: venue.coordinates.lat, longitude: venue.coordinates.lng },
+    placeId: venue.placeId,
+    mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.name)}&query_place_id=${venue.placeId}`,
+    description: venue.editorialSummary ?? activity.description ?? "",
+    image: "",       // cleared so image enrichment fetches the new venue's photo
+    cost: undefined, // stale for the old place
+  };
+}
+
+// Ordered candidate buckets to draw a replacement from, by the activity's slot
+// category. First non-empty, unused venue wins.
+function bucketsForCategory(category: string | undefined): (keyof StopCandidatePool)[] {
+  const c = (category ?? "").toLowerCase();
+  if (c === "food") return ["food", "breakfast"];
+  if (c === "nightlife") return ["nightlife", "food"];
+  if (c === "nature" || c === "scenic" || c === "outdoors" || c === "adventure") return ["scenic", "attractions"];
+  if (c === "culture" || c === "attraction" || c === "museum") return ["attractions", "scenic"];
+  return ["attractions", "food", "scenic", "nightlife", "breakfast"];
+}
+
+function pickUnusedVenue(
+  pool: StopCandidatePool,
+  category: string | undefined,
+  usedPlaceIds: Set<string>,
+  usedNames: Set<string>,
+): PlaceCandidate | null {
+  for (const bucket of bucketsForCategory(category)) {
+    for (const venue of pool[bucket]) {
+      if (!venue.placeId) continue;
+      if (usedPlaceIds.has(venue.placeId)) continue;
+      if (usedNames.has(venue.name.toLowerCase().trim())) continue;
+      return venue;
+    }
+  }
+  return null;
+}
+
+type Itinerary = GeneratedItinerary;
+
+/**
+ * Replace every unverified activity (no placeId and no trail data) with an unused
+ * real venue from the same stop's candidate pool. Drops an activity only when the
+ * pool is exhausted for its category. Deterministic — no LLM, no API calls.
+ * Run AFTER reconcileItineraryPlaces (so placeIds are populated) and BEFORE
+ * transport/image enrichment (so replacements get correct times + photos).
+ */
+export function enforceVerifiedPlaces(
+  itinerary: Itinerary,
+  pools: StopPool[],
+): { itinerary: Itinerary; replacedCount: number; droppedCount: number } {
+  // Seed the "used" sets with every venue already on the trip so replacements
+  // never duplicate an existing stop.
+  const usedPlaceIds = new Set<string>();
+  const usedNames = new Set<string>();
+  for (const stop of itinerary.stops) {
+    for (const day of stop.days) {
+      for (const a of day.activities) {
+        if (a.placeId) usedPlaceIds.add(a.placeId);
+        if (a.name) usedNames.add(a.name.toLowerCase().trim());
+      }
+    }
+  }
+
+  let replacedCount = 0;
+  let droppedCount = 0;
+
+  const stops = itinerary.stops.map((stop, stopIndex) => {
+    const pool = pools[stopIndex]?.candidates;
+    const days = stop.days.map((day) => {
+      const activities: Activity[] = [];
+      for (const activity of day.activities) {
+        if (isVerified(activity)) {
+          activities.push(activity);
+          continue;
+        }
+        const venue = pool ? pickUnusedVenue(pool, activity.category, usedPlaceIds, usedNames) : null;
+        if (!venue) {
+          droppedCount++;
+          continue;
+        }
+        usedPlaceIds.add(venue.placeId);
+        usedNames.add(venue.name.toLowerCase().trim());
+        replacedCount++;
+        activities.push(applyVenueToActivity(activity, venue));
+      }
+      return { ...day, activities };
+    });
+    return { ...stop, days };
+  });
+
+  if (replacedCount > 0 || droppedCount > 0) {
+    logger.info("Verified-places gate", { replacedCount, droppedCount });
+  }
+  return { itinerary: { ...itinerary, stops }, replacedCount, droppedCount };
+}
+
+/**
+ * Pool-free variant for the edit/regenerate endpoints, which don't carry the full
+ * candidate pools. For each unverified activity it pulls a real nearby venue of the
+ * same category from Google Places (reusing searchNearbyForActivity) and snaps it in;
+ * drops the activity only if Places returns nothing usable. `dayIndex` limits the
+ * scan (and the Places calls) to a single edited day. Run AFTER reconcileItineraryPlaces.
+ */
+export async function enforceVerifiedPlacesBySearch(
+  itinerary: Itinerary,
+  apiKey: string | undefined,
+  opts: { dayIndex?: number } = {},
+): Promise<{ itinerary: Itinerary; replacedCount: number; droppedCount: number }> {
+  if (!apiKey) return { itinerary, replacedCount: 0, droppedCount: 0 };
+
+  const usedPlaceIds = new Set<string>();
+  const usedNames = new Set<string>();
+  for (const stop of itinerary.stops) {
+    for (const day of stop.days) {
+      for (const a of day.activities) {
+        if (a.placeId) usedPlaceIds.add(a.placeId);
+        if (a.name) usedNames.add(a.name.toLowerCase().trim());
+      }
+    }
+  }
+
+  // Per global day index: stop location + a fallback center (overnight anchor) for
+  // activities whose own coordinates are missing.
+  const dayCenters: Array<{ latitude: number; longitude: number } | undefined> = [];
+  for (const stop of itinerary.stops) {
+    const anchor = stop.overnightAnchor?.coordinates;
+    for (let i = 0; i < stop.days.length; i++) dayCenters.push(anchor);
+  }
+
+  const days = getAllDays(itinerary);
+  let result = itinerary;
+  let replacedCount = 0;
+  let droppedCount = 0;
+
+  for (let di = 0; di < days.length; di++) {
+    if (opts.dayIndex != null && di !== opts.dayIndex) continue;
+    const day = days[di];
+    const activities: Activity[] = [];
+    for (const activity of day.activities) {
+      if (isVerified(activity)) {
+        activities.push(activity);
+        continue;
+      }
+      const center = activity.coordinates ?? dayCenters[di];
+      if (!center) {
+        droppedCount++;
+        continue;
+      }
+      let candidates: PlaceCandidate[] = [];
+      try {
+        candidates = await searchNearbyForActivity(
+          center.latitude, center.longitude, activity.category ?? "attraction", apiKey, { radiusMeters: 3000 },
+        );
+      } catch {
+        candidates = [];
+      }
+      const venue = candidates.find(
+        (v) => v.placeId && !usedPlaceIds.has(v.placeId) && !usedNames.has(v.name.toLowerCase().trim()),
+      );
+      if (!venue) {
+        droppedCount++;
+        continue;
+      }
+      usedPlaceIds.add(venue.placeId);
+      usedNames.add(venue.name.toLowerCase().trim());
+      replacedCount++;
+      activities.push(applyVenueToActivity(activity, venue));
+    }
+    result = updateDayByIndex(result, di, { ...day, activities });
+  }
+
+  if (replacedCount > 0 || droppedCount > 0) {
+    logger.info("Verified-places gate (search)", { replacedCount, droppedCount, scope: opts.dayIndex ?? "all" });
+  }
+  return { itinerary: result, replacedCount, droppedCount };
 }

@@ -380,10 +380,12 @@ export default function ItineraryScreen() {
   const [showUpsellSnack, setShowUpsellSnack] = useState(false);
   const snackAnim = useRef(new Animated.Value(0)).current;
   const [showUpgradePaywall, setShowUpgradePaywall] = useState(false);
+  const [mapInteracting, setMapInteracting] = useState(false);
   const allDays = itinerary ? getItineraryDays(itinerary) : [];
   const activities = allDays[selectedDay]?.activities ?? [];
   const MapView = MapsModule?.default;
   const Marker = MapsModule?.Marker;
+  const mapRef = useRef<any>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -789,6 +791,14 @@ export default function ItineraryScreen() {
     };
   }, [activities]);
 
+  // Recenter the map when the selected day (and thus its region) changes,
+  // while still allowing the user to pan/zoom freely in between.
+  useEffect(() => {
+    if (mapRegion && mapRef.current) {
+      mapRef.current.animateToRegion(mapRegion, 350);
+    }
+  }, [mapRegion]);
+
   const headerTop = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : insets.top + 8;
 
   const isLoadingAll = loadingRemote || (!imagesReady && !isBrowsing && !!id && !demoItinerary);
@@ -832,6 +842,7 @@ export default function ItineraryScreen() {
         style={styles.itineraryContainer}
         contentContainerStyle={makeScrollContentStyle(insets.bottom, isBrowsing, !isBrowsing)}
         showsVerticalScrollIndicator={false}
+        scrollEnabled={!mapInteracting}
       >
         {/* Hero */}
         <View style={styles.heroSection}>
@@ -877,13 +888,19 @@ export default function ItineraryScreen() {
 
         {/* Map */}
         <View style={styles.mapSection}>
-          <View style={styles.mapContainer}>
+          <View
+            style={styles.mapContainer}
+            onTouchStart={() => setMapInteracting(true)}
+            onTouchEnd={() => setMapInteracting(false)}
+            onTouchCancel={() => setMapInteracting(false)}
+          >
             {MapView && Marker && mapRegion ? (
               <MapView
+                ref={mapRef}
                 style={styles.mapImage}
-                region={mapRegion}
-                scrollEnabled={false}
-                zoomEnabled={false}
+                initialRegion={mapRegion}
+                scrollEnabled={true}
+                zoomEnabled={true}
                 pitchEnabled={false}
                 rotateEnabled={false}
               >

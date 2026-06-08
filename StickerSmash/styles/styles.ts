@@ -46,7 +46,6 @@ export const styles = StyleSheet.create({
     fontFamily: 'Merriweather_36pt-Bold',
     fontSize: 36,
     fontStyle: 'normal',
-    fontWeight: '700',
     lineHeight: undefined,
     marginTop: 8,
     marginBottom: 20,
@@ -124,6 +123,5 @@ export const styles = StyleSheet.create({
   fontFamily: 'Merriweather_36pt-Bold',
   fontSize: 24,
   fontStyle: 'normal',
-  fontWeight: '700',
 },
 });

@@ -62,7 +62,6 @@ progressBarFill: {
   },
   heading: {
     fontSize: 30,
-    fontWeight: 'bold',
     color: '#222',
     fontFamily: 'Merriweather_36pt-Bold',
     marginBottom: 12,
@@ -172,7 +171,6 @@ prefEmoji: {
   continueButtonText: {
     color: '#fff',
     fontSize: 24,
-    fontWeight: 'bold',
     fontFamily: 'Merriweather_36pt-Bold',
   },
 });
