@@ -37,6 +37,20 @@ export function getTotalDays(itinerary: GeneratedItinerary): number {
   return getItineraryDays(itinerary).length;
 }
 
+// Returns the location of the stop AFTER the one this global day index belongs to
+// (the arrival city on a drive day), or null if this is the last stop.
+export function getNextStopLocation(itinerary: GeneratedItinerary, globalDayIndex: number): string | null {
+  const stops = getItineraryStops(itinerary);
+  let cumulative = 0;
+  for (let i = 0; i < stops.length; i++) {
+    if (globalDayIndex < cumulative + stops[i].days.length) {
+      return stops[i + 1]?.location ?? null;
+    }
+    cumulative += stops[i].days.length;
+  }
+  return null;
+}
+
 // Updates a day at a global index, returning a new itinerary
 export function updateItineraryDay(
   itinerary: GeneratedItinerary,

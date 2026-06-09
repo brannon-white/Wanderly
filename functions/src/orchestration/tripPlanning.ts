@@ -2,7 +2,6 @@ import Anthropic from "@anthropic-ai/sdk";
 import * as logger from "firebase-functions/logger";
 import {
   MODEL_NAME,
-  FAST_MODEL_NAME,
   ITINERARY_TOOL_INPUT_SCHEMA,
   ACTIVITY_TOOL_INPUT_SCHEMA,
   MIN_ACTIVITIES_PER_DAY,
@@ -130,6 +129,40 @@ export function normalizeNights(stops: StopPlan[], durationDays: number): StopPl
   return result;
 }
 
+/**
+ * Drop stops that repeat a city already seen earlier (matched on the bare city
+ * token), preserving order. Used for every-night trips, where each stop must be a
+ * distinct place.
+ */
+export function dedupeByCity(stops: StopPlan[]): StopPlan[] {
+  const seen = new Set<string>();
+  const out: StopPlan[] = [];
+  for (const s of stops) {
+    const key = s.location.split(",")[0].trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out;
+}
+
+/**
+ * Spread `durationDays` nights across `numStops` stops as evenly as possible, any
+ * leftover going to the earliest stops. (2 stops, 4 nights) → [2,2];
+ * (3 stops, 4 nights) → [2,1,1]; (4 stops, 4 nights) → [1,1,1,1]. Fully
+ * deterministic — this is the "code owns night distribution" half of every-night.
+ */
+export function distributeNightsEvenly(numStops: number, durationDays: number): number[] {
+  if (numStops <= 0) return [];
+  const base = Math.floor(durationDays / numStops);
+  let remainder = durationDays - base * numStops;
+  return Array.from({ length: numStops }, () => {
+    const extra = remainder > 0 ? 1 : 0;
+    if (remainder > 0) remainder -= 1;
+    return base + extra;
+  });
+}
+
 export async function planStops(
   input: GenerateItineraryRequest,
   durationDays: number,
@@ -143,8 +176,9 @@ export async function planStops(
 
   const origin = input.destinationName;
   const { targetStops, hint } = paceGuidance(input.travelPace, durationDays);
+  const everyNight = input.travelPace === "every_night";
 
-  const prompt = `You are planning the geographic structure of a road trip.
+  const basePrompt = (extra: string) => `You are planning the geographic structure of a road trip.
 
 STARTING POINT (origin): ${origin}${input.country ? `, ${input.country}` : ""}
 DURATION: ${durationDays} nights total
@@ -154,40 +188,67 @@ ${input.tripPrompt ? `USER'S OWN WORDS: "${input.tripPrompt}"` : ""}
 
 The trip BEGINS at the origin above. Make the FIRST stop "${origin}" itself, then
 travel outward to other interesting, feasible places nearby (same state/region).
-Plan about ${targetStops} stops in total (including the origin as stop 1).
+${everyNight
+  ? `This traveler wants a NEW place every night. List a logical one-way route of DISTINCT cities, origin first — at least ${targetStops} of them (up to 8), each a place worth an overnight. Never repeat a city. (We assign the nights ourselves, so just give the route in order.)`
+  : `Plan about ${targetStops} stops in total (including the origin as stop 1).`}
 Build a logical one-way route — no backtracking, each stop reasonably close to the
 previous one (ideally within a 2–3 hour drive). Each stop must be a SPECIFIC city or
 area (e.g. "Bend, Oregon"), never a whole state or region.
-Sum of nightCount across all stops MUST equal exactly ${durationDays}.`;
+Sum of nightCount across all stops MUST equal exactly ${durationDays}.${extra}`;
 
-  const response = await client.messages.create({
-    model: FAST_MODEL_NAME,
-    max_tokens: 1024,
-    tools: [{
-      name: "plan_stops",
-      description: "Plan the stops + nights for a road trip",
-      input_schema: STOP_PLAN_SCHEMA,
-    }],
-    tool_choice: { type: "tool", name: "plan_stops" },
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const tool = response.content.find((b) => b.type === "tool_use");
-  if (!tool || tool.type !== "tool_use") {
-    // Fallback: single stop = destination
-    return [{ location: origin, nightCount: durationDays }];
+  async function callPlanner(extra: string): Promise<StopPlan[]> {
+    const response = await client.messages.create({
+      model: MODEL_NAME,
+      max_tokens: 1024,
+      tools: [{
+        name: "plan_stops",
+        description: "Plan the stops + nights for a road trip",
+        input_schema: STOP_PLAN_SCHEMA,
+      }],
+      tool_choice: { type: "tool", name: "plan_stops" },
+      messages: [{ role: "user", content: basePrompt(extra) }],
+    });
+    const tool = response.content.find((b) => b.type === "tool_use");
+    if (!tool || tool.type !== "tool_use") return [];
+    const raw = tool.input as { stops?: StopPlan[] };
+    return (raw.stops ?? []).filter((s) => s.location && s.nightCount > 0);
   }
 
-  const raw = tool.input as { stops?: StopPlan[] };
-  let stops: StopPlan[] = (raw.stops ?? []).filter((s) => s.location && s.nightCount > 0);
+  let stops = await callPlanner("");
+
+  // "Every night" only works if the model actually returns enough distinct cities.
+  // Haiku/Sonnet sometimes collapses to a couple of multi-night stops, which is the
+  // "4 days but only 2 places" bug. Retry once, naming the exact shortfall, before
+  // falling back to whatever it gave us.
+  const distinctCount = (ss: StopPlan[]) =>
+    new Set(ss.map((s) => s.location.split(",")[0].trim().toLowerCase())).size;
+  if (everyNight && distinctCount(stops) < targetStops) {
+    const retry = await callPlanner(
+      `\n\nYour previous attempt did not give enough variety. You MUST return ${targetStops} DIFFERENT cities, one night each — list ${targetStops} distinct stops now.`
+    );
+    if (distinctCount(retry) > distinctCount(stops)) stops = retry;
+  }
+
   if (stops.length === 0) {
     return [{ location: origin, nightCount: durationDays }];
   }
 
-  // Guarantee the route STARTS at the origin the user picked, then make the nights
-  // sum back to the requested duration. The model is instructed to do both, but we
-  // enforce them so the trip can never open in the wrong city or drift off-duration.
-  stops = normalizeNights(anchorOriginFirst(stops, origin), durationDays);
+  // Origin always leads the route.
+  const ordered = anchorOriginFirst(stops, origin);
+
+  if (everyNight) {
+    // Code owns the count and the night distribution; the model only discovered the
+    // route's cities. Take distinct cities in route order (as many as the trip has
+    // days, no more) and spread the nights evenly — so a 4-day trip with 4 distinct
+    // cities is 1 night each, and one with only 2 cities is 2+2, never 1+3.
+    const distinct = dedupeByCity(ordered);
+    const chosen = distinct.slice(0, durationDays);
+    const counts = distributeNightsEvenly(chosen.length, durationDays);
+    stops = chosen.map((s, i) => ({ ...s, nightCount: counts[i] }));
+  } else {
+    // Other paces keep the model's night choices, reconciled to the exact duration.
+    stops = normalizeNights(ordered, durationDays);
+  }
 
   logger.info("Trip planner: stops decided", {
     origin,
@@ -330,7 +391,18 @@ function buildPlannerPrompt(
   • NEVER isDriveDay on a hub trip — no inter-stop travel.
   • NEVER isDriveDay on any day of the FINAL stop — you're already at the destination.
   • NEVER isDriveDay on the first day at any stop.
-  • Drive days: exactly 3–4 activities (breakfast + scenic stop + lunch + optional 1 more). End ~16:00. No dinner, no evening slot.
+- DRIVE DAY STRUCTURE (this is how a travel day must look — the drive must be visible
+  and the traveler must still have dinner waiting in the city they arrive in):
+  • Morning in the DEPARTURE city: breakfast + one short morning activity or scenic stop.
+  • Lunch in the departure city or en route.
+  • THE DRIVE ITSELF must show: make the transport leg leading INTO the first
+    arrival-city activity a "car" leg whose time is the realistic total drive
+    (e.g. "2 hr 30 min"). This is what tells the traveler "now you drive to X".
+  • Arrival city (the NEXT stop): a DINNER is REQUIRED there — people still eat when
+    they roll in at night — plus an evening activity if they arrive before ~21:00.
+  • Activities AFTER the drive are real venues in the ARRIVAL city, using that city's
+    coordinates. Activities BEFORE the drive are in the departure city.
+  • It's fine for the departure-city portion to end early; the afternoon is the drive.
 - Non-drive days run the full 7-slot grid below.\n`
     : "";
 

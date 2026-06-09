@@ -1,0 +1,138 @@
+import * as logger from "firebase-functions/logger";
+import { type GeneratedItinerary, getAllDays, updateDayByIndex } from "../itinerarySchemas";
+import { type StopPool, type PlaceCandidate } from "./types";
+
+// Deterministic drive-day structure. Trip *shape* should not depend on the model
+// getting it right: on a multi-stop road trip the last day at every non-final stop
+// is, by definition, the travel day to the next stop. This module marks those days
+// (overriding whatever the model guessed) and guarantees the traveler still has a
+// real dinner waiting in the city they arrive in — pulled from that stop's verified
+// candidate pool, not invented. The model still chooses the rest of the day's
+// content; code owns the skeleton.
+
+type Activity = GeneratedItinerary["stops"][number]["days"][number]["activities"][number];
+
+// A food activity counts as the "arrival dinner" only if it actually sits in the
+// arrival city — within this radius of that stop's candidate-pool center.
+const ARRIVAL_DINNER_MAX_KM = 25;
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+// Center of a stop = the median coordinate of its pooled venues (all real, all in
+// that city). Avoids an extra geocode call.
+function poolCenter(pool: StopPool | undefined): { lat: number; lng: number } | null {
+  if (!pool) return null;
+  const c = pool.candidates;
+  const all = [...c.food, ...c.attractions, ...c.breakfast, ...c.scenic, ...c.nightlife];
+  if (all.length === 0) return null;
+  return {
+    lat: median(all.map((p) => p.coordinates.lat)),
+    lng: median(all.map((p) => p.coordinates.lng)),
+  };
+}
+
+function dinnerFromCandidate(c: PlaceCandidate): Activity {
+  return {
+    id: `arrival-dinner-${c.placeId}`,
+    name: c.name,
+    category: "food",
+    description: c.editorialSummary ?? "",
+    time: "07:00 PM - 08:30 PM",
+    image: "",
+    placeId: c.placeId,
+    mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.name)}&query_place_id=${c.placeId}`,
+    coordinates: { latitude: c.coordinates.lat, longitude: c.coordinates.lng },
+    rating: c.rating,
+    transport: [],
+  };
+}
+
+export function shapeDriveDays(
+  itinerary: GeneratedItinerary,
+  pools: StopPool[],
+): GeneratedItinerary {
+  if (!itinerary.stops || itinerary.stops.length < 2) return itinerary;
+
+  // Every venue already on the trip, so an appended dinner never duplicates one.
+  const used = new Set<string>();
+  for (const s of itinerary.stops)
+    for (const d of s.days)
+      for (const a of d.activities) if (a.placeId) used.add(a.placeId);
+
+  // Global day-index offset of each stop's first day.
+  const offsets: number[] = [];
+  let acc = 0;
+  for (const s of itinerary.stops) { offsets.push(acc); acc += s.days.length; }
+
+  let result = itinerary;
+  let shaped = 0;
+
+  for (let si = 0; si < itinerary.stops.length; si++) {
+    const isFinal = si === itinerary.stops.length - 1;
+    const stop = itinerary.stops[si];
+
+    for (let di = 0; di < stop.days.length; di++) {
+      const globalIdx = offsets[si] + di;
+      const isLastDayOfStop = di === stop.days.length - 1;
+      const shouldBeDrive = !isFinal && isLastDayOfStop;
+      const day = getAllDays(result)[globalIdx];
+
+      if (!shouldBeDrive) {
+        // Code owns the flag — clear any false positive the model set.
+        if (day.isDriveDay) {
+          result = updateDayByIndex(result, globalIdx, { ...day, isDriveDay: false });
+        }
+        continue;
+      }
+
+      const arrivalPool = pools[si + 1];
+      const arrivalCenter = poolCenter(arrivalPool);
+      let activities = [...day.activities];
+
+      const hasArrivalDinner = arrivalCenter
+        ? activities.some(
+            (a) => a.category === "food" && a.coordinates &&
+              haversineKm(arrivalCenter.lat, arrivalCenter.lng, a.coordinates.latitude, a.coordinates.longitude) <= ARRIVAL_DINNER_MAX_KM,
+          )
+        : activities.some((a) => a.category === "food");
+
+      if (!hasArrivalDinner && arrivalPool) {
+        const dinner = (arrivalPool.candidates.food ?? []).find(
+          (v) => v.placeId && !used.has(v.placeId),
+        );
+        if (dinner) {
+          // The leg leading into the arrival dinner is the drive — mark it so the
+          // itinerary shows "Drive · …". Real duration is filled by transport enrichment.
+          if (activities.length > 0) {
+            const lastIdx = activities.length - 1;
+            const prev = activities[lastIdx];
+            const existing = prev.transport?.[0];
+            activities[lastIdx] = { ...prev, transport: [{ mode: "car", time: existing?.time ?? "1 hr" }] };
+          }
+          used.add(dinner.placeId);
+          activities.push(dinnerFromCandidate(dinner));
+        }
+      }
+
+      result = updateDayByIndex(result, globalIdx, { ...day, isDriveDay: true, activities });
+      shaped++;
+    }
+  }
+
+  if (shaped > 0) logger.info("Drive-day shaping", { driveDays: shaped });
+  return result;
+}

@@ -33,7 +33,7 @@ import { DEMO_FULL_ITINERARIES } from '@/data/demoData';
 import { useTripPlanning } from '@/context/TripPlanningContext';
 import { useMyTrips, formatTripSubtitle } from '@/context/MyTripsContext';
 import type { GeneratedItinerary, ItineraryActivity, ItineraryDay } from '@/types/itinerary';
-import { getItineraryDays, updateItineraryDay, isRouteTrip, getStopForDayIndex } from '@/utils/itineraryHelpers';
+import { getItineraryDays, updateItineraryDay, isRouteTrip, getStopForDayIndex, getNextStopLocation } from '@/utils/itineraryHelpers';
 import { getAuth } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { searchPhoto } from '@/services/unsplash';
@@ -44,8 +44,8 @@ import ReplaceSuggestionsSheet, { type ActivityAction, type SheetTarget } from '
 import ActivityDetailSheet from './ActivityDetailSheet';
 import SmartBanner from './SmartBanner';
 import DayOptimizeBar from './DayOptimizeBar';
-import { editItineraryWithLanguage, getSuggestedReplacements, optimizeDay } from '@/services/regenerateItinerary';
-import { analyzeDay, type ActivityInsight } from '@/utils/itineraryInsights';
+import { editItineraryWithLanguage, getSuggestedReplacements, optimizeDay, recalculateDayTransport } from '@/services/regenerateItinerary';
+import { analyzeDay, estimateTransport, type ActivityInsight } from '@/utils/itineraryInsights';
 import ItineraryRefinementBar from './ItineraryRefinementBar';
 import { logRegenAttempted } from '@/services/analytics';
 
@@ -213,20 +213,37 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, onPress, onLon
   }
 
   const firstTransport = transportOptions[0];
-  const transportLabel = firstTransport
-    ? `${TRANSPORT_LABELS[firstTransport.mode?.toLowerCase() ?? ''] ?? 'Travel'} · ${firstTransport.time}`
+  // Reconcile the stored leg with the live distance. The backend Google Routes
+  // value is authoritative when its mode matches the geographic reality, but a
+  // stale label (e.g. "5 min walk" left over from a previous order while the cards
+  // are now 3 km apart) would contradict the long-walk warning — so fall back to a
+  // fresh client estimate whenever the stored mode disagrees with the distance.
+  const liveEstimate = !isLast && activity.coordinates && nextActivity?.coordinates
+    ? estimateTransport(activity.coordinates, nextActivity.coordinates)
     : null;
-  const transportIcon = firstTransport
-    ? (TRANSPORT_ICONS[firstTransport.mode?.toLowerCase() ?? ''] ?? 'navigate-outline')
+  const effectiveTransport = (() => {
+    if (firstTransport && liveEstimate) {
+      const storedMode = firstTransport.mode?.toLowerCase() ?? '';
+      const storedIsWalk = storedMode === 'walk' || storedMode === 'walking';
+      const agrees = liveEstimate.mode === 'walk' ? storedIsWalk : !storedIsWalk;
+      return agrees ? firstTransport : { mode: liveEstimate.mode, time: liveEstimate.time };
+    }
+    return firstTransport ?? (liveEstimate ? { mode: liveEstimate.mode, time: liveEstimate.time } : null);
+  })();
+  const transportLabel = effectiveTransport
+    ? `${TRANSPORT_LABELS[effectiveTransport.mode?.toLowerCase() ?? ''] ?? 'Travel'} · ${effectiveTransport.time}`
+    : null;
+  const transportIcon = effectiveTransport
+    ? (TRANSPORT_ICONS[effectiveTransport.mode?.toLowerCase() ?? ''] ?? 'navigate-outline')
     : null;
 
   const duration = parseDuration(activity.time);
 
-  const handleTransportPress = firstTransport && nextActivity
+  const handleTransportPress = effectiveTransport && nextActivity
     ? () => Linking.openURL(buildDirectionsUrl(
         { name: activity.name, placeId: activity.placeId, coordinates: activity.coordinates },
         { name: nextActivity.name, placeId: nextActivity.placeId, coordinates: nextActivity.coordinates },
-        firstTransport.mode ?? 'walk',
+        effectiveTransport.mode ?? 'walk',
       ))
     : undefined;
 
@@ -285,6 +302,19 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, onPress, onLon
               </Text>
             ) : null}
           </View>
+
+          {/* Drag handle — a clear grab affordance so reordering doesn't depend on
+              long-pressing the whole card (which fought the scroll gesture). */}
+          {onLongPress && (
+            <TouchableOpacity
+              onLongPress={onLongPress}
+              delayLongPress={120}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              style={{ justifyContent: 'center', paddingHorizontal: 6 }}
+            >
+              <Ionicons name="reorder-three-outline" size={22} color="#c4c0d8" />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Inline transport connector */}
@@ -585,6 +615,38 @@ export default function ItineraryScreen() {
       .catch(() => {}); // silent — will fetch normally on tap if this fails
   }, [detailActivity?.dayIndex, detailActivity?.activityIndex, id]);
 
+  // Light preload: when the user opens a day, warm the "Similar" suggestions for
+  // every activity on it (concurrency-capped to respect Places quota) so tapping
+  // an activity's replace options is instant. The per-sheet effect above stays as
+  // a fallback for anything this misses.
+  useEffect(() => {
+    if (!id || isBrowsing || !activities.length) return;
+    let cancelled = false;
+    const CONCURRENCY = 2;
+    const pending = activities
+      .map((_, activityIndex) => activityIndex)
+      .filter((activityIndex) => !preloadedSuggestions[`${selectedDay}-${activityIndex}`]);
+
+    (async () => {
+      for (let i = 0; i < pending.length; i += CONCURRENCY) {
+        if (cancelled) return;
+        await Promise.all(
+          pending.slice(i, i + CONCURRENCY).map((activityIndex) =>
+            getSuggestedReplacements({ itineraryId: id, dayIndex: selectedDay, activityIndex, reason: 'similar_nearby', count: 3 })
+              .then(({ candidates }) => {
+                if (!cancelled) {
+                  setPreloadedSuggestions((prev) => ({ ...prev, [`${selectedDay}-${activityIndex}`]: candidates }));
+                }
+              })
+              .catch(() => {}),
+          ),
+        );
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [id, selectedDay, isBrowsing, activities.length]);
+
   const getDayLabel = (index: number): string => {
     if (isBrowsing || !committedTrip) return (itinerary ? getItineraryDays(itinerary)[index]?.label : null) ?? `Day ${index + 1}`;
     const d = new Date(committedTrip.startDate);
@@ -682,7 +744,22 @@ export default function ItineraryScreen() {
     if (!uid) return;
     const currentDay = allDays[selectedDay];
     if (!currentDay) return;
-    const updatedDay = { ...currentDay, activities: data };
+    // Time slots are positional: slot 1 is the morning, slot 2 the late-morning,
+    // etc. When a card moves up the list it should inherit the earlier slot's time,
+    // otherwise the day reads out of order (a 2 PM card sitting above a 10 AM one).
+    // Reassign each position's time from the pre-drag order, then recompute legs.
+    const slotTimes = currentDay.activities.map((a) => a.time);
+    const reordered = data.map((act, i) => {
+      const timed = { ...act, time: slotTimes[i] ?? act.time };
+      const next = data[i + 1];
+      if (!next || !timed.coordinates || !next.coordinates) {
+        return i === data.length - 1 ? { ...timed, transport: [] } : timed;
+      }
+      const est = estimateTransport(timed.coordinates, next.coordinates);
+      const rest = Array.isArray(timed.transport) ? timed.transport.slice(1) : [];
+      return { ...timed, transport: [{ mode: est.mode, time: est.time }, ...rest] };
+    });
+    const updatedDay = { ...currentDay, activities: reordered };
     const updatedItinerary = updateItineraryDay(itinerary, selectedDay, updatedDay);
     setRemoteItinerary(updatedItinerary);
     try {
@@ -695,10 +772,18 @@ export default function ItineraryScreen() {
         .update(firestoreUpdate);
     } catch {
       setRemoteItinerary(itinerary);
+      return;
+    }
+    // Then correct the estimates with real Google Routes times in the background.
+    try {
+      const { itinerary: corrected } = await recalculateDayTransport({ itineraryId: id, dayIndex: selectedDay });
+      setRemoteItinerary(corrected);
+    } catch {
+      // Keep the client estimate — it's already consistent, just less precise.
     }
   }, [itinerary, id, selectedDay, allDays]);
 
-  const sendAiMessage = useCallback(async (message: string) => {
+  const sendAiMessage = useCallback(async (message: string, forceScopeToDay = false) => {
     if (!message.trim() || !id || aiBarLoading) return;
     const usage = await getUsageStatus().catch(() => null);
     if (usage && !usage.isPro && usage.regensLeft <= 0) {
@@ -708,7 +793,7 @@ export default function ItineraryScreen() {
     logRegenAttempted('ai_bar');
     setAiBarLoading(true);
     try {
-      const { itinerary: updated } = await editItineraryWithLanguage({ itineraryId: id, message: message.trim(), dayIndex: selectedDay });
+      const { itinerary: updated } = await editItineraryWithLanguage({ itineraryId: id, message: message.trim(), dayIndex: selectedDay, forceScopeToDay });
       setRemoteItinerary(updated);
     } catch (err) {
       if (err instanceof Error && /regen_limit_reached/i.test(err.message)) {
@@ -945,6 +1030,8 @@ export default function ItineraryScreen() {
           const dayTitle = allDays[selectedDay]?.title;
           const daytime = stop?.location;
           const overnight = stop?.overnightAnchor?.location;
+          const isDriveDay = allDays[selectedDay]?.isDriveDay === true;
+          const driveTo = isDriveDay ? getNextStopLocation(itinerary, selectedDay) : null;
           if (!stop && !dayTitle) return null;
           return (
             <View style={styles.stopCard}>
@@ -957,6 +1044,12 @@ export default function ItineraryScreen() {
                   </View>
                 ) : null}
                 {dayTitle ? <Text style={styles.stopCardTitle}>{dayTitle}</Text> : null}
+                {driveTo ? (
+                  <View style={styles.driveDayRow}>
+                    <Ionicons name="car-sport-outline" size={12} color="#C2683B" />
+                    <Text style={styles.driveDayText} numberOfLines={1}>Drive to {driveTo} today</Text>
+                  </View>
+                ) : null}
                 {overnight && overnight !== daytime ? (
                   <View style={styles.stopCardOvernightRow}>
                     <Ionicons name="moon-outline" size={11} color="#9890C8" />
@@ -1002,7 +1095,10 @@ export default function ItineraryScreen() {
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
             onDragEnd={!isBrowsing ? handleDragEnd : undefined}
-            activationDistance={!isBrowsing ? 20 : 999}
+            activationDistance={!isBrowsing ? 12 : 999}
+            dragItemOverflow
+            autoscrollThreshold={80}
+            autoscrollSpeed={160}
             renderItem={({ item, getIndex, drag, isActive }: RenderItemParams<ItineraryActivity>) => {
               const idx = getIndex() ?? 0;
               const locked = item.locked;
@@ -1040,7 +1136,7 @@ export default function ItineraryScreen() {
                         if (!message) return;
                         setAiBarLoading(true);
                         try {
-                          const { itinerary: updated } = await editItineraryWithLanguage({ itineraryId: id, message, dayIndex: selectedDay });
+                          const { itinerary: updated } = await editItineraryWithLanguage({ itineraryId: id, message, dayIndex: selectedDay, forceScopeToDay: true });
                           setRemoteItinerary(updated);
                         } catch {
                           Alert.alert('Could not apply changes', 'Please try again.');
@@ -1080,6 +1176,7 @@ export default function ItineraryScreen() {
       {!isBrowsing && id && (
         <ItineraryRefinementBar
           itineraryId={id}
+          dayIndex={selectedDay}
           onUpdated={(updated) => setRemoteItinerary(updated)}
           onPaywallNeeded={() => setShowRegenPaywall(true)}
         />
@@ -1106,7 +1203,7 @@ export default function ItineraryScreen() {
               <TouchableOpacity
                 key={chip.label}
                 style={styles.aiBarChip}
-                onPress={() => sendAiMessage(chip.message)}
+                onPress={() => sendAiMessage(chip.message, true)}
                 disabled={aiBarLoading}
               >
                 <Text style={styles.aiBarChipText}>{chip.label}</Text>

@@ -4,6 +4,8 @@ import {
   anchorOriginFirst,
   normalizeNights,
   paceGuidance,
+  dedupeByCity,
+  distributeNightsEvenly,
 } from "../src/orchestration/tripPlanning";
 import type { StopPlan } from "../src/orchestration/contextBuilder";
 
@@ -112,6 +114,38 @@ describe("paceGuidance", () => {
 
   it("every_few_days plans roughly one stop per 3 nights", () => {
     expect(paceGuidance("every_few_days", 9).targetStops).toBe(3);
+  });
+});
+
+describe("dedupeByCity", () => {
+  it("drops repeated cities by bare token, preserving order", () => {
+    const stops: StopPlan[] = [
+      { location: "Bend, Oregon", nightCount: 1 },
+      { location: "Sisters, Oregon", nightCount: 1 },
+      { location: "bend, OR", nightCount: 1 },
+    ];
+    expect(dedupeByCity(stops).map((s) => s.location)).toEqual(["Bend, Oregon", "Sisters, Oregon"]);
+  });
+});
+
+describe("distributeNightsEvenly", () => {
+  it("gives one night each when stops match the day count (true every-night)", () => {
+    expect(distributeNightsEvenly(4, 4)).toEqual([1, 1, 1, 1]);
+  });
+
+  it("splits evenly when there are fewer cities than days (2 cities, 4 days → 2+2, never 1+3)", () => {
+    expect(distributeNightsEvenly(2, 4)).toEqual([2, 2]);
+  });
+
+  it("puts the leftover on the earliest stops", () => {
+    expect(distributeNightsEvenly(3, 4)).toEqual([2, 1, 1]);
+    expect(distributeNightsEvenly(2, 5)).toEqual([3, 2]);
+  });
+
+  it("always sums to the trip duration", () => {
+    for (const [stops, days] of [[2, 4], [3, 4], [4, 4], [2, 7], [5, 6]]) {
+      expect(distributeNightsEvenly(stops, days).reduce((a, b) => a + b, 0)).toBe(days);
+    }
   });
 });
 

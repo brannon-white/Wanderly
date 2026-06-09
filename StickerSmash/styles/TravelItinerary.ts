@@ -443,6 +443,24 @@ export const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
+  driveDayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 6,
+    backgroundColor: '#FBEFE7',
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+
+  driveDayText: {
+    fontSize: 12,
+    color: '#C2683B',
+    fontFamily: 'SourceSans3-SemiBold',
+  },
+
   // ── Plan trip / Go back button ────────────────────────────────────────
   planTripButton: {
     backgroundColor: PURPLE,

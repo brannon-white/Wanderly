@@ -200,12 +200,13 @@ import {
   confirmActivityReplacementRequestSchema,
   editItineraryWithLanguageRequestSchema,
   optimizeDayRequestSchema,
+  recalculateDayTransportRequestSchema,
   type CallableGenerateItineraryResponse,
   type GenerateItineraryRequest,
 } from "./itinerarySchemas";
 import { getAllDays, updateDayByIndex, type GeneratedItinerary } from "./itinerarySchemas";
 import { enrichDayTransportTimes, enrichTransportTimes } from "./orchestration/directions";
-import { reconcileItineraryPlaces, enforceVerifiedPlacesBySearch } from "./orchestration/placeResolution";
+import { reconcileItineraryPlaces, enforceVerifiedPlacesBySearch, enforceDayGeographicCohesion } from "./orchestration/placeResolution";
 
 initializeApp();
 
@@ -630,10 +631,12 @@ export const regenerateDayHttp = functionsV1
 
       let updated = await regenerateDay({ itinerary: currentItinerary, dayIndex, modifications });
 
-      // Snap to real Google Places, reject any still-unverified place, then enrich legs
+      // Snap to real Google Places, reject any still-unverified place, pull any
+      // cross-city outlier back into the day's cluster, then enrich legs
       if (process.env.GOOGLE_PLACES_API_KEY) {
         updated = await reconcileItineraryPlaces(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
         updated = await enforceVerifiedPlacesBySearch(updated, process.env.GOOGLE_PLACES_API_KEY, { dayIndex }).then((g) => g.itinerary).catch(() => updated);
+        updated = await enforceDayGeographicCohesion(updated, process.env.GOOGLE_PLACES_API_KEY, { dayIndex }).then((g) => g.itinerary).catch(() => updated);
         updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
       }
 
@@ -963,7 +966,9 @@ function extractBearer(req: any): string | null {
 
 export const getSuggestedReplacementsHttp = functionsV1
   .region("us-central1")
-  .runWith({ maxInstances: 10, timeoutSeconds: 120, secrets: [anthropicApiKey, googlePlacesApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
+  // minInstances: 1 keeps one warm instance so the day-open preload and the
+  // first "replace" tap don't pay a cold start (the slowest part of the latency).
+  .runWith({ minInstances: 1, maxInstances: 10, timeoutSeconds: 120, secrets: [anthropicApiKey, googlePlacesApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
   .https.onRequest(async (req, res) => {
     if (corsHandler(req, res)) return;
     if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed." }); return; }
@@ -1019,10 +1024,11 @@ export const confirmActivityReplacementHttp = functionsV1
       let updated = updateDayByIndex(current, dayIndex, updatedDay);
 
       // Snap the swapped-in activity to its real Google Place, reject any unverified
-      // place, then re-enrich transport times for the affected day
+      // place, pull any cross-city outlier back in, then re-enrich the day's transport
       if (process.env.GOOGLE_PLACES_API_KEY) {
         updated = await reconcileItineraryPlaces(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
         updated = await enforceVerifiedPlacesBySearch(updated, process.env.GOOGLE_PLACES_API_KEY, { dayIndex }).then((g) => g.itinerary).catch(() => updated);
+        updated = await enforceDayGeographicCohesion(updated, process.env.GOOGLE_PLACES_API_KEY, { dayIndex }).then((g) => g.itinerary).catch(() => updated);
         updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
       }
 
@@ -1052,19 +1058,21 @@ export const editItineraryWithLanguageHttp = functionsV1
       const uid = decodedToken.uid;
       const parsed = editItineraryWithLanguageRequestSchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.message }); return; }
-      const { itineraryId, message, dayIndex } = parsed.data;
+      const { itineraryId, message, dayIndex, forceScopeToDay } = parsed.data;
       await checkAndConsumeRegenCredit(uid);
       const itineraryRef = getFirestore().collection("users").doc(uid).collection("itineraries").doc(itineraryId);
       const snap = await itineraryRef.get();
       if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
-      logger.info("editItineraryWithLanguageHttp", { uid, itineraryId, message, dayIndex });
-      let updated = await editItineraryWithLanguage({ itinerary: snap.data() as any, message, dayIndex });
+      logger.info("editItineraryWithLanguageHttp", { uid, itineraryId, message, dayIndex, forceScopeToDay });
+      let updated = await editItineraryWithLanguage({ itinerary: snap.data() as any, message, dayIndex, forceScopeToDay });
 
       // Snap any new/changed activities to real Google Places, reject unverified
-      // places, then re-enrich transport — language edits can affect multiple days
+      // places, pull cross-city outliers back into each day, then re-enrich
+      // transport — language edits can affect multiple days
       if (process.env.GOOGLE_PLACES_API_KEY) {
         updated = await reconcileItineraryPlaces(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
         updated = await enforceVerifiedPlacesBySearch(updated, process.env.GOOGLE_PLACES_API_KEY, { dayIndex }).then((g) => g.itinerary).catch(() => updated);
+        updated = await enforceDayGeographicCohesion(updated, process.env.GOOGLE_PLACES_API_KEY, { dayIndex }).then((g) => g.itinerary).catch(() => updated);
         updated = await enrichTransportTimes(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
       }
 
@@ -1107,10 +1115,12 @@ export const optimizeDayHttp = functionsV1
       logger.info("optimizeDayHttp", { uid, itineraryId, dayIndex, mode });
       let updated = await optimizeDay({ itinerary: snap.data() as any, dayIndex, mode });
 
-      // Snap any newly swapped-in activities to real Google Places, then re-enrich
-      // transport for the optimized day — activities may be reordered or replaced
+      // Snap any newly swapped-in activities to real Google Places, pull any
+      // cross-city outlier back into the day's cluster, then re-enrich transport
+      // for the optimized day — activities may be reordered or replaced
       if (process.env.GOOGLE_PLACES_API_KEY) {
         updated = await reconcileItineraryPlaces(updated, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
+        updated = await enforceDayGeographicCohesion(updated, process.env.GOOGLE_PLACES_API_KEY, { dayIndex }).then((g) => g.itinerary).catch(() => updated);
         updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
       }
 
@@ -1126,6 +1136,44 @@ export const optimizeDayHttp = functionsV1
     } catch (error) {
       const e = classifyHttpError(error);
       logger.error("optimizeDayHttp failed", { ...e, rawError: error });
+      res.status(e.status).json(e);
+    }
+  });
+
+// ─── Recalculate a single day's transport times ──────────────────────────────
+// Lightweight: re-runs Google Routes enrichment for one day after a client-side
+// reorder (drag-and-drop). Does NOT regenerate any activity, so it does not
+// consume a regen credit — it only refreshes the leg times for the new order.
+export const recalculateDayTransportHttp = functionsV1
+  .region("us-central1")
+  .runWith({ maxInstances: 10, timeoutSeconds: 60, secrets: [googlePlacesApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
+  .https.onRequest(async (req, res) => {
+    if (corsHandler(req, res)) return;
+    if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed." }); return; }
+    const token = extractBearer(req);
+    if (!token) { res.status(401).json({ error: "Missing bearer token." }); return; }
+    try {
+      const decodedToken = await getAuth().verifyIdToken(token);
+      if (!(await verifyAppCheck(req))) { res.status(401).json({ error: "App Check verification failed." }); return; }
+      const uid = decodedToken.uid;
+      const parsed = recalculateDayTransportRequestSchema.safeParse(req.body);
+      if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.message }); return; }
+      const { itineraryId, dayIndex } = parsed.data;
+      const itineraryRef = getFirestore().collection("users").doc(uid).collection("itineraries").doc(itineraryId);
+      const snap = await itineraryRef.get();
+      if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
+
+      let updated = snap.data() as any;
+      if (process.env.GOOGLE_PLACES_API_KEY) {
+        updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
+      }
+
+      await itineraryRef.update({ stops: updated.stops, updatedAt: FieldValue.serverTimestamp() });
+      logger.info("recalculateDayTransportHttp", { uid, itineraryId, dayIndex });
+      res.status(200).json({ itinerary: updated });
+    } catch (error) {
+      const e = classifyHttpError(error);
+      logger.error("recalculateDayTransportHttp failed", { ...e, rawError: error });
       res.status(e.status).json(e);
     }
   });

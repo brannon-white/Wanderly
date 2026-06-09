@@ -22,7 +22,8 @@ import { validateItinerary } from "./orchestration/validation";
 import { enrichTransportTimes } from "./orchestration/directions";
 import { enrichWithImages } from "./orchestration/imageEnrichment";
 import { searchNearbyForActivity } from "./orchestration/placesRetrieval";
-import { reconcileItineraryPlaces, resolveActivityPlaces, enforceVerifiedPlaces } from "./orchestration/placeResolution";
+import { reconcileItineraryPlaces, resolveActivityPlaces, enforceVerifiedPlaces, enforceDayGeographicCohesion } from "./orchestration/placeResolution";
+import { shapeDriveDays } from "./orchestration/driveDayShaping";
 import { fetchHikingTrails } from "./orchestration/trailDiscovery";
 import { type OsmHike, type StopPool } from "./orchestration/types";
 
@@ -35,6 +36,23 @@ export { MODEL_NAME, PROMPT_VERSION };
 const REPAIR_DEADLINE_MS = 450_000;
 // Re-validate after fixing the flagged days; a second pass catches stragglers.
 const MAX_REPAIR_ATTEMPTS = 2;
+
+// ─── Map a global (cross-stop) day index to its stop's location ──────────────
+// Days are a flat sequence across all stops. Several single-day flows need the
+// city/area a given global day belongs to so the LLM generates venues for the
+// day's actual anchor city, not the trip-level destinationName (which is the
+// first/overall city). Falls back to destinationName when stops are absent.
+export function stopLocationForDayIndex(
+  itinerary: GeneratedItinerary,
+  dayIndex: number
+): string {
+  let cumulative = 0;
+  for (const stop of itinerary.stops ?? []) {
+    if (dayIndex < cumulative + stop.days.length) return stop.location;
+    cumulative += stop.days.length;
+  }
+  return itinerary.destinationName;
+}
 
 // ─── Stamp OSM trail data onto matched hiking activities ─────────────────────
 
@@ -250,7 +268,11 @@ export async function generateItineraryFlow(
     });
 
     const allTrails = pools.flatMap((p) => p.trails);
-    return stampOsmTrailData(parsed, allTrails);
+    const stamped = stampOsmTrailData(parsed, allTrails);
+    // Deterministic trip structure: mark the travel day at each non-final stop and
+    // guarantee a real arrival-city dinner. Runs before validation so a complete
+    // drive day never triggers an AI repair pass for a "missing dinner".
+    return shapeDriveDays(stamped, pools);
   };
 
   // Step 4: Validate; on fatal failures, repair ONLY the flagged days. Each day is
@@ -316,6 +338,14 @@ export async function generateItineraryFlow(
     } catch (error) {
       logger.warn("Pipeline: verified-places gate failed, keeping reconciled itinerary", { error });
     }
+    // Pull any cross-city outlier back into its day's cluster so no single day has
+    // activities in different towns hours apart.
+    try {
+      const cohesive = await enforceDayGeographicCohesion(validated, googlePlacesApiKey);
+      validated = cohesive.itinerary;
+    } catch (error) {
+      logger.warn("Pipeline: day cohesion enforcement failed, keeping itinerary", { error });
+    }
     try {
       logger.info("Pipeline: enriching transport times");
       withTransportTimes = await enrichTransportTimes(validated, googlePlacesApiKey);
@@ -367,15 +397,7 @@ export async function regenerateActivity(
     .join(", ");
 
   // Determine the stop location for this day
-  let stopLocation = itinerary.destinationName;
-  let cumulative = 0;
-  for (const stop of itinerary.stops) {
-    if (dayIndex < cumulative + stop.days.length) {
-      stopLocation = stop.location;
-      break;
-    }
-    cumulative += stop.days.length;
-  }
+  const stopLocation = stopLocationForDayIndex(itinerary, dayIndex);
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -463,15 +485,7 @@ export async function regenerateDay(input: RegenerateDayInput): Promise<Generate
   const theme = modifications?.theme ?? day.title ?? day.label;
 
   // Find stop location for this day
-  let stopLocation = itinerary.destinationName;
-  let cumulative = 0;
-  for (const stop of itinerary.stops) {
-    if (dayIndex < cumulative + stop.days.length) {
-      stopLocation = stop.location;
-      break;
-    }
-    cumulative += stop.days.length;
-  }
+  const stopLocation = stopLocationForDayIndex(itinerary, dayIndex);
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -504,7 +518,8 @@ RULES:
 6. transport array describes how to reach the NEXT activity. Last activity = empty array.
 7. Set category to "food" for all meals, "adventure" for hikes/trails, "nightlife" for bars.
 8. Google Maps URLs: https://www.google.com/maps/search/?api=1&query=Place+Name+City
-9. Use real coordinates for ${stopLocation}.`;
+9. Use real coordinates for ${stopLocation}.
+10. ALL activities must be in ${stopLocation} and within ~15 km of each other (a single city/area). Do NOT place activities in different towns on the same day.`;
 
   const DAY_SCHEMA = {
     type: "object" as const,
@@ -614,15 +629,7 @@ export async function getSuggestedReplacements(
     .join(", ");
 
   // Find stop location for this day
-  let stopLocation = itinerary.destinationName;
-  let cumulative = 0;
-  for (const stop of itinerary.stops) {
-    if (dayIndex < cumulative + stop.days.length) {
-      stopLocation = stop.location;
-      break;
-    }
-    cumulative += stop.days.length;
-  }
+  const stopLocation = stopLocationForDayIndex(itinerary, dayIndex);
 
   const specificType = inferSpecificType(activity.name, activity.category ?? "");
   const isLocationAware = (reason === "similar_nearby" || reason === "hidden_gem" || reason === "cheaper") && activity.coordinates;
@@ -762,6 +769,10 @@ export interface EditItineraryWithLanguageInput {
   // The day the user is currently viewing. When set, mutations are clamped to
   // this day so a request that says "today" can't churn unrelated days.
   dayIndex?: number;
+  // When true (pill/chip-originated requests that always mean "this day"),
+  // every mutation is force-scoped onto dayIndex rather than dropped if the
+  // model misattributes it to another day — so the action can't silently no-op.
+  forceScopeToDay?: boolean;
 }
 
 export interface ApplyMutationsOptions {
@@ -823,7 +834,7 @@ export function applyMutations(
 export async function editItineraryWithLanguage(
   input: EditItineraryWithLanguageInput
 ): Promise<GeneratedItinerary> {
-  const { itinerary, message, dayIndex } = input;
+  const { itinerary, message, dayIndex, forceScopeToDay } = input;
   const days = getAllDays(itinerary);
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -868,8 +879,16 @@ export async function editItineraryWithLanguage(
       day.activities.map((a, ai) => `  [${di},${ai}] ${a.time} — ${a.name} (${a.category ?? "general"})`).join("\n");
   }).join("\n\n");
 
+  const viewingStopLocation = dayIndex !== undefined
+    ? stopLocationForDayIndex(itinerary, dayIndex)
+    : undefined;
+
   const viewingDayHint = dayIndex !== undefined
-    ? `\nThe user is currently viewing Day ${dayIndex + 1}. Unless the request clearly refers to other days or the whole trip, only mutate Day ${dayIndex + 1} (dayIndex ${dayIndex}).`
+    ? `\nThe user is currently viewing Day ${dayIndex + 1}, which is in ${viewingStopLocation}.` +
+      (forceScopeToDay
+        ? ` This request applies ONLY to Day ${dayIndex + 1} (dayIndex ${dayIndex}). Every mutation MUST use dayIndex ${dayIndex} — do not touch any other day.`
+        : ` Unless the request clearly refers to other days or the whole trip, only mutate Day ${dayIndex + 1} (dayIndex ${dayIndex}).`) +
+      ` Any replace_activity for this day MUST be a real venue in ${viewingStopLocation}, NOT in ${itinerary.destinationName} or any other stop.`
     : "";
 
   const prompt = `You are an AI travel assistant helping a user modify their itinerary through natural language.
@@ -878,14 +897,14 @@ ITINERARY: ${itinerary.destinationName}${itinerary.country ? `, ${itinerary.coun
 Budget: ${itinerary.budget ?? "moderate"}
 Trip type: ${itinerary.tripType ?? "hub"}
 
-CURRENT SCHEDULE:
+CURRENT SCHEDULE (each day is tagged with its city/area in [brackets]):
 ${itinerarySummary}
 
 USER REQUEST: "${message}"
 ${viewingDayHint}
 Analyze the request and return the minimal set of mutations needed.
 - dayIndex uses global 0-based numbering across all stops
-- For replace_activity, generate a real replacement in the same location as the original day
+- For replace_activity, generate a real replacement in the SAME city/area shown in [brackets] for that day
 - Only mutate what is necessary — preserve the rest of the itinerary`;
 
   const response = await client.messages.create({
@@ -906,6 +925,15 @@ Analyze the request and return the minimal set of mutations needed.
   }
 
   const { mutations } = toolBlock.input as { mutations: ItineraryMutation[] };
+
+  // Pill/chip requests always mean "the day I'm viewing". Force every mutation
+  // onto that day (mirroring optimizeDay) so a misattributed dayIndex can't make
+  // the action silently no-op. Free-text edits keep day-scoped dropping so the
+  // model may legitimately reference other days the user named.
+  if (forceScopeToDay && dayIndex !== undefined) {
+    const dayScoped = mutations.map((m) => ({ ...m, dayIndex }));
+    return applyMutations(itinerary, dayScoped, { scopeDayIndex: dayIndex });
+  }
 
   return applyMutations(itinerary, mutations, { scopeDayIndex: dayIndex });
 }
@@ -1004,26 +1032,25 @@ export async function optimizeDay(
     const rebuilt = day.activities.map((a, i) =>
       mealIndices.has(i) ? a : reorderedNonMeals[nonMealCursor++]
     );
-    return updateDayByIndex(itinerary, dayIndex, { ...day, activities: rebuilt });
+    // Only return early if the reorder actually changed the order. Otherwise the
+    // day was already nearest-neighbor ordered and the user would see no effect —
+    // fall through to the LLM path below to swap the most-distant outlier instead.
+    const changed = nonMealOrder.some((srcIdx, i) => srcIdx !== i);
+    if (changed) {
+      return updateDayByIndex(itinerary, dayIndex, { ...day, activities: rebuilt });
+    }
   }
 
   // Find stop location for this day
-  let stopLocation = itinerary.destinationName;
-  let cumulative = 0;
-  for (const stop of itinerary.stops) {
-    if (dayIndex < cumulative + stop.days.length) {
-      stopLocation = stop.location;
-      break;
-    }
-    cumulative += stop.days.length;
-  }
+  const stopLocation = stopLocationForDayIndex(itinerary, dayIndex);
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   const modeInstructions: Record<string, string> = {
+    minimize_walking: "The day is already in the most walkable order, so reduce walking further by replacing the single activity that is farthest from the others with a real alternative closer to the rest of the day's stops. Keep all meals. Use replace_activity only.",
     minimize_cost: "Replace expensive activities with free or cheap alternatives. Keep all meals. Use replace_activity only.",
     relax_mode: "Replace back-to-back high-energy activities with cafes, parks, or leisurely experiences. Optionally use remove_activity to cut one rushed stop. Keep all meals.",
-    maximize_sightseeing: "Replace non-essential activities (casual walks, shopping) with top-rated landmarks, museums, and cultural sites. KEEP ALL MEALS. Use replace_activity only — NEVER use remove_activity for this mode. The goal is better sights, not fewer activities.",
+    maximize_sightseeing: "Upgrade EVERY non-meal slot that is not already a top-tier sight into a top-rated landmark, museum, gallery, or cultural site. Go through the activities in order and emit a replace_activity for each one that is a casual walk, shopping, generic stop, or minor attraction — typically 2–4 replacements, not just one. KEEP ALL MEALS unchanged. Use replace_activity only — NEVER use remove_activity. The goal is more and better sights across the whole day, not a single swap.",
     foodie_mode: "Replace non-food activities with notable restaurants, local markets, or famous food experiences. Keep at least 2 non-food activities per day.",
   };
 
@@ -1053,7 +1080,7 @@ export async function optimizeDay(
   };
 
   const modeGuard = mode === "maximize_sightseeing"
-    ? "\n⚠️ CRITICAL: Do NOT use remove_activity. Only use replace_activity to swap non-sightseeing stops with attractions."
+    ? "\n⚠️ CRITICAL: Do NOT use remove_activity. Replace EVERY non-meal slot that isn't already a major sight — return multiple replace_activity mutations (one per upgraded slot), not just one."
     : mode === "relax_mode"
     ? "\n⚠️ Remove at most 1 activity. Prefer replace_activity over remove_activity."
     : "";
@@ -1071,6 +1098,7 @@ RULES:
 - Do NOT modify LOCKED activities (marked with 🔒)
 - Locked activity indices: [${lockedActivities.join(", ")}]
 - Use reorder_day for reordering. Use replace_activity to swap in a new activity. Use remove_activity to delete.
+- Any replacement MUST be a real venue in ${stopLocation}, within ~15 km of the other activities — never another city.
 - All operations reference dayIndex: ${dayIndex}
 - Return only the mutations needed to achieve the goal`;
 

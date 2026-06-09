@@ -19,24 +19,27 @@ interface RefinementPill {
   message: string;
 }
 
+// Messages are phrased for the day the user is viewing — the bar passes
+// forceScopeToDay so every refinement is applied only to that day's city.
 const PILLS: RefinementPill[] = [
-  { label: 'More Food', icon: Utensils, message: 'Add more food and dining experiences throughout the itinerary, include interesting local restaurants and cafes' },
-  { label: 'Less Walking', icon: Car, message: 'Reduce walking between activities by clustering them geographically, use transport more often' },
-  { label: 'Hidden Gems', icon: Map, message: 'Replace tourist hotspots with local hidden gem alternatives and off-the-beaten-path venues' },
-  { label: 'More Relaxed', icon: Coffee, message: 'Make the pace more relaxed with fewer activities per day and longer time at each place' },
-  { label: 'More Nature', icon: Leaf, message: 'Add more nature, parks, and outdoor experiences to the itinerary' },
-  { label: 'More Nightlife', icon: Music2, message: 'Add more evening activities, bars, music venues, and nightlife options' },
-  { label: 'More Adventure', icon: Mountain, message: 'Add more outdoor adventure activities, hiking, and physical experiences' },
-  { label: 'Budget Friendly', icon: DollarSign, message: 'Replace expensive venues with more affordable local alternatives' },
+  { label: 'More Food', icon: Utensils, message: 'Add more food and dining experiences to this day, include interesting local restaurants and cafes nearby' },
+  { label: 'Less Walking', icon: Car, message: 'Reduce walking between activities on this day by clustering them geographically, use transport more often' },
+  { label: 'Hidden Gems', icon: Map, message: 'Replace tourist hotspots on this day with local hidden gem alternatives and off-the-beaten-path venues nearby' },
+  { label: 'More Relaxed', icon: Coffee, message: 'Make this day more relaxed with fewer activities and longer time at each place' },
+  { label: 'More Nature', icon: Leaf, message: 'Add more nature, parks, and outdoor experiences to this day nearby' },
+  { label: 'More Nightlife', icon: Music2, message: 'Add more evening activities, bars, music venues, and nightlife options to this day nearby' },
+  { label: 'More Adventure', icon: Mountain, message: 'Add more outdoor adventure activities, hiking, and physical experiences to this day nearby' },
+  { label: 'Budget Friendly', icon: DollarSign, message: 'Replace expensive venues on this day with more affordable local alternatives nearby' },
 ];
 
 interface Props {
   itineraryId: string;
+  dayIndex: number;
   onUpdated: (itinerary: GeneratedItinerary) => void;
   onPaywallNeeded: () => void;
 }
 
-export default function ItineraryRefinementBar({ itineraryId, onUpdated, onPaywallNeeded }: Props) {
+export default function ItineraryRefinementBar({ itineraryId, dayIndex, onUpdated, onPaywallNeeded }: Props) {
   const [loadingPill, setLoadingPill] = useState<string | null>(null);
 
   async function handlePill(pill: RefinementPill) {
@@ -53,6 +56,8 @@ export default function ItineraryRefinementBar({ itineraryId, onUpdated, onPaywa
       const { itinerary: updated } = await editItineraryWithLanguage({
         itineraryId,
         message: pill.message,
+        dayIndex,
+        forceScopeToDay: true,
       });
       onUpdated(updated);
     } catch {
