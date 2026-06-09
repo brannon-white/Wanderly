@@ -25,6 +25,14 @@ function haversineKm(
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Median is robust to a single far outlier, so the day's "center" stays with the
+// majority cluster even when one activity landed in the wrong town.
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
 // Snaps AI-generated activities to the real Google Place they describe.
 //
 // The trip planner gives the LLM real place *names* but it invents the lat/lng.
@@ -433,4 +441,84 @@ export async function enforceVerifiedPlacesBySearch(
     logger.info("Verified-places gate (search)", { replacedCount, droppedCount, scope: opts.dayIndex ?? "all" });
   }
   return { itinerary: result, replacedCount, droppedCount };
+}
+
+// A day's activities should all sit in one city/area, not be spread across towns
+// hours apart. Even after place snapping (which only rejects matches >60 km from
+// the stop center) a venue can land in a neighbouring town and produce a
+// multi-hour intra-day hop. For each non-drive day this finds activities more than
+// COHESION_MAX_KM from the day's median coordinate (the majority cluster) and swaps
+// each outlier for a real same-category venue near that cluster center. Keeps the
+// original activity if Places offers no usable replacement. Run AFTER reconcile.
+const COHESION_MAX_KM = 15;
+
+export async function enforceDayGeographicCohesion(
+  itinerary: Itinerary,
+  apiKey: string | undefined,
+  opts: { dayIndex?: number } = {},
+): Promise<{ itinerary: Itinerary; movedCount: number }> {
+  if (!apiKey) return { itinerary, movedCount: 0 };
+
+  const usedPlaceIds = new Set<string>();
+  const usedNames = new Set<string>();
+  for (const stop of itinerary.stops) {
+    for (const day of stop.days) {
+      for (const a of day.activities) {
+        if (a.placeId) usedPlaceIds.add(a.placeId);
+        if (a.name) usedNames.add(a.name.toLowerCase().trim());
+      }
+    }
+  }
+
+  const days = getAllDays(itinerary);
+  let result = itinerary;
+  let movedCount = 0;
+
+  for (let di = 0; di < days.length; di++) {
+    if (opts.dayIndex != null && di !== opts.dayIndex) continue;
+    const day = days[di];
+    if (day.isDriveDay) continue; // drive days legitimately span cities
+
+    const coords = day.activities
+      .map((a) => a.coordinates)
+      .filter((c): c is NonNullable<typeof c> => Boolean(c));
+    if (coords.length < 3) continue; // too few points to define a cluster
+
+    const medLat = median(coords.map((c) => c.latitude));
+    const medLng = median(coords.map((c) => c.longitude));
+
+    const activities: Activity[] = [];
+    for (const activity of day.activities) {
+      const c = activity.coordinates;
+      if (!c || haversineKm(medLat, medLng, c.latitude, c.longitude) <= COHESION_MAX_KM) {
+        activities.push(activity);
+        continue;
+      }
+      let candidates: PlaceCandidate[] = [];
+      try {
+        candidates = await searchNearbyForActivity(
+          medLat, medLng, activity.category ?? "attraction", apiKey, { radiusMeters: 8000 },
+        );
+      } catch {
+        candidates = [];
+      }
+      const venue = candidates.find(
+        (v) => v.placeId && !usedPlaceIds.has(v.placeId) && !usedNames.has(v.name.toLowerCase().trim()),
+      );
+      if (!venue) {
+        activities.push(activity); // no nearby alternative — keep original
+        continue;
+      }
+      usedPlaceIds.add(venue.placeId);
+      usedNames.add(venue.name.toLowerCase().trim());
+      movedCount++;
+      activities.push(applyVenueToActivity(activity, venue));
+    }
+    result = updateDayByIndex(result, di, { ...day, activities });
+  }
+
+  if (movedCount > 0) {
+    logger.info("Day cohesion enforcement", { movedCount, scope: opts.dayIndex ?? "all" });
+  }
+  return { itinerary: result, movedCount };
 }

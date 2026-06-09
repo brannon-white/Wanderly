@@ -8,8 +8,9 @@ const MAX_WALK_KM = 1.5;
 // Normal days must end no earlier than 20:30 (dinner + evening fully in).
 const MIN_DAY_END_MINUTES = 20 * 60 + 30; // 20:30
 
-// Drive days are transition legs — lighter schedule, but must still run past 1 PM.
-const MIN_DRIVE_DAY_END_MINUTES = 13 * 60; // 13:00
+// Drive days are transition legs — lighter midday, but must still carry the
+// traveler into dinner in the arrival city, so they run into the evening.
+const MIN_DRIVE_DAY_END_MINUTES = 18 * 60; // 18:00
 
 function haversineKm(
   lat1: number, lng1: number,
@@ -146,23 +147,35 @@ export function validateItinerary(
         }
       }
 
-      // Legitimate drive day (non-final stop): lighter checks only
+      // Legitimate drive day (non-final stop): lighter checks, but the traveler must
+      // still have breakfast in the departure city and DINNER in the arrival city.
       if (isDriveDay && !isLastStop) {
-        if (activities.length < 3) {
+        if (activities.length < 4) {
           fatalIssues.push(
-            `${dayLabel} (drive day): only ${activities.length} activities (need at least 3 — breakfast + scenic stop + lunch)`
+            `${dayLabel} (drive day): only ${activities.length} activities (need at least 4 — breakfast, lunch, the drive, and dinner in the arrival city)`
           );
         }
+        const driveHasBreakfast = activities.some(
+          (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
+            isMealTime(parseActivityTime(a.time)!.startMinutes, "breakfast")
+        );
+        const driveHasDinner = activities.some(
+          (a) => a.category === "food" && parseActivityTime(a.time) !== null &&
+            isMealTime(parseActivityTime(a.time)!.startMinutes, "dinner")
+        );
+        if (!driveHasBreakfast) fatalIssues.push(`${dayLabel} (drive day): missing breakfast in the departure city`);
+        if (!driveHasDinner) {
+          fatalIssues.push(
+            `${dayLabel} (drive day): missing dinner in the arrival city — add a dinner at the next stop (they still eat when arriving at night)`
+          );
+        }
+        // Sanity floor only — dinner already forces a reasonable end time.
         const lastDriveTime = activities.length > 0
           ? parseActivityTime(activities[activities.length - 1].time)
           : null;
         if (lastDriveTime && lastDriveTime.endMinutes < MIN_DRIVE_DAY_END_MINUTES) {
-          const hr = Math.floor(lastDriveTime.endMinutes / 60);
-          const min = lastDriveTime.endMinutes % 60;
-          const period = hr >= 12 ? "PM" : "AM";
-          const hr12 = hr % 12 === 0 ? 12 : hr % 12;
           fatalIssues.push(
-            `${dayLabel} (drive day): ends at ${hr12}:${min.toString().padStart(2, "0")} ${period} — drive days must run until at least 1:00 PM`
+            `${dayLabel} (drive day): ends too early — must include dinner in the arrival city`
           );
         }
         return { ...day, activities };

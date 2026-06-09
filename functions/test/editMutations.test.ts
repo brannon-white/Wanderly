@@ -52,6 +52,24 @@ describe("applyMutations", () => {
     expect(names(out, 1)).toEqual(["D2-A-NEW", "D2-B"]);      // only scoped day changed
   });
 
+  it("force-scopes a misattributed mutation onto the viewed day instead of dropping it (chips/pills)", () => {
+    // A "we're tired" chip while viewing day 1: the model emits the mutation for
+    // day 0. editItineraryWithLanguage(forceScopeToDay) rewrites dayIndex to the
+    // viewed day before applyMutations, so the action lands on day 1 (not a no-op).
+    const it = itinerary([
+      [activity({ name: "D1-A" }), activity({ name: "D1-B" })],
+      [activity({ name: "D2-A" }), activity({ name: "D2-B" })],
+    ]);
+    const viewedDay = 1;
+    const fromModel: ItineraryMutation[] = [
+      { op: "remove_activity", dayIndex: 0, activityIndex: 1 },
+    ];
+    const dayScoped = fromModel.map((m) => ({ ...m, dayIndex: viewedDay }));
+    const out = applyMutations(it, dayScoped, { scopeDayIndex: viewedDay });
+    expect(names(out, 0)).toEqual(["D1-A", "D1-B"]);   // untouched
+    expect(names(out, 1)).toEqual(["D2-A"]);           // viewed day changed
+  });
+
   it("honours locked activity indices (optimize day)", () => {
     const it = itinerary([[activity({ name: "Locked" }), activity({ name: "Free" })]]);
     const muts: ItineraryMutation[] = [

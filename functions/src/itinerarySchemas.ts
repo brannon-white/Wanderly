@@ -197,12 +197,19 @@ export const editItineraryWithLanguageRequestSchema = z.object({
   itineraryId: z.string().min(1),
   message: z.string().min(1).max(500),
   dayIndex: z.number().int().nonnegative().optional(),
+  // Pill/chip requests set this so the edit is locked to the viewed day.
+  forceScopeToDay: z.boolean().optional(),
 });
 
 export const optimizeDayRequestSchema = z.object({
   itineraryId: z.string().min(1),
   dayIndex: z.number().int().nonnegative(),
   mode: z.enum(["minimize_walking", "minimize_cost", "relax_mode", "maximize_sightseeing", "foodie_mode"]),
+});
+
+export const recalculateDayTransportRequestSchema = z.object({
+  itineraryId: z.string().min(1),
+  dayIndex: z.number().int().nonnegative(),
 });
 
 export type GetSuggestedReplacementsRequest = z.infer<typeof getSuggestedReplacementsRequestSchema>;

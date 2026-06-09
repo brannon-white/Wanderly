@@ -96,6 +96,7 @@ export async function editItineraryWithLanguage(params: {
   itineraryId: string;
   message: string;
   dayIndex?: number;
+  forceScopeToDay?: boolean;
 }): Promise<EditItineraryWithLanguageResponse> {
   return callEndpoint<EditItineraryWithLanguageResponse>('editItineraryWithLanguageHttp', params);
 }
@@ -110,4 +111,17 @@ export async function optimizeDay(params: {
   mode: 'minimize_walking' | 'minimize_cost' | 'relax_mode' | 'maximize_sightseeing' | 'foodie_mode';
 }): Promise<OptimizeDayResponse> {
   return callEndpoint<OptimizeDayResponse>('optimizeDayHttp', params);
+}
+
+export interface RecalculateDayTransportResponse {
+  itinerary: GeneratedItinerary;
+}
+
+// Re-enriches only the transport times for one day (used after a drag-reorder).
+// Does not regenerate any activities, so it does not consume a regen credit.
+export async function recalculateDayTransport(params: {
+  itineraryId: string;
+  dayIndex: number;
+}): Promise<RecalculateDayTransportResponse> {
+  return callEndpoint<RecalculateDayTransportResponse>('recalculateDayTransportHttp', params);
 }

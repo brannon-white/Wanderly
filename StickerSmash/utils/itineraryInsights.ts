@@ -1,4 +1,4 @@
-import type { ItineraryActivity } from '@/types/itinerary';
+import type { ItineraryActivity, ItineraryCoordinates } from '@/types/itinerary';
 
 export type InsightLevel = 'warning' | 'info';
 
@@ -65,6 +65,25 @@ function getTransitMinutes(activity: ItineraryActivity): number {
     if (numMatch) total += parseInt(numMatch[1], 10);
   }
   return total;
+}
+
+// Client-side transport estimate from two coordinates. Used (a) to fill/refresh
+// the between-activity label instantly after a drag-reorder, and (b) as a fallback
+// in the card when the stored backend time is stale or contradicts the live
+// distance — so the "long walk" warning and the transport label never disagree.
+// Backend Google Routes values overwrite this once they arrive.
+const WALK_MAX_KM = 1.2;
+const WALK_KMH = 4.8;
+const DRIVE_KMH = 30;
+
+export function estimateTransport(
+  from: ItineraryCoordinates,
+  to: ItineraryCoordinates,
+): { mode: 'walk' | 'car'; minutes: number; time: string } {
+  const distKm = haversineKm(from.latitude, from.longitude, to.latitude, to.longitude);
+  const walk = distKm <= WALK_MAX_KM;
+  const minutes = Math.max(1, Math.round((distKm / (walk ? WALK_KMH : DRIVE_KMH)) * 60));
+  return { mode: walk ? 'walk' : 'car', minutes, time: `${minutes} min` };
 }
 
 export function analyzeDay(activities: ItineraryActivity[]): ActivityInsight[] {
