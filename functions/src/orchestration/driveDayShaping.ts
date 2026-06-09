@@ -45,6 +45,28 @@ function poolCenter(pool: StopPool | undefined): { lat: number; lng: number } | 
   };
 }
 
+// "9:00 AM - 11:00 AM" → { start: "9:00 AM", end: "11:00 AM" }. Tolerant of en-dash.
+function splitTimeRange(time: string | undefined): { start?: string; end?: string } {
+  if (!time) return {};
+  const parts = time.split(/\s*[–-]\s*/);
+  return { start: parts[0]?.trim() || undefined, end: parts[1]?.trim() || undefined };
+}
+
+// Builds the fallback drive skeleton (cities + leave time). The real duration,
+// distance, route geometry, and arrival time are filled by enrichDriveLegs (async API)
+// — this only ensures the card has cities + a leave time if that call fails. The drive
+// spans the day boundary (arrival city is the next day), so leave time = end of the
+// drive day's last activity.
+function buildDriveSkeleton(
+  fromLocation: string,
+  toLocation: string,
+  activities: Activity[],
+): GeneratedItinerary["stops"][number]["days"][number]["drive"] {
+  const last = activities[activities.length - 1];
+  const departTime = splitTimeRange(last?.time).end ?? splitTimeRange(last?.time).start;
+  return { fromLocation, toLocation, departTime };
+}
+
 function dinnerFromCandidate(c: PlaceCandidate): Activity {
   return {
     id: `arrival-dinner-${c.placeId}`,
@@ -128,11 +150,54 @@ export function shapeDriveDays(
         }
       }
 
-      result = updateDayByIndex(result, globalIdx, { ...day, isDriveDay: true, activities });
+      const nextStop = itinerary.stops[si + 1];
+      const drive = buildDriveSkeleton(stop.location, nextStop?.location ?? "", activities);
+      result = updateDayByIndex(result, globalIdx, { ...day, isDriveDay: true, drive, activities });
       shaped++;
     }
   }
 
   if (shaped > 0) logger.info("Drive-day shaping", { driveDays: shaped });
   return result;
+}
+
+// Pool-free re-flagging for stop edits (remove/replace). After a stop is added or
+// removed, "the last day of a stop" shifts, so isDriveDay must be recomputed. Unlike
+// shapeDriveDays this needs no candidate pools — the arrival dinners already exist on
+// the days — it only re-marks the flag and rebuilds the drive skeleton (cities/times)
+// from the itinerary itself. Route metrics are filled afterwards by enrichDriveLegs.
+export function reflagDriveDays(itinerary: GeneratedItinerary): GeneratedItinerary {
+  if (!itinerary.stops || itinerary.stops.length === 0) return itinerary;
+
+  const stops = itinerary.stops.map((stop, si) => {
+    const isFinal = si === itinerary.stops.length - 1;
+    const nextStop = itinerary.stops[si + 1];
+    const days = stop.days.map((day, di) => {
+      const shouldBeDrive = !isFinal && di === stop.days.length - 1;
+      if (!shouldBeDrive) {
+        if (day.isDriveDay || day.drive) {
+          const { drive: _drive, ...rest } = day;
+          return { ...rest, isDriveDay: false };
+        }
+        return day;
+      }
+      const drive = buildDriveSkeleton(stop.location, nextStop?.location ?? "", day.activities);
+      return { ...day, isDriveDay: true, drive };
+    });
+    return { ...stop, days };
+  });
+
+  return { ...itinerary, stops };
+}
+
+// Sequential "Day N" labels across all stops — call after adding/removing a stop.
+export function relabelDays(itinerary: GeneratedItinerary): GeneratedItinerary {
+  if (!itinerary.stops) return itinerary;
+  let n = 0;
+  const stops = itinerary.stops.map((stop, si) => ({
+    ...stop,
+    stopIndex: si,
+    days: stop.days.map((day) => ({ ...day, label: `Day ${++n}` })),
+  }));
+  return { ...itinerary, stops };
 }

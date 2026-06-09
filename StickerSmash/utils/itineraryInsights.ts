@@ -86,6 +86,16 @@ export function estimateTransport(
   return { mode: walk ? 'walk' : 'car', minutes, time: `${minutes} min` };
 }
 
+// A leg counts as walking only if it's not a motorized leg AND the live distance
+// estimate would actually recommend walking. This keeps the "long walk" warning in
+// sync with the transport the card displays — we never warn about a walk on a leg
+// we're recommending you drive.
+function legIsWalk(curr: ItineraryActivity, next: ItineraryActivity): boolean {
+  if (isMotorizedTransit(curr)) return false;
+  if (!curr.coordinates || !next.coordinates) return false;
+  return estimateTransport(curr.coordinates, next.coordinates).mode === 'walk';
+}
+
 export function analyzeDay(activities: ItineraryActivity[]): ActivityInsight[] {
   const insights: ActivityInsight[] = [];
 
@@ -93,7 +103,7 @@ export function analyzeDay(activities: ItineraryActivity[]): ActivityInsight[] {
     const curr = activities[i];
     const next = activities[i + 1];
 
-    if (curr.coordinates && next.coordinates && !isMotorizedTransit(curr)) {
+    if (curr.coordinates && next.coordinates && legIsWalk(curr, next)) {
       const distKm = haversineKm(
         curr.coordinates.latitude,
         curr.coordinates.longitude,
@@ -135,14 +145,14 @@ export function analyzeDay(activities: ItineraryActivity[]): ActivityInsight[] {
   }
 
   const totalWalkKm = activities.reduce((sum, a, i) => {
-    if (i === 0 || isMotorizedTransit(activities[i - 1])) return sum;
+    if (i === 0) return sum;
     const prev = activities[i - 1];
-    if (!prev.coordinates || !a.coordinates) return sum;
+    if (!legIsWalk(prev, a)) return sum; // only count legs we'd actually walk
     return sum + haversineKm(
-      prev.coordinates.latitude,
-      prev.coordinates.longitude,
-      a.coordinates.latitude,
-      a.coordinates.longitude,
+      prev.coordinates!.latitude,
+      prev.coordinates!.longitude,
+      a.coordinates!.latitude,
+      a.coordinates!.longitude,
     );
   }, 0);
 

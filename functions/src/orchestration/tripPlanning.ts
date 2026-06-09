@@ -163,6 +163,48 @@ export function distributeNightsEvenly(numStops: number, durationDays: number): 
   });
 }
 
+// What the traveler likes, condensed for the stop planner: interests, vibes, food,
+// and the taste-profile scores (so the ROUTE itself reflects them, not just each day).
+export function formatStopPersonalization(input: GenerateItineraryRequest): string {
+  const interests = [...(input.includeActivities ?? []), ...input.interests].filter(Boolean);
+  const lines: string[] = [];
+  if (interests.length) lines.push(`INTERESTS: ${[...new Set(interests)].join(", ")}`);
+  if (input.tripVibes?.length) lines.push(`VIBES: ${input.tripVibes.join(", ")}`);
+  if (input.foodPreferences?.length) lines.push(`FOOD: ${input.foodPreferences.join(", ")}`);
+  const taste = formatTasteProfile(input.tasteProfile);
+  if (taste) lines.push(taste);
+  return lines.length ? `\n${lines.join("\n")}` : "";
+}
+
+// Turns the taste profile into concrete city-selection instructions, including the
+// popularity ↔ hidden-gem dial the route should be biased along.
+export function stopSelectionGuidance(input: GenerateItineraryRequest): string {
+  const tp = input.tasteProfile;
+  const rules: string[] = [
+    "HOW TO CHOOSE STOPS — tailor the whole route to THIS traveler, don't pick generic stops:",
+    "- Match each stop to their interests, vibes, and taste scores above. Nature/adventure → towns near parks, mountains, trails, coast, or scenic byways. Foodie → known food towns. Nightlife → places with a real evening scene (skip sleepy hamlets). Luxury → upscale/resort towns.",
+  ];
+
+  // Popularity vs hidden-gems dial.
+  const hg = tp?.hiddenGems;
+  if (hg != null && hg >= 0.6) {
+    rules.push(
+      `- HIDDEN-GEM TRAVELER (hidden-gems score ${hg.toFixed(2)}): deliberately favor lesser-known, off-the-beaten-path towns with genuine character over the obvious tourist magnets. Pick the local-favorite stop near the famous one rather than the famous one itself — but it must still have enough to do for an overnight.`,
+    );
+  } else if (hg != null && hg <= 0.4) {
+    rules.push(
+      `- ICONIC-LEANING TRAVELER (hidden-gems score ${hg.toFixed(2)}): favor the well-known, popular, highly-rated destinations most travelers would put on this route.`,
+    );
+  } else {
+    rules.push(
+      "- POPULARITY: default to well-known, genuinely worthwhile stops most travelers rate highly — avoid obscure towns with little to do — while still leaning toward whatever fits their interests.",
+    );
+  }
+
+  rules.push("- Every stop must be worth an overnight: real things to do that fit their interests, not just a place to sleep.");
+  return rules.join("\n");
+}
+
 export async function planStops(
   input: GenerateItineraryRequest,
   durationDays: number,
@@ -178,6 +220,9 @@ export async function planStops(
   const { targetStops, hint } = paceGuidance(input.travelPace, durationDays);
   const everyNight = input.travelPace === "every_night";
 
+  const personalization = formatStopPersonalization(input);
+  const selection = stopSelectionGuidance(input);
+
   const basePrompt = (extra: string) => `You are planning the geographic structure of a road trip.
 
 STARTING POINT (origin): ${origin}${input.country ? `, ${input.country}` : ""}
@@ -185,12 +230,16 @@ DURATION: ${durationDays} nights total
 PARTY: ${input.party}  BUDGET: ${input.budget}
 TRAVEL PACE: ${hint}
 ${input.tripPrompt ? `USER'S OWN WORDS: "${input.tripPrompt}"` : ""}
+${personalization}
 
 The trip BEGINS at the origin above. Make the FIRST stop "${origin}" itself, then
 travel outward to other interesting, feasible places nearby (same state/region).
 ${everyNight
   ? `This traveler wants a NEW place every night. List a logical one-way route of DISTINCT cities, origin first — at least ${targetStops} of them (up to 8), each a place worth an overnight. Never repeat a city. (We assign the nights ourselves, so just give the route in order.)`
   : `Plan about ${targetStops} stops in total (including the origin as stop 1).`}
+
+${selection}
+
 Build a logical one-way route — no backtracking, each stop reasonably close to the
 previous one (ideally within a 2–3 hour drive). Each stop must be a SPECIFIC city or
 area (e.g. "Bend, Oregon"), never a whole state or region.
@@ -395,14 +444,25 @@ function buildPlannerPrompt(
   and the traveler must still have dinner waiting in the city they arrive in):
   • Morning in the DEPARTURE city: breakfast + one short morning activity or scenic stop.
   • Lunch in the departure city or en route.
+  • CRITICAL TIMING — the drive must happen in DAYLIGHT, not at night:
+    - The departure-city activities MUST finish by ~14:00 (2 PM). Keep the departure
+      city LIGHT — at most breakfast + 1–2 morning things + an early lunch. Do NOT pack
+      it with afternoon/evening activities, and NEVER schedule a departure-city activity
+      that ends after ~15:00 on a drive day.
+    - Then DRIVE in the early-to-mid afternoon so the traveler ARRIVES by roughly
+      17:00–19:00. A schedule where the drive starts at night and arrives near or after
+      midnight is WRONG and unacceptable — rework the day so the drive is in the afternoon.
+    - Do NOT leave a big empty gap (e.g. lunch then nothing until a 7 PM dinner). The
+      drive fills the afternoon; sequence activities continuously.
   • THE DRIVE ITSELF must show: make the transport leg leading INTO the first
     arrival-city activity a "car" leg whose time is the realistic total drive
     (e.g. "2 hr 30 min"). This is what tells the traveler "now you drive to X".
-  • Arrival city (the NEXT stop): a DINNER is REQUIRED there — people still eat when
-    they roll in at night — plus an evening activity if they arrive before ~21:00.
+  • Arrival city (the NEXT stop): a DINNER is REQUIRED there, plus an evening activity
+    (you arrive in the evening with time to spare).
   • Activities AFTER the drive are real venues in the ARRIVAL city, using that city's
     coordinates. Activities BEFORE the drive are in the departure city.
-  • It's fine for the departure-city portion to end early; the afternoon is the drive.
+  • Transport times between two activities in the SAME city are short (a few minutes) —
+    only the single inter-city leg is long. Never label an in-city hop as an hour+.
 - Non-drive days run the full 7-slot grid below.\n`
     : "";
 

@@ -118,10 +118,27 @@ export interface ItineraryActivity {
   trailDurationHours?: number;
 }
 
+// Structured inter-city drive leg, present on drive days so the commute card can
+// show leave/arrive times, duration, distance, and a route map preview. Optional
+// for backward compatibility — older saved itineraries render a simpler fallback.
+export interface DriveLeg {
+  fromLocation?: string;
+  toLocation?: string;
+  departTime?: string;
+  arriveTime?: string;
+  durationText?: string;
+  distanceText?: string;
+  encodedPolyline?: string;
+  // Id of the activity the drive happens AFTER — the card renders inline right after it
+  // (the city-jump can be mid-day, not just at the day's end).
+  afterActivityId?: string;
+}
+
 export interface ItineraryDay {
   label: string;
   title?: string;
   isDriveDay?: boolean;
+  drive?: DriveLeg;
   activities: ItineraryActivity[];
 }
 
@@ -196,7 +213,7 @@ export type FirestoreTimestampValue =
       nanoseconds: number;
     };
 
-export interface FirestoreItineraryDocument extends GeneratedItinerary {
+export interface FirestoreItineraryDocument extends Omit<GeneratedItinerary, 'createdAt' | 'updatedAt'> {
   userId?: string;
   createdAt: FirestoreTimestampValue;
   updatedAt: FirestoreTimestampValue;

@@ -71,6 +71,7 @@ interface MapLocation {
   name: string;
   placeId?: string;
   coordinates?: { latitude: number; longitude: number };
+  locationContext?: string;
 }
 
 // Opens turn-by-turn directions between two activities.

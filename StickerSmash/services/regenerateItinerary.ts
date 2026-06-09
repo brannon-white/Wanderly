@@ -125,3 +125,29 @@ export async function recalculateDayTransport(params: {
 }): Promise<RecalculateDayTransportResponse> {
   return callEndpoint<RecalculateDayTransportResponse>('recalculateDayTransportHttp', params);
 }
+
+export interface SuggestStopAlternativesResponse {
+  alternatives: string[];
+}
+
+// Suggests alternative cities for a stop the user wants to swap. No regen credit cost.
+export async function suggestStopAlternatives(params: {
+  itineraryId: string;
+  stopIndex: number;
+}): Promise<SuggestStopAlternativesResponse> {
+  return callEndpoint<SuggestStopAlternativesResponse>('suggestStopAlternativesHttp', params);
+}
+
+export interface ReworkStopResponse {
+  itinerary: GeneratedItinerary;
+}
+
+// Removes or replaces an entire city stop. Heavy (re-plans a stop) → consumes a credit.
+export async function reworkStop(params: {
+  itineraryId: string;
+  stopIndex: number;
+  action: 'remove' | 'replace';
+  newLocation?: string;
+}): Promise<ReworkStopResponse> {
+  return callEndpoint<ReworkStopResponse>('reworkStopHttp', params);
+}

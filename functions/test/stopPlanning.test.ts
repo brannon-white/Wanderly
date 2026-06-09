@@ -6,8 +6,12 @@ import {
   paceGuidance,
   dedupeByCity,
   distributeNightsEvenly,
+  stopSelectionGuidance,
 } from "../src/orchestration/tripPlanning";
 import type { StopPlan } from "../src/orchestration/contextBuilder";
+import type { GenerateItineraryRequest } from "../src/itinerarySchemas";
+
+const baseReq = { destinationName: "Chattanooga, TN", interests: [], budget: "moderate", party: "2", startDate: null, endDate: null, destinationId: "d", tripType: "route" } as unknown as GenerateItineraryRequest;
 
 // A multi-stop road trip the user starts from a city must OPEN in that city and
 // fan outward. These pure helpers are the enforcement behind that guarantee, so the
@@ -160,5 +164,29 @@ describe("origin-anchoring + night normalization (combined)", () => {
     const out = normalizeNights(anchorOriginFirst(modelOutput, "Chattanooga"), 5);
     expect(out[0].location).toBe("Chattanooga, TN");
     expect(out.reduce((n, s) => n + s.nightCount, 0)).toBe(5);
+  });
+});
+
+describe("stopSelectionGuidance — taste-driven city choice", () => {
+  const withTaste = (hiddenGems: number): GenerateItineraryRequest => ({
+    ...baseReq,
+    tasteProfile: { pace: .5, foodie: .5, nature: .5, nightlife: .5, hiddenGems, touristTolerance: 1 - hiddenGems, walkingTolerance: .5, structurePreference: .5, adventure: .5, luxury: .5 },
+  });
+
+  it("steers toward off-the-beaten-path towns for hidden-gem lovers", () => {
+    const g = stopSelectionGuidance(withTaste(0.8));
+    expect(g).toMatch(/hidden-gem/i);
+    expect(g).toMatch(/off-the-beaten-path|lesser-known/i);
+  });
+
+  it("favors iconic/popular destinations for low hidden-gem scores", () => {
+    const g = stopSelectionGuidance(withTaste(0.2));
+    expect(g).toMatch(/iconic|popular|well-known/i);
+  });
+
+  it("defaults to popular-but-worthwhile when there's no taste profile", () => {
+    const g = stopSelectionGuidance(baseReq);
+    expect(g).toMatch(/well-known|popular/i);
+    expect(g).not.toMatch(/hidden-gem traveler/i);
   });
 });
