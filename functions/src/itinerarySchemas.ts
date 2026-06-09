@@ -79,10 +79,25 @@ export const itineraryActivitySchema = z.object({
   trailDurationHours: z.number().optional(),
 });
 
+// Structured inter-city drive leg, stamped onto drive days for a rich commute card.
+export const driveLegSchema = z.object({
+  fromLocation: z.string().optional(),
+  toLocation: z.string().optional(),
+  departTime: z.string().optional(),
+  arriveTime: z.string().optional(),
+  durationText: z.string().optional(),
+  distanceText: z.string().optional(),
+  encodedPolyline: z.string().optional(),
+  // Id of the activity the drive happens AFTER, so the client can place the card
+  // inline at the real city-jump (which may be mid-day, not at the end).
+  afterActivityId: z.string().optional(),
+});
+
 export const itineraryDaySchema = z.object({
   label: z.string().min(1),
   title: z.string().optional(),
   isDriveDay: z.boolean().optional(),
+  drive: driveLegSchema.optional(),
   activities: z.array(itineraryActivitySchema).min(1),
 });
 
@@ -168,6 +183,20 @@ export const regenerateDayRequestSchema = z.object({
       excludePlaces: z.array(z.string()).optional(),
     })
     .optional(),
+});
+
+export const suggestStopAlternativesRequestSchema = z.object({
+  itineraryId: z.string().min(1),
+  stopIndex: z.number().int().nonnegative(),
+});
+
+export const reworkStopRequestSchema = z.object({
+  itineraryId: z.string().min(1),
+  stopIndex: z.number().int().positive(), // never the origin (index 0)
+  action: z.enum(["remove", "replace"]),
+  newLocation: z.string().min(1).optional(),
+}).refine((d) => d.action !== "replace" || (d.newLocation && d.newLocation.trim().length > 0), {
+  message: "newLocation is required when action is 'replace'",
 });
 
 export type GenerateItineraryRequest = z.infer<typeof generateItineraryRequestSchema>;

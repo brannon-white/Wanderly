@@ -263,15 +263,17 @@ function isVerified(activity: Activity): boolean {
 // Snap a real Place candidate onto an activity, keeping its slot (id/time/category)
 // but replacing the name/coords/placeId/description with the verified venue's.
 function applyVenueToActivity(activity: Activity, venue: PlaceCandidate): Activity {
+  // Drop the old place's cost entirely (key omitted, not set to undefined —
+  // Firestore rejects undefined values) since it's stale for the new venue.
+  const { cost: _staleCost, ...rest } = activity;
   return {
-    ...activity,
+    ...rest,
     name: venue.name,
     coordinates: { latitude: venue.coordinates.lat, longitude: venue.coordinates.lng },
     placeId: venue.placeId,
     mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.name)}&query_place_id=${venue.placeId}`,
     description: venue.editorialSummary ?? activity.description ?? "",
-    image: "",       // cleared so image enrichment fetches the new venue's photo
-    cost: undefined, // stale for the old place
+    image: "", // cleared so image enrichment fetches the new venue's photo
   };
 }
 

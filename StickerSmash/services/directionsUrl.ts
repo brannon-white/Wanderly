@@ -13,6 +13,10 @@ export interface DirectionsLocation {
   name: string;
   placeId?: string;
   coordinates?: { latitude: number; longitude: number };
+  // City/state context (e.g. "Nashville, TN") appended to the name query so a
+  // same-named venue in another state can't win. Critical when placeId is absent
+  // (legacy/prebuilt itineraries, trail/unverified activities).
+  locationContext?: string;
 }
 
 const TRANSIT_MODES = ['bus', 'train', 'subway', 'metro', 'ferry', 'boat'];
@@ -32,9 +36,20 @@ function googleTravelMode(mode: string): string {
 }
 
 // Address string used by Apple Maps and as the Google origin/destination query.
-// Prefer the human-readable name; fall back to coords only when there's no name.
+// Prefer the human-readable name (city-qualified when we have context); fall back
+// to coords only when there's no name.
 function addr(loc: DirectionsLocation): string {
-  if (loc.name && loc.name.trim()) return encodeURIComponent(loc.name.trim());
+  if (loc.name && loc.name.trim()) {
+    const name = loc.name.trim();
+    const ctx = loc.locationContext?.trim();
+    // Don't double up if the name already contains the context city (compare on the
+    // city token, e.g. "Nashville" from "Nashville, TN").
+    const city = ctx?.split(',')[0]?.trim().toLowerCase();
+    const qualified = ctx && city && !name.toLowerCase().includes(city)
+      ? `${name}, ${ctx}`
+      : name;
+    return encodeURIComponent(qualified);
+  }
   if (loc.coordinates) return `${loc.coordinates.latitude},${loc.coordinates.longitude}`;
   return '';
 }

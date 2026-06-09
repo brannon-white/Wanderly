@@ -201,14 +201,24 @@ import {
   editItineraryWithLanguageRequestSchema,
   optimizeDayRequestSchema,
   recalculateDayTransportRequestSchema,
+  suggestStopAlternativesRequestSchema,
+  reworkStopRequestSchema,
   type CallableGenerateItineraryResponse,
   type GenerateItineraryRequest,
 } from "./itinerarySchemas";
 import { getAllDays, updateDayByIndex, type GeneratedItinerary } from "./itinerarySchemas";
-import { enrichDayTransportTimes, enrichTransportTimes } from "./orchestration/directions";
+import { enrichDayTransportTimes, enrichTransportTimes, enrichDriveLegs } from "./orchestration/directions";
 import { reconcileItineraryPlaces, enforceVerifiedPlacesBySearch, enforceDayGeographicCohesion } from "./orchestration/placeResolution";
+import { removeStop, replaceStop, suggestStopAlternatives, pruneStaleDriveDayActivities } from "./orchestration/stopRework";
+import { reflagDriveDays } from "./orchestration/driveDayShaping";
 
 initializeApp();
+
+// Skip (rather than reject) undefined-valued fields on writes. The generation
+// pipeline can legitimately leave optional fields (e.g. an activity's `cost`)
+// unset, and Firestore otherwise throws on the whole document. Must run before
+// any Firestore access.
+getFirestore().settings({ ignoreUndefinedProperties: true });
 
 const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
 const googlePlacesApiKey = defineSecret("GOOGLE_PLACES_API_KEY");
@@ -638,6 +648,7 @@ export const regenerateDayHttp = functionsV1
         updated = await enforceVerifiedPlacesBySearch(updated, process.env.GOOGLE_PLACES_API_KEY, { dayIndex }).then((g) => g.itinerary).catch(() => updated);
         updated = await enforceDayGeographicCohesion(updated, process.env.GOOGLE_PLACES_API_KEY, { dayIndex }).then((g) => g.itinerary).catch(() => updated);
         updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
+        updated = await enrichDriveLegs(updated, process.env.GOOGLE_PLACES_API_KEY, { dayIndex }).catch(() => updated);
       }
 
       await itineraryRef.update({
@@ -1166,6 +1177,8 @@ export const recalculateDayTransportHttp = functionsV1
       let updated = snap.data() as any;
       if (process.env.GOOGLE_PLACES_API_KEY) {
         updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
+        // Backfill the drive-leg metrics for existing trips that predate the commute card.
+        updated = await enrichDriveLegs(updated, process.env.GOOGLE_PLACES_API_KEY, { dayIndex }).catch(() => updated);
       }
 
       await itineraryRef.update({ stops: updated.stops, updatedAt: FieldValue.serverTimestamp() });
@@ -1174,6 +1187,103 @@ export const recalculateDayTransportHttp = functionsV1
     } catch (error) {
       const e = classifyHttpError(error);
       logger.error("recalculateDayTransportHttp failed", { ...e, rawError: error });
+      res.status(e.status).json(e);
+    }
+  });
+
+// ─── Rework a city stop (remove / replace) ────────────────────────────────────
+
+// Suggests alternative cities for a stop the user wants to swap. Read-only LLM call,
+// no credit cost (mirrors a preload — the actual rework is what costs).
+export const suggestStopAlternativesHttp = functionsV1
+  .region("us-central1")
+  .runWith({ maxInstances: 10, timeoutSeconds: 60, secrets: [anthropicApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
+  .https.onRequest(async (req, res) => {
+    if (corsHandler(req, res)) return;
+    if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed." }); return; }
+    const token = extractBearer(req);
+    if (!token) { res.status(401).json({ error: "Missing bearer token." }); return; }
+    try {
+      const decodedToken = await getAuth().verifyIdToken(token);
+      if (!(await verifyAppCheck(req))) { res.status(401).json({ error: "App Check verification failed." }); return; }
+      const uid = decodedToken.uid;
+      const parsed = suggestStopAlternativesRequestSchema.safeParse(req.body);
+      if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.message }); return; }
+      const { itineraryId, stopIndex } = parsed.data;
+      const db = getFirestore();
+      const snap = await db.collection("users").doc(uid).collection("itineraries").doc(itineraryId).get();
+      if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
+      // Load the traveler's effective taste profile (swipe baseline + learned drift) so
+      // swap suggestions follow the same hidden-gem/interest bias as the original route.
+      const userSnap = await db.collection("users").doc(uid).get();
+      const userData = userSnap.data() ?? {};
+      const effectiveTaste = getEffectiveTasteProfile(
+        userData.tasteProfile,
+        (userData.learnedTasteAdjustments ?? {}) as Record<string, number>,
+      );
+      const alternatives = await suggestStopAlternatives(snap.data() as GeneratedItinerary, stopIndex, effectiveTaste);
+      logger.info("suggestStopAlternativesHttp", { uid, itineraryId, stopIndex, count: alternatives.length });
+      res.status(200).json({ alternatives });
+    } catch (error) {
+      const e = classifyHttpError(error);
+      logger.error("suggestStopAlternativesHttp failed", { ...e, rawError: error });
+      res.status(e.status).json(e);
+    }
+  });
+
+// Removes or replaces an entire city stop, then re-flags drive days, re-snaps places,
+// and re-enriches transport so the whole trip stays coherent. Heavy (LLM + Places per
+// stop) → consumes a regen credit, like regenerateDayHttp.
+export const reworkStopHttp = functionsV1
+  .region("us-central1")
+  .runWith({ maxInstances: 10, timeoutSeconds: 180, secrets: [anthropicApiKey, googlePlacesApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
+  .https.onRequest(async (req, res) => {
+    if (corsHandler(req, res)) return;
+    if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed." }); return; }
+    const token = extractBearer(req);
+    if (!token) { res.status(401).json({ error: "Missing bearer token." }); return; }
+    try {
+      const decodedToken = await getAuth().verifyIdToken(token);
+      if (!(await verifyAppCheck(req))) { res.status(401).json({ error: "App Check verification failed." }); return; }
+      const uid = decodedToken.uid;
+      const parsed = reworkStopRequestSchema.safeParse(req.body);
+      if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.message }); return; }
+      const { itineraryId, stopIndex, action, newLocation } = parsed.data;
+
+      await checkAndConsumeRegenCredit(uid);
+
+      const itineraryRef = getFirestore().collection("users").doc(uid).collection("itineraries").doc(itineraryId);
+      const snap = await itineraryRef.get();
+      if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
+
+      const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+      if (!apiKey) { res.status(503).json({ error: "Place data is unavailable right now." }); return; }
+
+      const current = snap.data() as GeneratedItinerary;
+      logger.info("reworkStopHttp", { uid, itineraryId, stopIndex, action, newLocation });
+
+      let updated = action === "remove"
+        ? await removeStop(current, stopIndex, apiKey)
+        : await replaceStop(current, stopIndex, (newLocation ?? "").trim(), apiKey);
+
+      // Drop any activity left on a drive day that belonged to the swapped-out city
+      // (the model parks mid-drive arrival activities on the previous stop's drive day).
+      updated = pruneStaleDriveDayActivities(updated);
+
+      // Re-flag drive days (which "last day of stop" shifted), then snap to real
+      // Places, drop unverified, pull in outliers, and enrich transport + drive legs.
+      updated = reflagDriveDays(updated);
+      updated = await reconcileItineraryPlaces(updated, apiKey).catch(() => updated);
+      updated = await enforceVerifiedPlacesBySearch(updated, apiKey).then((g) => g.itinerary).catch(() => updated);
+      updated = await enforceDayGeographicCohesion(updated, apiKey).then((g) => g.itinerary).catch(() => updated);
+      updated = await enrichTransportTimes(updated, apiKey).catch(() => updated);
+      updated = await enrichDriveLegs(updated, apiKey).catch(() => updated);
+
+      await itineraryRef.update({ stops: updated.stops, updatedAt: FieldValue.serverTimestamp() });
+      res.status(200).json({ itinerary: updated });
+    } catch (error) {
+      const e = classifyHttpError(error);
+      logger.error("reworkStopHttp failed", { ...e, rawError: error });
       res.status(e.status).json(e);
     }
   });

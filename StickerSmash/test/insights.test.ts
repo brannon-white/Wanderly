@@ -13,14 +13,14 @@ function act(partial: Partial<ItineraryActivity> & { name: string }): ItineraryA
 }
 
 describe("analyzeDay — walking warnings", () => {
-  it("flags a long walk between two stops on foot", () => {
+  it("does NOT warn about a long gap we'd actually drive (no walk/drive contradiction)", () => {
+    // ~3.3 km apart → past the 1.2 km walk cap, so the recommended mode is driving.
+    // We must not warn about a 'walk' the user isn't being told to take.
     const insights = analyzeDay([
       act({ name: "A", coordinates: { latitude: 45.50, longitude: -122.68 } }),
-      act({ name: "B", coordinates: { latitude: 45.53, longitude: -122.68 } }), // ~3.3 km north
+      act({ name: "B", coordinates: { latitude: 45.53, longitude: -122.68 } }),
     ]);
-    const walk = insights.find((i) => i.actionType === "reduce_walking" && i.afterIndex === 0);
-    expect(walk).toBeTruthy();
-    expect(walk!.level).toBe("warning");
+    expect(insights.find((i) => i.actionType === "reduce_walking" && i.afterIndex === 0)).toBeFalsy();
   });
 
   it("does not flag a long leg when the transport is motorized", () => {

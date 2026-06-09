@@ -19,7 +19,7 @@ import {
 import { scoreCandidatePool } from "./orchestration/candidateScoring";
 import { buildStopPools, geocodeStop } from "./orchestration/contextBuilder";
 import { validateItinerary } from "./orchestration/validation";
-import { enrichTransportTimes } from "./orchestration/directions";
+import { enrichTransportTimes, enrichDriveLegs } from "./orchestration/directions";
 import { enrichWithImages } from "./orchestration/imageEnrichment";
 import { searchNearbyForActivity } from "./orchestration/placesRetrieval";
 import { reconcileItineraryPlaces, resolveActivityPlaces, enforceVerifiedPlaces, enforceDayGeographicCohesion } from "./orchestration/placeResolution";
@@ -352,6 +352,12 @@ export async function generateItineraryFlow(
     } catch (error) {
       logger.warn("Pipeline: transport enrichment failed, using estimates", { error });
       withTransportTimes = validated;
+    }
+    // Fill route metrics (duration/distance/polyline) onto drive days for the commute card.
+    try {
+      withTransportTimes = await enrichDriveLegs(withTransportTimes, googlePlacesApiKey);
+    } catch (error) {
+      logger.warn("Pipeline: drive-leg enrichment failed, keeping skeleton", { error });
     }
   }
 

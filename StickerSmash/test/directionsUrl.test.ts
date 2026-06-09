@@ -39,6 +39,25 @@ describe("buildDirectionsUrlFor — Android (Google Maps)", () => {
     const url = buildDirectionsUrlFor("android", noName, powells, "walk");
     expect(url).toContain("origin=10%2C20");
   });
+
+  it("city-qualifies the name query so a same-named venue elsewhere can't win (issue: wrong state)", () => {
+    const orchids: DirectionsLocation = { name: "Orchids Lounge", locationContext: "Nashville, TN" };
+    const url = buildDirectionsUrlFor("android", orchids, powells, "walk");
+    // Encoded "Orchids Lounge, Nashville, TN"
+    expect(url).toContain("Orchids+Lounge%2C+Nashville%2C+TN");
+  });
+
+  it("does not double up when the name already includes the context city", () => {
+    const loc: DirectionsLocation = { name: "Nashville Farmers Market", locationContext: "Nashville, TN" };
+    const url = buildDirectionsUrlFor("android", loc, powells, "walk");
+    expect(url).not.toContain("Nashville+Farmers+Market%2C+Nashville");
+  });
+
+  it("place_id still takes precedence regardless of context", () => {
+    const orchids: DirectionsLocation = { name: "Orchids Lounge", placeId: "PLACE_X", locationContext: "Nashville, TN" };
+    const url = buildDirectionsUrlFor("android", orchids, powells, "walk");
+    expect(url).toContain("origin_place_id=PLACE_X");
+  });
 });
 
 describe("buildDirectionsUrlFor — iOS (Apple Maps)", () => {

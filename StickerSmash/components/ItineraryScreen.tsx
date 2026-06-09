@@ -47,6 +47,8 @@ import DayOptimizeBar from './DayOptimizeBar';
 import { editItineraryWithLanguage, getSuggestedReplacements, optimizeDay, recalculateDayTransport } from '@/services/regenerateItinerary';
 import { analyzeDay, estimateTransport, type ActivityInsight } from '@/utils/itineraryInsights';
 import ItineraryRefinementBar from './ItineraryRefinementBar';
+import DriveDayCard from './DriveDayCard';
+import StopReworkSheet from './StopReworkSheet';
 import { logRegenAttempted } from '@/services/analytics';
 
 let MapsModule:
@@ -129,6 +131,15 @@ const CATEGORY_LABELS: Record<string, string> = {
   wellness: 'Wellness',
 };
 
+// Parse a transit duration label like "1 hr 20 min", "45 min", "2 hr" → minutes.
+function parseTransitMinutes(s: string | undefined): number | null {
+  if (!s) return null;
+  const h = s.match(/(\d+)\s*hr/i);
+  const m = s.match(/(\d+)\s*min/i);
+  if (!h && !m) return null;
+  return (h ? parseInt(h[1], 10) * 60 : 0) + (m ? parseInt(m[1], 10) : 0);
+}
+
 function parseDuration(timeStr: string): string {
   const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)\s*-\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
   if (!match) return '';
@@ -166,9 +177,14 @@ interface ActivityCardProps {
   onPress?: () => void;
   onLongPress?: () => void;
   isDragging?: boolean;
+  // City/state of the day's stop (e.g. "Nashville, TN") — disambiguates directions
+  // when an activity has no placeId so Maps can't open a same-named venue elsewhere.
+  locationContext?: string;
+  // Suppress the inline transport connector (the inter-city DriveDayCard renders here).
+  hideConnector?: boolean;
 }
 
-function ActivityCard({ activity, isLast, nextActivity, imageUri, onPress, onLongPress, isDragging }: ActivityCardProps) {
+function ActivityCard({ activity, isLast, nextActivity, imageUri, onPress, onLongPress, isDragging, locationContext, hideConnector }: ActivityCardProps) {
   const transportOptions = Array.isArray(activity.transport) ? activity.transport : [];
   const catKey = (activity.category ?? '').toLowerCase();
   const catIcon = CATEGORY_ICONS[catKey] ?? 'location-outline';
@@ -226,7 +242,16 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, onPress, onLon
       const storedMode = firstTransport.mode?.toLowerCase() ?? '';
       const storedIsWalk = storedMode === 'walk' || storedMode === 'walking';
       const agrees = liveEstimate.mode === 'walk' ? storedIsWalk : !storedIsWalk;
-      return agrees ? firstTransport : { mode: liveEstimate.mode, time: liveEstimate.time };
+      // Even when the mode agrees, reject a stored time that grossly contradicts the
+      // real distance (e.g. a hallucinated "1 hr 20 min" between two spots 2 km apart).
+      // The inter-city drive is shown by the DriveDayCard, not this connector.
+      const storedMins = parseTransitMinutes(firstTransport.time);
+      const grosslyOff = storedMins != null
+        && storedMins > liveEstimate.minutes + 25
+        && storedMins > liveEstimate.minutes * 2.5;
+      return agrees && !grosslyOff
+        ? firstTransport
+        : { mode: liveEstimate.mode, time: liveEstimate.time };
     }
     return firstTransport ?? (liveEstimate ? { mode: liveEstimate.mode, time: liveEstimate.time } : null);
   })();
@@ -241,8 +266,8 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, onPress, onLon
 
   const handleTransportPress = effectiveTransport && nextActivity
     ? () => Linking.openURL(buildDirectionsUrl(
-        { name: activity.name, placeId: activity.placeId, coordinates: activity.coordinates },
-        { name: nextActivity.name, placeId: nextActivity.placeId, coordinates: nextActivity.coordinates },
+        { name: activity.name, placeId: activity.placeId, coordinates: activity.coordinates, locationContext },
+        { name: nextActivity.name, placeId: nextActivity.placeId, coordinates: nextActivity.coordinates, locationContext },
         effectiveTransport.mode ?? 'walk',
       ))
     : undefined;
@@ -317,8 +342,8 @@ function ActivityCard({ activity, isLast, nextActivity, imageUri, onPress, onLon
           )}
         </View>
 
-        {/* Inline transport connector */}
-        {!isLast && transportLabel && (
+        {/* Inline transport connector — hidden when the drive card replaces it here */}
+        {!isLast && !hideConnector && transportLabel && (
           <TouchableOpacity
             style={styles.transportConnector}
             onPress={handleTransportPress}
@@ -400,6 +425,7 @@ export default function ItineraryScreen() {
   const imageRetryCount = useRef(0);
   const [imageRetryTick, setImageRetryTick] = useState(0);
   const [showRegenPaywall, setShowRegenPaywall] = useState(false);
+  const [reworkStop, setReworkStop] = useState<{ stopIndex: number; location?: string } | null>(null);
   const [sheetTarget, setSheetTarget] = useState<SheetTarget | null>(null);
   const sheetRef = useRef<BottomSheet>(null);
   const [detailActivity, setDetailActivity] = useState<{ activity: ItineraryActivity; dayIndex: number; activityIndex: number } | null>(null);
@@ -413,6 +439,13 @@ export default function ItineraryScreen() {
   const [mapInteracting, setMapInteracting] = useState(false);
   const allDays = itinerary ? getItineraryDays(itinerary) : [];
   const activities = allDays[selectedDay]?.activities ?? [];
+  // The inter-city drive on a travel day, rendered inline right after the last activity
+  // in the departing city (drive.afterActivityId), or at the end as a fallback.
+  const driveForDay = (itinerary && isRouteTrip(itinerary) && allDays[selectedDay]?.isDriveDay)
+    ? allDays[selectedDay]?.drive ?? null
+    : null;
+  const driveAfterId = driveForDay?.afterActivityId
+    ?? (driveForDay && activities.length > 0 ? activities[activities.length - 1].id : undefined);
   const MapView = MapsModule?.default;
   const Marker = MapsModule?.Marker;
   const mapRef = useRef<any>(null);
@@ -1032,32 +1065,52 @@ export default function ItineraryScreen() {
           const overnight = stop?.overnightAnchor?.location;
           const isDriveDay = allDays[selectedDay]?.isDriveDay === true;
           const driveTo = isDriveDay ? getNextStopLocation(itinerary, selectedDay) : null;
+          const drive = allDays[selectedDay]?.drive;
           if (!stop && !dayTitle) return null;
           return (
-            <View style={styles.stopCard}>
-              <View style={styles.stopCardAccent} />
-              <View style={styles.stopCardBody}>
-                {daytime ? (
-                  <View style={styles.stopCardLocationRow}>
-                    <Ionicons name="location" size={12} color="#6A62B7" />
-                    <Text style={styles.stopCardLocation} numberOfLines={1}>{daytime}</Text>
-                  </View>
-                ) : null}
-                {dayTitle ? <Text style={styles.stopCardTitle}>{dayTitle}</Text> : null}
-                {driveTo ? (
-                  <View style={styles.driveDayRow}>
-                    <Ionicons name="car-sport-outline" size={12} color="#C2683B" />
-                    <Text style={styles.driveDayText} numberOfLines={1}>Drive to {driveTo} today</Text>
-                  </View>
-                ) : null}
-                {overnight && overnight !== daytime ? (
-                  <View style={styles.stopCardOvernightRow}>
-                    <Ionicons name="moon-outline" size={11} color="#9890C8" />
-                    <Text style={styles.stopCardOvernight} numberOfLines={1}>Overnight in {overnight}</Text>
-                  </View>
-                ) : null}
+            <>
+              <View style={styles.stopCard}>
+                <View style={styles.stopCardAccent} />
+                <View style={styles.stopCardBody}>
+                  {/* Rework affordance — only for editable, non-origin stops on a route trip */}
+                  {!isBrowsing && id && stop && stop.stopIndex > 0 ? (
+                    <TouchableOpacity
+                      style={{ position: 'absolute', top: 8, right: 8, padding: 6, zIndex: 2 }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      onPress={() => setReworkStop({ stopIndex: stop.stopIndex, location: stop.location })}
+                    >
+                      <Ionicons name="ellipsis-horizontal" size={18} color="#9890C8" />
+                    </TouchableOpacity>
+                  ) : null}
+                  {daytime ? (
+                    <View style={styles.stopCardLocationRow}>
+                      <Ionicons name="location" size={12} color="#6A62B7" />
+                      <Text style={styles.stopCardLocation} numberOfLines={1}>{daytime}</Text>
+                    </View>
+                  ) : null}
+                  {dayTitle ? <Text style={styles.stopCardTitle}>{dayTitle}</Text> : null}
+                  {/* Fallback pill only when this is a drive day but we have no structured drive data (older itineraries) */}
+                  {driveTo && !drive ? (
+                    <View style={styles.driveDayRow}>
+                      <Ionicons name="car-sport-outline" size={12} color="#C2683B" />
+                      <Text style={styles.driveDayText} numberOfLines={1}>Drive to {driveTo} today</Text>
+                    </View>
+                  ) : null}
+                  {(() => {
+                    // On a drive day you sleep in the destination city, not the
+                    // departing stop's anchor — show that so it doesn't contradict the
+                    // "travel to X" drive card at the end of the day.
+                    const overnightLabel = isDriveDay ? driveTo : (overnight && overnight !== daytime ? overnight : null);
+                    return overnightLabel ? (
+                      <View style={styles.stopCardOvernightRow}>
+                        <Ionicons name="moon-outline" size={11} color="#9890C8" />
+                        <Text style={styles.stopCardOvernight} numberOfLines={1}>Overnight in {overnightLabel}</Text>
+                      </View>
+                    ) : null;
+                  })()}
+                </View>
               </View>
-            </View>
+            </>
           );
         })() : (
           allDays[selectedDay]?.title ? (
@@ -1113,6 +1166,14 @@ export default function ItineraryScreen() {
                     onPress={() => setDetailActivity({ activity: item, dayIndex: selectedDay, activityIndex: idx })}
                     onLongPress={!isBrowsing && !locked ? drag : undefined}
                     isDragging={isActive}
+                    locationContext={
+                      itinerary
+                        ? (isRouteTrip(itinerary)
+                            ? getStopForDayIndex(itinerary, selectedDay)?.location
+                            : itinerary.destinationName)
+                        : undefined
+                    }
+                    hideConnector={!!driveForDay && item.id === driveAfterId}
                   />
                   {betweenInsights.map((ins, i) => (
                     <SmartBanner
@@ -1146,6 +1207,20 @@ export default function ItineraryScreen() {
                       }}
                     />
                   ))}
+                  {/* Inter-city drive, placed inline at the real city-jump on a travel day */}
+                  {driveForDay && item.id === driveAfterId ? (
+                    <DriveDayCard
+                      drive={driveForDay}
+                      fallbackFrom={getStopForDayIndex(itinerary!, selectedDay)?.location}
+                      fallbackTo={getNextStopLocation(itinerary!, selectedDay) ?? undefined}
+                      onPress={() => {
+                        const fromName = driveForDay.fromLocation || getStopForDayIndex(itinerary!, selectedDay)?.location;
+                        const toName = driveForDay.toLocation || getNextStopLocation(itinerary!, selectedDay) || '';
+                        if (!fromName || !toName) return;
+                        Linking.openURL(buildDirectionsUrl({ name: fromName }, { name: toName }, 'car'));
+                      }}
+                    />
+                  ) : null}
                 </ScaleDecorator>
               );
             }}
@@ -1271,6 +1346,17 @@ export default function ItineraryScreen() {
           onDismiss={() => setSheetTarget(null)}
           sheetRef={sheetRef}
           onPaywallNeeded={() => setShowRegenPaywall(true)}
+        />
+      )}
+
+      {!isBrowsing && id && (
+        <StopReworkSheet
+          itineraryId={id}
+          stopIndex={reworkStop?.stopIndex ?? null}
+          stopLocation={reworkStop?.location}
+          onDone={(updated) => { setRemoteItinerary(updated); setReworkStop(null); }}
+          onDismiss={() => setReworkStop(null)}
+          onPaywallNeeded={() => { setReworkStop(null); setShowRegenPaywall(true); }}
         />
       )}
 
