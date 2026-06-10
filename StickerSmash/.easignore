@@ -1,3 +1,8 @@
+# When .easignore exists, EAS Build uses it INSTEAD of .gitignore to decide
+# which files to upload. GoogleService-Info.plist is gitignored (kept out of
+# the public repo) but is intentionally NOT listed here so EAS builds still
+# receive the Firebase config.
+
 # Node modules
 node_modules/
 
@@ -23,19 +28,16 @@ ios/Pods/
 .env.local
 .env.*.local
 
-# Firebase/Google config (if you have these)
-google-services.json
-GoogleService-Info.plist
+# Firebase service account keys (never upload these)
 serviceAccountKey.json
-scripts/serviceAccount.json
-seedFirestore.js
-# Firebase service account keys (NEVER commit these)
 *firebase-adminsdk*.json
 *serviceAccount*.json
+
 # Firebase local deploy cache & logs
 .firebase/
 firebase-debug.log
 *firebase-debug*.log
+
 # VSCode settings
 .vscode/
 
@@ -46,7 +48,7 @@ firebase-debug.log
 web-build/
 dist/
 
-# Large map data files (exceed GitHub's 100MB limit)
+# Large map data files
 *.pbf
 *.osm
 *.osm.pbf
