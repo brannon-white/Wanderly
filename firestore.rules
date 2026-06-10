@@ -44,9 +44,6 @@ service cloud.firestore {
     match /userInfo/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
-    match /itineraries/{itineraryId} {
-      allow read, write: if request.auth != null;
-    }
     match /articles/{article} {
       allow read: if request.auth != null;
     }
