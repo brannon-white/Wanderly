@@ -210,6 +210,7 @@ import { getAllDays, updateDayByIndex, type GeneratedItinerary } from "./itinera
 import { enrichDayTransportTimes, enrichTransportTimes, enrichDriveLegs } from "./orchestration/directions";
 import { reconcileItineraryPlaces, enforceVerifiedPlacesBySearch, enforceDayGeographicCohesion } from "./orchestration/placeResolution";
 import { removeStop, replaceStop, suggestStopAlternatives, pruneStaleDriveDayActivities } from "./orchestration/stopRework";
+import { getDestinationHero } from "./orchestration/heroImages";
 import { reflagDriveDays } from "./orchestration/driveDayShaping";
 
 initializeApp();
@@ -222,6 +223,7 @@ getFirestore().settings({ ignoreUndefinedProperties: true });
 
 const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
 const googlePlacesApiKey = defineSecret("GOOGLE_PLACES_API_KEY");
+const pexelsApiKey = defineSecret("PEXELS_API_KEY");
 
 type HttpErrorDetails = {
   status: number;
@@ -415,7 +417,7 @@ export const generateItineraryV1 = functionsV1
   .runWith({
     maxInstances: 10,
     timeoutSeconds: 300,
-    secrets: [anthropicApiKey, googlePlacesApiKey],
+    secrets: [anthropicApiKey, googlePlacesApiKey, pexelsApiKey],
     serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
   })
   .https.onCall(async (data, context): Promise<CallableGenerateItineraryResponse> => {
@@ -442,7 +444,7 @@ export const generateItineraryHttp = functionsV1
     // top of the initial Sonnet call; the pipeline self-imposes a tighter wall-clock
     // budget (REPAIR_DEADLINE_MS) so it ships best-effort well before this hard cap.
     timeoutSeconds: 540,
-    secrets: [anthropicApiKey, googlePlacesApiKey],
+    secrets: [anthropicApiKey, googlePlacesApiKey, pexelsApiKey],
     serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
   })
   .https.onRequest(async (req, res) => {
@@ -1285,6 +1287,60 @@ export const reworkStopHttp = functionsV1
       const e = classifyHttpError(error);
       logger.error("reworkStopHttp failed", { ...e, rawError: error });
       res.status(e.status).json(e);
+    }
+  });
+
+// ─── Place photo proxy ────────────────────────────────────────────────────────
+// Serves a Google Places photo without ever exposing the Places API key to the client:
+// resolves the keyless googleusercontent media URL server-side and 302-redirects to it
+// with long cache headers (so repeat views are served from cache, not re-resolved).
+// Plain image GET — no auth/App Check (an <Image> can't send those); abuse is bounded
+// by the strict `name` format + existing Places quota caps.
+export const placePhotoHttp = functionsV1
+  .region("us-central1")
+  .runWith({ maxInstances: 20, timeoutSeconds: 30, secrets: [googlePlacesApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
+  .https.onRequest(async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    const name = String(req.query.name ?? "");
+    // Only accept a real Places photo resource id: places/<id>/photos/<ref>
+    if (!/^places\/[^/]+\/photos\/[^/]+$/.test(name)) { res.status(400).send("bad name"); return; }
+    const w = Math.min(1600, Math.max(200, parseInt(String(req.query.w ?? "800"), 10) || 800));
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+    if (!apiKey) { res.status(503).send("unavailable"); return; }
+    try {
+      const mediaUrl = `https://places.googleapis.com/v1/${name}/media?maxWidthPx=${w}&skipHttpRedirect=true&key=${apiKey}`;
+      const r = await fetch(mediaUrl);
+      if (!r.ok) { res.status(404).send("not found"); return; }
+      const data = await r.json() as { photoUri?: string };
+      if (!data.photoUri) { res.status(404).send("no photo"); return; }
+      // Cache hard — a Places photo for a given resource id is stable.
+      res.set("Cache-Control", "public, max-age=86400, s-maxage=604800, immutable");
+      res.redirect(302, data.photoUri);
+    } catch (error) {
+      logger.warn("placePhotoHttp failed", { error });
+      res.status(502).send("error");
+    }
+  });
+
+// ─── Destination hero image (cached) ──────────────────────────────────────────
+// Returns a cached, beautiful hero image URL for any city. Client screens can call
+// this instead of hitting a stock API per view — each destination is fetched once.
+export const destinationHeroHttp = functionsV1
+  .region("us-central1")
+  .runWith({ maxInstances: 10, timeoutSeconds: 30, secrets: [pexelsApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
+  .https.onRequest(async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    if (req.method === "OPTIONS") { res.set("Access-Control-Allow-Headers", "Content-Type"); res.status(204).send(""); return; }
+    const city = String(req.query.city ?? "").trim();
+    const country = String(req.query.country ?? "").trim() || undefined;
+    if (!city) { res.status(400).json({ error: "city is required" }); return; }
+    try {
+      const url = await getDestinationHero(city, country);
+      res.set("Cache-Control", "public, max-age=86400, s-maxage=604800");
+      res.status(200).json({ url: url ?? null });
+    } catch (error) {
+      logger.warn("destinationHeroHttp failed", { error });
+      res.status(200).json({ url: null });
     }
   });
 

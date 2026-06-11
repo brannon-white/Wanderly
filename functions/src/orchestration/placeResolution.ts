@@ -3,6 +3,7 @@ import { type GeneratedItinerary, getAllDays, updateDayByIndex } from "../itiner
 import { type StopPool, type StopCandidatePool, type PlaceCandidate } from "./types";
 import { searchNearbyForActivity } from "./placesRetrieval";
 import { geocodeStop } from "./contextBuilder";
+import { placePhotoUrl } from "./placePhoto";
 
 // All of a single day's activities live in one stop city, so a real venue for an
 // activity should sit near that stop's center. Google Text Search will happily
@@ -47,6 +48,7 @@ const FIELD_MASK = [
   "places.displayName",
   "places.formattedAddress",
   "places.location",
+  "places.photos",
 ].join(",");
 
 export interface ResolvedPlace {
@@ -54,6 +56,7 @@ export interface ResolvedPlace {
   coordinates: { latitude: number; longitude: number };
   mapUrl: string;
   address: string;
+  photoName?: string;
 }
 
 interface TextSearchPlace {
@@ -61,6 +64,7 @@ interface TextSearchPlace {
   displayName?: { text: string };
   formattedAddress?: string;
   location?: { latitude: number; longitude: number };
+  photos?: Array<{ name: string }>;
 }
 
 // Normalize a venue name to a comparable token set: lowercase, strip accents,
@@ -162,6 +166,7 @@ export async function findPlaceByText(
     coordinates: { latitude: best.location.latitude, longitude: best.location.longitude },
     mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(best.displayName.text)}&query_place_id=${best.id}`,
     address: best.formattedAddress ?? "",
+    photoName: best.photos?.[0]?.name,
   };
 }
 
@@ -197,6 +202,8 @@ export async function resolveActivityPlaces(
         coordinates: match.coordinates,
         placeId: match.placeId,
         mapUrl: match.mapUrl,
+        // Real photo of the actual venue; falls back to image enrichment if none.
+        image: match.photoName ? placePhotoUrl(match.photoName) : activity.image,
       };
     })
   );
@@ -273,7 +280,8 @@ function applyVenueToActivity(activity: Activity, venue: PlaceCandidate): Activi
     placeId: venue.placeId,
     mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.name)}&query_place_id=${venue.placeId}`,
     description: venue.editorialSummary ?? activity.description ?? "",
-    image: "", // cleared so image enrichment fetches the new venue's photo
+    // Real photo of the replacement venue; empty → image enrichment fills a fallback.
+    image: placePhotoUrl(venue.photoName),
   };
 }
 

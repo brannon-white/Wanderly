@@ -1,43 +1,39 @@
 import * as logger from "firebase-functions/logger";
 import { type GeneratedItinerary, getAllDays, mapAllDays } from "../itinerarySchemas";
+import { getDestinationHero } from "./heroImages";
+import { stockImage } from "./imageSources";
 
-const UNSPLASH_BASE = "https://api.unsplash.com/search/photos";
-// Same key used client-side — already public in the app bundle
-const UNSPLASH_ACCESS_KEY = "REDACTED_ROTATED_KEY";
-
-async function fetchUnsplashImage(query: string): Promise<string | null> {
-  try {
-    const url = `${UNSPLASH_BASE}?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape&client_id=${UNSPLASH_ACCESS_KEY}`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = await res.json() as { results?: Array<{ urls: { regular: string } }> };
-    return data.results?.[0]?.urls?.regular ?? null;
-  } catch {
-    return null;
-  }
+// An image is "real" only if it's an http(s) URL. After place resolution, an activity
+// already carries a Google Places photo URL (the real venue) when one exists; anything
+// else (empty, or a model placeholder) still needs a stock fallback.
+function needsImage(image: string | undefined): boolean {
+  return !image || !/^https?:\/\//.test(image);
 }
 
 export async function enrichWithImages(itinerary: GeneratedItinerary): Promise<GeneratedItinerary> {
   const allDays = getAllDays(itinerary);
   const allActivities = allDays.flatMap((d) => d.activities);
 
-  // Fetch hero + all activity images in parallel
-  const heroQuery = `${itinerary.destinationName} ${itinerary.country ?? ""} landscape travel`;
-  const queries = [heroQuery, ...allActivities.map((a) => a.name)];
+  // Hero: cached, beautiful city photo (Pexels → Unsplash). Fetched once per destination.
+  const heroPromise = getDestinationHero(itinerary.destinationName, itinerary.country);
 
-  logger.info("Image enrichment: fetching images", { count: queries.length, destination: itinerary.destinationName });
-
-  const urls = await Promise.all(queries.map((q) => fetchUnsplashImage(q)));
-  const [heroUrl, ...activityUrls] = urls;
-
-  const imageMap = new Map<string, string>();
-  allActivities.forEach((a, i) => {
-    const url = activityUrls[i];
-    if (url) imageMap.set(a.id, url);
+  // Venues already resolved to a Google Places photo keep it. Only fill the gaps
+  // (trailheads, venues without a Places photo) with a stock image of that venue.
+  const gaps = allActivities.filter((a) => needsImage(a.image));
+  logger.info("Image enrichment: filling gaps", {
+    total: allActivities.length, gaps: gaps.length, destination: itinerary.destinationName,
   });
 
-  const successCount = [...imageMap.values()].length + (heroUrl ? 1 : 0);
-  logger.info("Image enrichment: complete", { total: queries.length, succeeded: successCount });
+  const imageMap = new Map<string, string>();
+  await Promise.all(
+    gaps.map(async (a) => {
+      const query = a.name?.split(/\s+[–-]\s+/)[0].trim() || a.name;
+      const url = query ? await stockImage(`${query} ${itinerary.destinationName}`) : null;
+      if (url) imageMap.set(a.id, url);
+    })
+  );
+
+  const heroUrl = await heroPromise;
 
   const withImages = mapAllDays(itinerary, (day) => ({
     ...day,
@@ -46,6 +42,12 @@ export async function enrichWithImages(itinerary: GeneratedItinerary): Promise<G
       image: imageMap.get(a.id) ?? a.image,
     })),
   }));
+
+  logger.info("Image enrichment: complete", {
+    venuePhotos: allActivities.length - gaps.length,
+    gapsFilled: imageMap.size,
+    hero: heroUrl ? "ok" : "none",
+  });
 
   return {
     ...withImages,

@@ -40,6 +40,7 @@ export interface PlaceCandidate {
   neighborhood?: string;
   editorialSummary?: string;
   openingHours?: string;
+  photoName?: string; // Google Places photo resource id, e.g. "places/X/photos/Y"
 }
 
 // ─── Single-call architecture (v8) ────────────────────────────────────────────

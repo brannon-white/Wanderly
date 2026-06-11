@@ -14,6 +14,7 @@ const FIELD_MASK = [
   "places.priceLevel",
   "places.types",
   "places.editorialSummary",
+  "places.photos",
 ].join(",");
 
 interface GooglePlaceResult {
@@ -26,6 +27,7 @@ interface GooglePlaceResult {
   priceLevel?: string;
   types?: string[];
   editorialSummary?: { text: string };
+  photos?: Array<{ name: string }>;
 }
 
 function priceLevelToNumber(priceLevel?: string): number {
@@ -52,6 +54,7 @@ function toPlaceCandidate(p: GooglePlaceResult, category: PlaceCategory, neighbo
     category,
     neighborhood,
     editorialSummary: p.editorialSummary?.text,
+    photoName: p.photos?.[0]?.name,
   };
 }
 
