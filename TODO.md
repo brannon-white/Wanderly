@@ -56,39 +56,26 @@
 
 ---
 
-## Hiking Trail Ingestion (OSM via GitHub Actions)
+## Hiking Trails (Waymark GIS)
 
-Trail data comes from OpenStreetMap via a GitHub Actions scheduled worker — no paid APIs needed.
-Firebase functions read from Firestore `trails/` and queue cache misses to `trailIngestionQueue/`.
-GitHub Actions runs every 30 min, picks up the queue, calls Overpass, and writes results to Firestore.
+Trail data comes from the **Waymark GIS API** (`/api/wanderly/trails/nearby`) — a curated,
+deduped dataset (OSM + NPS + Geofabrik). Firestore `trails/` is just a fast cache in front of it.
 
-### One-time setup
+### How it works ([trailDiscovery.ts](functions/src/orchestration/trailDiscovery.ts))
 
-- [ ] Create a Firebase service account with Firestore read/write access:
-  - Firebase Console → Project Settings → Service accounts → Generate new private key
-  - Save as `scripts/serviceAccount.json` (already in `.gitignore`)
-- [ ] Add it as a GitHub repo secret (base64-encoded):
-  ```
-  cat scripts/serviceAccount.json | base64 | pbcopy
-  ```
-  Then: GitHub → repo Settings → Secrets → Actions → New secret → `FIREBASE_SERVICE_ACCOUNT_JSON`
-- [ ] The GitHub Actions workflow (`.github/workflows/trail-ingestion.yml`) runs automatically every 30 min
-- [ ] **Manual trigger**: GitHub → Actions → "Trail Ingestion Worker" → Run workflow
-- [ ] **Manual single-destination ingest** (from your Mac, no GCP IP restriction):
-  ```
-  node scripts/ingestTrails.js --destination yosemite-us --lat 37.8651 --lng -119.5383
-  ```
+1. Generation calls `fetchHikingTrails(lat, lng)`, keyed by 0.1° grid cell (~11km).
+2. **Current cached cell** (Waymark-sourced, < 30-day TTL) → served directly.
+3. **Missing or stale cell** → fetched live from Waymark and cached.
+4. **Waymark down/empty** → any stale cached trails are served rather than nothing (10s timeout, fail-soft).
 
-### How it works
+### Config
 
-1. User generates an itinerary for a hiking destination → Firebase function checks `trails/{destinationId}`
-2. Cache miss → function writes to `trailIngestionQueue/{destinationId}` (status: pending)
-3. GitHub Actions runs within ~30 min, calls Overpass (works from GitHub's IPs), writes to `trails/`
-4. Next generation for that destination gets real trail data with distances, difficulty, and duration
+- Base URL defaults to `https://waymark-api.onrender.com`; override with the `WAYMARK_API_URL`
+  env var (e.g. in `functions/.env`) if self-hosted.
+- No auth required — the `/wanderly` endpoint is public.
 
-### Pre-seeded destinations
-
-- `zion-us` — 19 trails already in Firestore
+> The old OSM/Overpass ingestion pipeline (GitHub Actions worker, `scripts/ingestTrails.js`,
+> `trailIngestionQueue`) was removed once Waymark became the source of truth.
 
 ---
 
