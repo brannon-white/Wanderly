@@ -187,10 +187,56 @@ describe("enrichDriveLegs", () => {
     expect(drive.durationText).toBe("2 hr 45 min");
     expect(drive.distanceText).toBe("142 mi");
     expect(drive.encodedPolyline).toBe("poly!");
-    // Biggest gap is A3 → B1 (the day boundary): leave = end of A3 (2:00 PM); arrive +2h45m.
-    expect(drive.departTime).toBe("2:00 PM");
-    expect(drive.arriveTime).toBe("4:45 PM");
+    // Biggest gap is A3 → B1 (the day boundary). The departure city is re-timed onto a
+    // real morning clock (A2 08:00–10:00, A3 10:15–11:15) so the drive leaves at the end
+    // of A3 (11:15 AM) — NOT the model's invented 2:00 PM — and arrives +2h45m later.
+    expect(drive.departTime).toBe("11:15 AM");
+    expect(drive.arriveTime).toBe("2:00 PM");
     expect(drive.afterActivityId).toBe(out.stops[0].days[1].activities[1].id); // A3
+  });
+
+  it("re-times arrival-city activities to flow AFTER the drive (no impossible ordering)", async () => {
+    // Model bug being fixed: an 8 PM departure-city activity, a 2 hr 45 min drive, then
+    // a 7 PM arrival activity — i.e. the arrival reads EARLIER than the departure. The
+    // re-timer must produce a strictly forward clock across the inter-city leg.
+    const trip: GeneratedItinerary = {
+      id: "t", title: "T", subtitle: "S", destinationId: "d", destinationName: "A City",
+      heroImage: "", source: "ai_generated", tripType: "route",
+      stops: [
+        {
+          stopIndex: 0, location: "A City",
+          overnightAnchor: { location: "A City", overnightType: "unknown" },
+          days: [{
+            label: "Day 1", isDriveDay: true,
+            activities: [
+              activity({ name: "A-bfast", time: "8:00 AM - 9:00 AM", category: "food", coordinates: { latitude: 35.06, longitude: -85.29 } }),
+              activity({ name: "A-late", time: "6:00 PM - 8:00 PM", coordinates: { latitude: 35.02, longitude: -85.29 } }),
+              activity({ name: "B-dinner", time: "7:00 PM - 8:30 PM", category: "food", coordinates: { latitude: 35.72, longitude: -83.50 } }),
+            ],
+          }],
+        },
+        {
+          stopIndex: 1, location: "B City",
+          overnightAnchor: { location: "B City", overnightType: "unknown" },
+          days: [{ label: "Day 2", activities: [activity({ name: "B-bfast", coordinates: { latitude: 35.73, longitude: -83.51 } })] }],
+        },
+      ],
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => computeRoutesResponse(9900, 228530, "p") as any));
+
+    const out = await enrichDriveLegs(trip, "KEY");
+    const acts = out.stops[0].days[0].activities;
+    const parse = (t: string) => {
+      const m = t.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)!;
+      let h = parseInt(m[1]); if (m[3].toUpperCase() === "PM" && h !== 12) h += 12; if (m[3].toUpperCase() === "AM" && h === 12) h = 0;
+      return h * 60 + parseInt(m[2]);
+    };
+    // Every activity starts at or after the previous one ended — strictly forward.
+    for (let i = 1; i < acts.length; i++) {
+      expect(parse(acts[i].time)).toBeGreaterThanOrEqual(parse(acts[i - 1].time));
+    }
+    // The arrival dinner now lands well after the drive, not before it.
+    expect(parse(acts[2].time)).toBeGreaterThan(parse(acts[1].time));
   });
 
   it("calls the route API with the inter-city endpoints, not two same-city activities", async () => {

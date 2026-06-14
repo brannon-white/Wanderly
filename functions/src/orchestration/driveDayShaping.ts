@@ -52,6 +52,28 @@ function splitTimeRange(time: string | undefined): { start?: string; end?: strin
   return { start: parts[0]?.trim() || undefined, end: parts[1]?.trim() || undefined };
 }
 
+// "7:30 PM" → minutes since midnight, or null.
+function parseClock(t: string | undefined): number | null {
+  if (!t) return null;
+  const m = t.trim().match(/^(\d{1,2}):(\d{2})\s*([AP]M)?$/i);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  const ap = m[3]?.toUpperCase();
+  if (ap === "PM" && h < 12) h += 12;
+  if (ap === "AM" && h === 12) h = 0;
+  return h * 60 + min;
+}
+
+function formatClock(minsOfDay: number): string {
+  const m = ((minsOfDay % 1440) + 1440) % 1440;
+  let h = Math.floor(m / 60);
+  const min = m % 60;
+  const ap = h >= 12 ? "PM" : "AM";
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${String(min).padStart(2, "0")} ${ap}`;
+}
+
 // Builds the fallback drive skeleton (cities + leave time). The real duration,
 // distance, route geometry, and arrival time are filled by enrichDriveLegs (async API)
 // — this only ensures the card has cities + a leave time if that call fails. The drive
@@ -67,13 +89,25 @@ function buildDriveSkeleton(
   return { fromLocation, toLocation, departTime };
 }
 
-function dinnerFromCandidate(c: PlaceCandidate): Activity {
+// Placeholder dinner time = arrival (~2 hr after the day's last departure-city
+// activity) + a short settle. enrichDriveLegs overwrites this with the real arrival
+// time once the route is known; this only keeps the no-API / pre-enrichment path
+// from showing a dinner earlier than the activity that precedes it.
+function arrivalDinnerStart(prevActivities: Activity[]): number {
+  const last = prevActivities[prevActivities.length - 1];
+  const prevEnd = parseClock(splitTimeRange(last?.time).end ?? splitTimeRange(last?.time).start);
+  // Fall back to a normal 7 PM dinner only when we can't read the preceding time.
+  if (prevEnd == null) return 19 * 60;
+  return prevEnd + 2 * 60 + 30; // ~2.5 hr to drive + arrive
+}
+
+function dinnerFromCandidate(c: PlaceCandidate, startMin: number): Activity {
   return {
     id: `arrival-dinner-${c.placeId}`,
     name: c.name,
     category: "food",
     description: c.editorialSummary ?? "",
-    time: "07:00 PM - 08:30 PM",
+    time: `${formatClock(startMin)} - ${formatClock(startMin + 90)}`,
     image: "",
     placeId: c.placeId,
     mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.name)}&query_place_id=${c.placeId}`,
@@ -146,7 +180,7 @@ export function shapeDriveDays(
             activities[lastIdx] = { ...prev, transport: [{ mode: "car", time: existing?.time ?? "1 hr" }] };
           }
           used.add(dinner.placeId);
-          activities.push(dinnerFromCandidate(dinner));
+          activities.push(dinnerFromCandidate(dinner, arrivalDinnerStart(activities)));
         }
       }
 

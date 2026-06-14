@@ -5,6 +5,11 @@ import { MIN_ACTIVITIES_PER_DAY } from "../constants";
 // ~1.5 km ≈ 18-minute walk — anything beyond this is not reasonably walkable
 const MAX_WALK_KM = 1.5;
 
+// Two meals back-to-back is only legitimate when they're in different cities (a
+// departure-city lunch then an arrival-city dinner on a drive day). Within this
+// radius the two restaurants are in the same place — you don't eat, then eat again.
+const SAME_AREA_KM = 30;
+
 // Normal days must end no earlier than 20:30 (dinner + evening fully in).
 const MIN_DAY_END_MINUTES = 20 * 60 + 30; // 20:30
 
@@ -125,7 +130,7 @@ export function validateItinerary(
       });
 
       // Deterministic fix: drop venues that duplicate ones used on earlier days
-      const activities = activitiesWithFixedTransport.filter((activity) => {
+      const dedupedActivities = activitiesWithFixedTransport.filter((activity) => {
         const key = activity.name.toLowerCase().trim();
         if (seenVenues.has(key)) {
           issues.push(`${dayLabel}: removed duplicate venue "${activity.name}"`);
@@ -134,6 +139,26 @@ export function validateItinerary(
         }
         seenVenues.add(key);
         return true;
+      });
+
+      // Deterministic fix: never schedule two meals back-to-back in the same city.
+      // (A departure-city meal followed by an arrival-city meal across a long drive is
+      // fine — that's gated by distance below.)
+      const activities = dedupedActivities.filter((activity, i) => {
+        if (i === 0) return true;
+        const prev = dedupedActivities[i - 1];
+        if (activity.category !== "food" || prev.category !== "food") return true;
+        // Keep when we can't confirm they're in the same area (avoid dropping a
+        // legitimate arrival-city dinner on a drive day).
+        if (!activity.coordinates || !prev.coordinates) return true;
+        const distKm = haversineKm(
+          prev.coordinates.latitude, prev.coordinates.longitude,
+          activity.coordinates.latitude, activity.coordinates.longitude,
+        );
+        if (distKm > SAME_AREA_KM) return true;
+        issues.push(`${dayLabel}: removed back-to-back restaurant "${activity.name}" (follows "${prev.name}" with no activity between)`);
+        repaired = true;
+        return false;
       });
 
       // Check time overlaps (informational unless severe)

@@ -1,6 +1,8 @@
 import * as logger from "firebase-functions/logger";
 import { type GeneratedItinerary, getAllDays, mapAllDays, updateDayByIndex } from "../itinerarySchemas";
 
+type Activity = GeneratedItinerary["stops"][number]["days"][number]["activities"][number];
+
 // Routes API v2 — same Google Cloud project/key as Places API (New).
 // The legacy Distance Matrix API is a separate product that needs separate enablement.
 const ROUTES_MATRIX_URL = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix";
@@ -69,11 +71,92 @@ function formatClock(minsOfDay: number): string {
   return `${h}:${String(min).padStart(2, "0")} ${ap}`;
 }
 
-// End time of "9:00 AM - 11:00 AM" → "11:00 AM" (falls back to the start).
-function endOfRange(time: string | undefined): string | undefined {
-  if (!time) return undefined;
-  const parts = time.split(/\s*[–-]\s*/);
-  return (parts[1] ?? parts[0])?.trim() || undefined;
+// ── Deterministic drive-day clock layout ──────────────────────────────────────
+// The model's activity times can't be trusted across a multi-hour inter-city leg —
+// it will happily place an 8 PM activity in the departure city, label the drive
+// "2 hr", then start the arrival city at 7 PM. We throw its clock away on drive days
+// and rebuild it: departure-city activities from the morning, the real drive, then
+// arrival-city activities starting when the traveler actually arrives.
+const DRIVE_DAY_START_MIN = 8 * 60;        // 08:00 — departure-city morning start
+const DRIVE_LATEST_DEPART_MIN = 15 * 60;   // never START a departure-city activity after 3 PM
+const IN_CITY_HOP_MIN = 15;                // buffer between two stops in the same city
+
+// Realistic activity length (minutes) when the model's own range isn't usable.
+function defaultDurationMin(category: string | undefined): number {
+  switch (category) {
+    case "adventure": return 210; // a real hike
+    case "culture": return 120;   // museum / gallery
+    case "nature": return 90;
+    case "nightlife": return 90;
+    case "food": return 75;
+    default: return 90;
+  }
+}
+
+// Prefer the model's intended length (keeps its pacing) but fall back to a sane
+// per-category default; clamp out nonsense (negative / >6 hr) ranges.
+function activityDurationMin(time: string | undefined, category: string | undefined): number {
+  if (time) {
+    const parts = time.split(/\s*[–-]\s*/);
+    const s = parseClock(parts[0]?.trim());
+    const e = parseClock(parts[1]?.trim());
+    if (s != null && e != null && e > s && e - s <= 6 * 60) return e - s;
+  }
+  return defaultDurationMin(category);
+}
+
+interface RetimedDriveDay {
+  activities: Activity[];
+  departTime: string;
+  arriveTime: string;
+  afterActivityId: string;
+}
+
+// Lay a drive day out on a real clock. `splitIdx` is the index of the last
+// departure-city activity (everything after it is in the arrival city). Departure
+// activities run from the morning and are trimmed if they'd push the drive past
+// mid-afternoon — keeping the departure city light so the drive happens in daylight.
+function retimeDriveDay(
+  activities: Activity[],
+  splitIdx: number,
+  driveMin: number,
+): RetimedDriveDay {
+  const withTime = (a: Activity, startMin: number, dur: number): Activity =>
+    ({ ...a, time: `${formatClock(startMin)} - ${formatClock(startMin + dur)}` });
+
+  // Departure block, from the morning. Stop adding once we'd start a stop after the
+  // cap, so an over-packed departure day can't shove the drive into the night.
+  const departure: Activity[] = [];
+  let cursor = DRIVE_DAY_START_MIN;
+  let departEndMin = cursor;
+  for (let i = 0; i <= splitIdx; i++) {
+    if (departure.length > 0 && cursor > DRIVE_LATEST_DEPART_MIN) break;
+    const a = activities[i];
+    const dur = activityDurationMin(a.time, a.category);
+    departure.push(withTime(a, cursor, dur));
+    departEndMin = cursor + dur;
+    cursor = departEndMin + IN_CITY_HOP_MIN;
+  }
+
+  const arriveMin = departEndMin + Math.max(0, driveMin);
+
+  // Arrival block, starting when the traveler actually rolls into the next city.
+  const arrival: Activity[] = [];
+  cursor = arriveMin;
+  for (let i = splitIdx + 1; i < activities.length; i++) {
+    const a = activities[i];
+    const dur = activityDurationMin(a.time, a.category);
+    arrival.push(withTime(a, cursor, dur));
+    cursor = cursor + dur + IN_CITY_HOP_MIN;
+  }
+
+  const afterAct = departure[departure.length - 1];
+  return {
+    activities: [...departure, ...arrival],
+    departTime: formatClock(departEndMin),
+    arriveTime: formatClock(arriveMin),
+    afterActivityId: afterAct?.id ?? "",
+  };
 }
 
 // One Routes API call for a single drive leg between two cities/points. Returns
@@ -261,26 +344,38 @@ export async function enrichDriveLegs(
     );
     if (!leg) continue;
 
-    const departTime = endOfRange(fromAct.time);
-    const departMin = parseClock(departTime);
-    // Arrival = leave + drive duration; fall back to the next activity's start time.
-    const startOfNext = toAct.time?.split(/\s*[–-]\s*/)[0]?.trim();
-    const arriveTime = departMin != null && leg.durationSeconds > 0
-      ? formatClock(departMin + Math.round(leg.durationSeconds / 60))
-      : startOfNext;
+    // Re-time the whole day on a real clock now that we know the actual drive length.
+    // arrivalOnThisDay = the inter-city jump lands on a venue still in THIS day's list
+    // (the model put arrival-city activities after the drive same-day). Otherwise the
+    // gap is the day boundary and every activity on this day is in the departure city.
+    const driveMin = leg.durationSeconds > 0 ? Math.round(leg.durationSeconds / 60) : 0;
+    const fromIdx = driveDay.activities.findIndex((a) => a.id === fromAct.id);
+    const arrivalOnThisDay = gapIdx + 1 < located.length;
+    const splitIdx = fromIdx >= 0 && arrivalOnThisDay ? fromIdx : driveDay.activities.length - 1;
+
+    const retimed = retimeDriveDay(driveDay.activities, splitIdx, driveMin);
+
+    // The leg leading INTO the arrival city IS the drive — surface it on the boundary
+    // activity so the inline card reads "Drive · 2 hr 30 min".
+    const activities = retimed.activities.map((a) =>
+      a.id === retimed.afterActivityId && a.transport?.length
+        ? { ...a, transport: a.transport.map((t, ti) => ti === 0 ? { ...t, mode: "car", time: leg.durationText } : t) }
+        : a,
+    );
 
     result = updateDayByIndex(result, driveDayGlobal, {
       ...driveDay,
       isDriveDay: true,
+      activities,
       drive: {
         fromLocation: stop.location,
         toLocation: nextStop.location,
-        departTime,
-        arriveTime,
+        departTime: retimed.departTime,
+        arriveTime: retimed.arriveTime,
         durationText: leg.durationText,
         distanceText: leg.distanceText,
         encodedPolyline: leg.encodedPolyline,
-        afterActivityId: fromAct.id,
+        afterActivityId: retimed.afterActivityId,
       },
     });
   }

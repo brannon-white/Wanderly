@@ -507,6 +507,7 @@ HARD CONSTRAINTS:
 
 1. MINIMUM ${MIN_ACTIVITIES_PER_DAY} activities per non-drive day. EVERY non-drive day MUST include late afternoon, dinner, AND an evening activity. Day MUST end no earlier than 20:30. This is non-negotiable — a day ending at 2 PM or 5 PM is a broken itinerary.
 2. NO REPEATED VENUES anywhere in the trip. Each restaurant, attraction, bar appears at most once.
+2b. NEVER schedule two meals back-to-back. A "food" activity must always be separated from the next "food" activity by a non-food activity (sightseeing, scenic stop, walk, etc.). Breakfast → morning activity → lunch → afternoon activity → dinner. Never breakfast→lunch with nothing between, never two restaurants in a row.
 3. SPECIFIC NAMED PLACES ONLY. No "local cafe", no "downtown restaurant".
 4. POOL VENUES + VERIFIED TRAILS ONLY — this is a hard rule. Every activity name MUST come from the candidate pools above (BREAKFAST/FOOD/NIGHTLIFE/ATTRACTIONS/SCENIC) or the VERIFIED HIKING TRAILS list. NEVER invent, guess, or recall a place name from your own knowledge — not for restaurants, not for landmarks, not for natural features. Any name you make up will be rejected and replaced downstream, producing a worse trip. If a bucket is empty, use a venue from another pool bucket or leave that slot to the verified options you do have; do not fabricate.
 5. TIME FEASIBILITY: consecutive activities can't overlap. Account for transit time between coordinates.
@@ -815,7 +816,8 @@ RULES:
 4. transport array describes how to reach the NEXT activity; the last activity = empty array.
 5. One major hike per day max; trails cannot start after 15:00.
 6. Outdoor activities must start before 15:00.
-7. Use real coordinates for venues in ${pool.location}.
+7. Never put two meals back-to-back — separate every "food" activity from the next with a non-food activity.
+8. Use real coordinates for venues in ${pool.location}.
 
 CURRENT (BROKEN) DAY:
 ${JSON.stringify(badDay, null, 2)}
