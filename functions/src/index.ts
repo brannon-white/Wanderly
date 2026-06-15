@@ -201,13 +201,14 @@ import {
   editItineraryWithLanguageRequestSchema,
   optimizeDayRequestSchema,
   recalculateDayTransportRequestSchema,
+  reflowDayScheduleRequestSchema,
   suggestStopAlternativesRequestSchema,
   reworkStopRequestSchema,
   type CallableGenerateItineraryResponse,
   type GenerateItineraryRequest,
 } from "./itinerarySchemas";
 import { getAllDays, updateDayByIndex, type GeneratedItinerary } from "./itinerarySchemas";
-import { enrichDayTransportTimes, enrichTransportTimes, enrichDriveLegs } from "./orchestration/directions";
+import { enrichDayTransportTimes, enrichTransportTimes, enrichDriveLegs, reflowDaySchedule } from "./orchestration/directions";
 import { reconcileItineraryPlaces, enforceVerifiedPlacesBySearch, enforceDayGeographicCohesion } from "./orchestration/placeResolution";
 import { removeStop, replaceStop, suggestStopAlternatives, pruneStaleDriveDayActivities } from "./orchestration/stopRework";
 import { getDestinationHero } from "./orchestration/heroImages";
@@ -1189,6 +1190,55 @@ export const recalculateDayTransportHttp = functionsV1
     } catch (error) {
       const e = classifyHttpError(error);
       logger.error("recalculateDayTransportHttp failed", { ...e, rawError: error });
+      res.status(e.status).json(e);
+    }
+  });
+
+// ─── Rework a day's schedule (fix tight timing) ───────────────────────────────
+// Deterministic: re-flows the activity times for one day so nothing overlaps and
+// each stop has enough buffer for travel between them. Does NOT change any
+// activity (so verified trail data is preserved) — it only fixes the clock, which
+// is exactly what a "tight schedule" conflict needs. Consumes a regen credit to
+// match the other in-day rework actions the UI gates on.
+export const reflowDayScheduleHttp = functionsV1
+  .region("us-central1")
+  .runWith({ maxInstances: 10, timeoutSeconds: 60, secrets: [googlePlacesApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
+  .https.onRequest(async (req, res) => {
+    if (corsHandler(req, res)) return;
+    if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed." }); return; }
+    const token = extractBearer(req);
+    if (!token) { res.status(401).json({ error: "Missing bearer token." }); return; }
+    try {
+      const decodedToken = await getAuth().verifyIdToken(token);
+      if (!(await verifyAppCheck(req))) { res.status(401).json({ error: "App Check verification failed." }); return; }
+      const uid = decodedToken.uid;
+      const parsed = reflowDayScheduleRequestSchema.safeParse(req.body);
+      if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.message }); return; }
+      const { itineraryId, dayIndex } = parsed.data;
+      await checkAndConsumeRegenCredit(uid);
+      const itineraryRef = getFirestore().collection("users").doc(uid).collection("itineraries").doc(itineraryId);
+      const snap = await itineraryRef.get();
+      if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
+
+      let updated = snap.data() as GeneratedItinerary;
+      // Refresh real leg times first so the re-flow spaces activities by the actual
+      // travel time, then re-flow the clock deterministically.
+      if (process.env.GOOGLE_PLACES_API_KEY) {
+        updated = await enrichDayTransportTimes(updated, dayIndex, process.env.GOOGLE_PLACES_API_KEY).catch(() => updated);
+      }
+      updated = reflowDaySchedule(updated, dayIndex);
+      // If this is a drive day, re-derive its drive card (depart/arrive) from the
+      // re-flowed clock so the commute card stays consistent. No-op for normal days.
+      if (process.env.GOOGLE_PLACES_API_KEY) {
+        updated = await enrichDriveLegs(updated, process.env.GOOGLE_PLACES_API_KEY, { dayIndex }).catch(() => updated);
+      }
+
+      await itineraryRef.update({ stops: updated.stops, updatedAt: FieldValue.serverTimestamp() });
+      logger.info("reflowDayScheduleHttp", { uid, itineraryId, dayIndex });
+      res.status(200).json({ itinerary: updated });
+    } catch (error) {
+      const e = classifyHttpError(error);
+      logger.error("reflowDayScheduleHttp failed", { ...e, rawError: error });
       res.status(e.status).json(e);
     }
   });

@@ -126,6 +126,19 @@ export async function recalculateDayTransport(params: {
   return callEndpoint<RecalculateDayTransportResponse>('recalculateDayTransportHttp', params);
 }
 
+export interface ReflowDayScheduleResponse {
+  itinerary: GeneratedItinerary;
+}
+
+// Deterministically fixes a tight-schedule conflict by re-flowing the day's activity
+// times (no content change → verified trail data is preserved). Consumes a regen credit.
+export async function reflowDaySchedule(params: {
+  itineraryId: string;
+  dayIndex: number;
+}): Promise<ReflowDayScheduleResponse> {
+  return callEndpoint<ReflowDayScheduleResponse>('reflowDayScheduleHttp', params);
+}
+
 export interface SuggestStopAlternativesResponse {
   alternatives: string[];
 }

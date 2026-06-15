@@ -89,25 +89,28 @@ function buildDriveSkeleton(
   return { fromLocation, toLocation, departTime };
 }
 
-// Placeholder dinner time = arrival (~2 hr after the day's last departure-city
-// activity) + a short settle. enrichDriveLegs overwrites this with the real arrival
-// time once the route is known; this only keeps the no-API / pre-enrichment path
-// from showing a dinner earlier than the activity that precedes it.
-function arrivalDinnerStart(prevActivities: Activity[]): number {
-  const last = prevActivities[prevActivities.length - 1];
+// Start time for the next appended arrival-city activity: right after the day's
+// current last activity (a short hop). Overwritten precisely by enrichDriveLegs.
+function nextStartAfter(activities: Activity[]): number {
+  const last = activities[activities.length - 1];
   const prevEnd = parseClock(splitTimeRange(last?.time).end ?? splitTimeRange(last?.time).start);
-  // Fall back to a normal 7 PM dinner only when we can't read the preceding time.
   if (prevEnd == null) return 19 * 60;
-  return prevEnd + 2 * 60 + 30; // ~2.5 hr to drive + arrive
+  return prevEnd + 15;
 }
 
-function dinnerFromCandidate(c: PlaceCandidate, startMin: number): Activity {
+function activityFromCandidate(
+  c: PlaceCandidate,
+  category: string,
+  idPrefix: string,
+  startMin: number,
+  durationMin: number,
+): Activity {
   return {
-    id: `arrival-dinner-${c.placeId}`,
+    id: `${idPrefix}-${c.placeId}`,
     name: c.name,
-    category: "food",
+    category,
     description: c.editorialSummary ?? "",
-    time: `${formatClock(startMin)} - ${formatClock(startMin + 90)}`,
+    time: `${formatClock(startMin)} - ${formatClock(startMin + durationMin)}`,
     image: "",
     placeId: c.placeId,
     mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.name)}&query_place_id=${c.placeId}`,
@@ -115,6 +118,24 @@ function dinnerFromCandidate(c: PlaceCandidate, startMin: number): Activity {
     rating: c.rating,
     transport: [],
   };
+}
+
+// First real, unused arrival-city sight to anchor the evening so a drive day isn't
+// just meals — preferring a proper attraction, then a scenic spot, then nightlife.
+function pickArrivalSight(
+  pool: StopPool,
+  used: Set<string>,
+): { candidate: PlaceCandidate; category: string } | null {
+  const buckets: Array<{ list: PlaceCandidate[]; category: string }> = [
+    { list: pool.candidates.attractions ?? [], category: "attraction" },
+    { list: pool.candidates.scenic ?? [], category: "nature" },
+    { list: pool.candidates.nightlife ?? [], category: "nightlife" },
+  ];
+  for (const { list, category } of buckets) {
+    const found = list.find((v) => v.placeId && !used.has(v.placeId));
+    if (found) return { candidate: found, category };
+  }
+  return null;
 }
 
 export function shapeDriveDays(
@@ -159,28 +180,49 @@ export function shapeDriveDays(
       const arrivalCenter = poolCenter(arrivalPool);
       let activities = [...day.activities];
 
-      const hasArrivalDinner = arrivalCenter
-        ? activities.some(
-            (a) => a.category === "food" && a.coordinates &&
-              haversineKm(arrivalCenter.lat, arrivalCenter.lng, a.coordinates.latitude, a.coordinates.longitude) <= ARRIVAL_DINNER_MAX_KM,
-          )
-        : activities.some((a) => a.category === "food");
+      const nearArrival = (a: Activity): boolean =>
+        Boolean(arrivalCenter && a.coordinates &&
+          haversineKm(arrivalCenter.lat, arrivalCenter.lng, a.coordinates.latitude, a.coordinates.longitude) <= ARRIVAL_DINNER_MAX_KM);
 
-      if (!hasArrivalDinner && arrivalPool) {
-        const dinner = (arrivalPool.candidates.food ?? []).find(
-          (v) => v.placeId && !used.has(v.placeId),
-        );
-        if (dinner) {
-          // The leg leading into the arrival dinner is the drive — mark it so the
-          // itinerary shows "Drive · …". Real duration is filled by transport enrichment.
-          if (activities.length > 0) {
-            const lastIdx = activities.length - 1;
-            const prev = activities[lastIdx];
-            const existing = prev.transport?.[0];
-            activities[lastIdx] = { ...prev, transport: [{ mode: "car", time: existing?.time ?? "1 hr" }] };
+      // What does the arrival city already have on this day? Without a pool center we
+      // fall back to "any food / any non-food" rather than skipping the guarantee.
+      const hasArrivalDinner = arrivalCenter
+        ? activities.some((a) => a.category === "food" && nearArrival(a))
+        : activities.some((a) => a.category === "food");
+      const hasArrivalSight = arrivalCenter
+        ? activities.some((a) => a.category !== "food" && nearArrival(a))
+        : activities.some((a) => a.category !== "food");
+
+      if (arrivalPool && (!hasArrivalDinner || !hasArrivalSight)) {
+        // The leg leading into the FIRST appended arrival activity is the drive — mark
+        // it so the itinerary shows "Drive · …". Real duration is filled by enrichment.
+        const departureEndIdx = activities.length - 1;
+        let appendedAny = false;
+
+        // A real arrival-city sight so the travel day isn't two restaurants in a row.
+        if (!hasArrivalSight) {
+          const sight = pickArrivalSight(arrivalPool, used);
+          if (sight) {
+            used.add(sight.candidate.placeId);
+            activities.push(activityFromCandidate(sight.candidate, sight.category, "arrival-sight", nextStartAfter(activities), 90));
+            appendedAny = true;
           }
-          used.add(dinner.placeId);
-          activities.push(dinnerFromCandidate(dinner, arrivalDinnerStart(activities)));
+        }
+
+        // A real dinner waiting in the city they arrive in.
+        if (!hasArrivalDinner) {
+          const dinner = (arrivalPool.candidates.food ?? []).find((v) => v.placeId && !used.has(v.placeId));
+          if (dinner) {
+            used.add(dinner.placeId);
+            activities.push(activityFromCandidate(dinner, "food", "arrival-dinner", nextStartAfter(activities), 90));
+            appendedAny = true;
+          }
+        }
+
+        if (appendedAny && departureEndIdx >= 0) {
+          const prev = activities[departureEndIdx];
+          const existing = prev.transport?.[0];
+          activities[departureEndIdx] = { ...prev, transport: [{ mode: "car", time: existing?.time ?? "1 hr" }] };
         }
       }
 

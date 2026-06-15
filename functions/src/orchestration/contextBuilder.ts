@@ -6,6 +6,7 @@ import {
   type StopPool,
   type OsmHike,
 } from "./types";
+import { isJunkVenue } from "./placeQuality";
 
 const TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
 const NEARBY_SEARCH_URL = "https://places.googleapis.com/v1/places:searchNearby";
@@ -153,6 +154,7 @@ async function searchNearby(
 
     const data = await response.json() as { places?: GooglePlaceResult[] };
     return filterValid(data.places ?? [])
+      .filter((p) => !isJunkVenue(p.types))
       .map((p) => toPlaceCandidate(p, categoryHint))
       .sort((a, b) => b.rating - a.rating);
   } catch {

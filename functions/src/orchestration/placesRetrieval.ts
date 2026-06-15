@@ -1,5 +1,6 @@
 import * as logger from "firebase-functions/logger";
 import { type PlaceCandidate, type SearchQuery, type PlaceCategory, type PlaceCluster } from "./types";
+import { isJunkVenue } from "./placeQuality";
 
 const TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
 const NEARBY_SEARCH_URL = "https://places.googleapis.com/v1/places:searchNearby";
@@ -80,6 +81,7 @@ async function searchPlaces(query: SearchQuery, apiKey: string): Promise<PlaceCa
       .filter((p): p is GooglePlaceResult & { location: NonNullable<GooglePlaceResult["location"]>; displayName: NonNullable<GooglePlaceResult["displayName"]> } =>
         Boolean(p.location && p.displayName)
       )
+      .filter((p) => !isJunkVenue(p.types))
       .map((p) => toPlaceCandidate(p, query.category as PlaceCategory, query.neighborhood));
   } catch (error) {
     logger.warn("Places text search failed", { query: query.query, error });
@@ -153,6 +155,7 @@ async function searchNearby(
       .filter((p): p is GooglePlaceResult & { location: NonNullable<GooglePlaceResult["location"]>; displayName: NonNullable<GooglePlaceResult["displayName"]> } =>
         Boolean(p.location && p.displayName)
       )
+      .filter((p) => !isJunkVenue(p.types))
       .map((p) => {
         const category: PlaceCategory = p.types?.some((t) => t.includes("restaurant") || t.includes("cafe") || t.includes("food"))
           ? "restaurant"

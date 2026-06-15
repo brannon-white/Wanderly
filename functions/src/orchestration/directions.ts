@@ -105,6 +105,15 @@ function activityDurationMin(time: string | undefined, category: string | undefi
   return defaultDurationMin(category);
 }
 
+// "1 hr 30 min" / "45 min" / "2 hr" → minutes, or null.
+function parseTransitMin(text: string | undefined): number | null {
+  if (!text) return null;
+  const h = text.match(/(\d+)\s*hr/i);
+  const m = text.match(/(\d+)\s*min/i);
+  if (!h && !m) return null;
+  return (h ? parseInt(h[1], 10) * 60 : 0) + (m ? parseInt(m[1], 10) : 0);
+}
+
 interface RetimedDriveDay {
   activities: Activity[];
   departTime: string;
@@ -454,6 +463,39 @@ export async function enrichDayTransportTimes(
   });
 
   return updateDayByIndex(itinerary, dayIndex, { ...day, activities: updatedActivities });
+}
+
+// Deterministically re-flow ONE day's clock so activities never overlap and each
+// has enough buffer for the travel between them — without changing any content.
+// This is what the "Rework Schedule" action runs: a tight-schedule conflict is a
+// timing problem, so we fix the times in place rather than asking an LLM to swap
+// activities (which loses verified trail data and re-introduces bad times).
+//
+// Each activity keeps its own length (the model's range, or a per-category default);
+// the gap after it is the real transport leg time already on the activity, falling
+// back to a short in-city hop. The first activity keeps its original start so the
+// day still begins when the traveler intended.
+export function reflowDaySchedule(
+  itinerary: GeneratedItinerary,
+  dayIndex: number,
+): GeneratedItinerary {
+  const days = getAllDays(itinerary);
+  const day = days[dayIndex];
+  if (!day || day.activities.length === 0) return itinerary;
+
+  const firstStart = parseClock(day.activities[0].time?.split(/\s*[–-]\s*/)[0]?.trim()) ?? DRIVE_DAY_START_MIN;
+  let cursor = firstStart;
+
+  const activities = day.activities.map((a, i) => {
+    const dur = activityDurationMin(a.time, a.category);
+    const time = `${formatClock(cursor)} - ${formatClock(cursor + dur)}`;
+    const isLast = i === day.activities.length - 1;
+    const transit = isLast ? 0 : (parseTransitMin(a.transport?.[0]?.time) ?? IN_CITY_HOP_MIN);
+    cursor = cursor + dur + transit;
+    return { ...a, time };
+  });
+
+  return updateDayByIndex(itinerary, dayIndex, { ...day, activities });
 }
 
 export async function enrichTransportTimes(

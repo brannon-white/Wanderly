@@ -4,6 +4,7 @@ import { type StopPool, type StopCandidatePool, type PlaceCandidate } from "./ty
 import { searchNearbyForActivity } from "./placesRetrieval";
 import { geocodeStop } from "./contextBuilder";
 import { placePhotoUrl } from "./placePhoto";
+import { isJunkVenue } from "./placeQuality";
 
 // All of a single day's activities live in one stop city, so a real venue for an
 // activity should sit near that stop's center. Google Text Search will happily
@@ -49,7 +50,16 @@ const FIELD_MASK = [
   "places.formattedAddress",
   "places.location",
   "places.photos",
+  "places.types",
 ].join(",");
+
+// Categories where a retail/utility venue could be legitimate (a bar IS nightlife).
+// For every other slot, a junk-typed match is rejected so a "scenic viewpoint" can't
+// snap onto a Dollar General that happened to share a name token.
+function junkMattersForCategory(category: string | undefined): boolean {
+  const c = (category ?? "").toLowerCase();
+  return c !== "food" && c !== "nightlife";
+}
 
 export interface ResolvedPlace {
   placeId: string;
@@ -65,6 +75,7 @@ interface TextSearchPlace {
   formattedAddress?: string;
   location?: { latitude: number; longitude: number };
   photos?: Array<{ name: string }>;
+  types?: string[];
 }
 
 // Normalize a venue name to a comparable token set: lowercase, strip accents,
@@ -102,6 +113,7 @@ export async function findPlaceByText(
   locationBias: string,
   apiKey: string,
   center?: { lat: number; lng: number } | null,
+  category?: string,
 ): Promise<ResolvedPlace | null> {
   const query = locationBias ? `${name}, ${locationBias}` : name;
   let data: { places?: TextSearchPlace[] };
@@ -148,6 +160,15 @@ export async function findPlaceByText(
   }
   if (!best || bestScore < MATCH_THRESHOLD) return null;
 
+  // Don't snap a sightseeing/cultural/outdoor activity onto an errand venue (gas
+  // station, dollar store, bank, …) even if the names happen to overlap.
+  if (junkMattersForCategory(category) && isJunkVenue(best.types)) {
+    logger.info("placeResolution: rejected junk-typed match", {
+      name, matched: best.displayName.text, types: best.types,
+    });
+    return null;
+  }
+
   // Hard location guard: a name match in the wrong city (e.g. a chain branch 200 km
   // away) would put a multi-hour drive inside a single day. Reject it so the activity
   // stays unverified and gets swapped for a real nearby venue downstream.
@@ -188,10 +209,10 @@ export async function resolveActivityPlaces(
       if (activity.placeId) return activity;            // already verified
       if (!activity.name) return activity;
 
-      const cacheKey = `${activity.name}|${location}`;
+      const cacheKey = `${activity.name}|${location}|${activity.category ?? ""}`;
       let match = cache.get(cacheKey);
       if (match === undefined) {
-        match = await findPlaceByText(activity.name, location, apiKey, center);
+        match = await findPlaceByText(activity.name, location, apiKey, center, activity.category);
         cache.set(cacheKey, match);
       }
       if (!match) return activity;                      // weak/no match → keep AI coords

@@ -241,6 +241,11 @@ export const recalculateDayTransportRequestSchema = z.object({
   dayIndex: z.number().int().nonnegative(),
 });
 
+export const reflowDayScheduleRequestSchema = z.object({
+  itineraryId: z.string().min(1),
+  dayIndex: z.number().int().nonnegative(),
+});
+
 export type GetSuggestedReplacementsRequest = z.infer<typeof getSuggestedReplacementsRequestSchema>;
 export type ConfirmActivityReplacementRequest = z.infer<typeof confirmActivityReplacementRequestSchema>;
 export type EditItineraryWithLanguageRequest = z.infer<typeof editItineraryWithLanguageRequestSchema>;

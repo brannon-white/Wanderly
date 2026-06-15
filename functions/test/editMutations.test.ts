@@ -16,6 +16,32 @@ describe("applyMutations", () => {
     expect(names(applyMutations(it, muts))).toEqual(["New", "Keep"]);
   });
 
+  it("preserves verified trail data when a replacement re-emits the same trail without it", () => {
+    const it = itinerary([[
+      activity({ name: "Eagle Creek Trail", category: "adventure", trailDistanceMiles: 6.1, trailDifficulty: "hard", trailDurationHours: 4 }),
+    ]]);
+    // The model returns the same trail (same name) but as a plain AI activity.
+    const muts: ItineraryMutation[] = [
+      { op: "replace_activity", dayIndex: 0, activityIndex: 0, activity: activity({ name: "Eagle Creek Trail", category: "adventure", time: "10:00 AM - 02:00 PM" }) },
+    ];
+    const out = getAllDays(applyMutations(it, muts))[0].activities[0];
+    expect(out.trailDistanceMiles).toBe(6.1);
+    expect(out.trailDifficulty).toBe("hard");
+    expect(out.trailDurationHours).toBe(4);
+    expect(out.time).toBe("10:00 AM - 02:00 PM"); // the new time still applies
+  });
+
+  it("does NOT carry trail data onto a genuinely different replacement venue", () => {
+    const it = itinerary([[
+      activity({ name: "Eagle Creek Trail", category: "adventure", trailDistanceMiles: 6.1, trailDifficulty: "hard", trailDurationHours: 4 }),
+    ]]);
+    const muts: ItineraryMutation[] = [
+      { op: "replace_activity", dayIndex: 0, activityIndex: 0, activity: activity({ name: "Downtown Art Museum", category: "culture" }) },
+    ];
+    const out = getAllDays(applyMutations(it, muts))[0].activities[0];
+    expect(out.trailDistanceMiles).toBeUndefined();
+  });
+
   it("removes an activity", () => {
     const it = itinerary([[activity({ name: "A" }), activity({ name: "B" }), activity({ name: "C" })]]);
     const muts: ItineraryMutation[] = [{ op: "remove_activity", dayIndex: 0, activityIndex: 1 }];

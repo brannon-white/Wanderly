@@ -40,3 +40,29 @@ describe("validateItinerary — back-to-back meals", () => {
     expect(names).toEqual(["Breakfast", "Museum", "Lunch"]);
   });
 });
+
+describe("validateItinerary — one trail per day", () => {
+  it("flags a day with more than one hike/trail as fatal", () => {
+    const it = itinerary([[
+      activity({ name: "Eagle Creek Trail", category: "adventure", time: "8:00 AM - 11:00 AM" }),
+      activity({ name: "Misty Ridge Hike", category: "adventure", time: "1:00 PM - 4:00 PM" }),
+    ]]);
+    const { result } = validateItinerary(it);
+    expect(result.fatalIssues.some((i) => /hiking trails/i.test(i))).toBe(true);
+    expect(result.isValid).toBe(false);
+  });
+
+  it("allows a single trail alongside multiple scenic viewpoints", () => {
+    const it = itinerary([[
+      activity({ name: "Breakfast", category: "food", time: "8:00 AM - 9:00 AM" }),
+      activity({ name: "Summit Trail", category: "adventure", time: "9:30 AM - 12:00 PM" }),
+      activity({ name: "Lunch", category: "food", time: "12:30 PM - 1:30 PM" }),
+      activity({ name: "Scenic Overlook", category: "nature", time: "2:00 PM - 3:00 PM" }),
+      activity({ name: "Riverside Viewpoint", category: "nature", time: "3:30 PM - 4:30 PM" }),
+      activity({ name: "Dinner", category: "food", time: "6:30 PM - 8:00 PM" }),
+      activity({ name: "Live Music", category: "nightlife", time: "8:30 PM - 10:00 PM" }),
+    ]]);
+    const { result } = validateItinerary(it);
+    expect(result.fatalIssues.some((i) => /hiking trails/i.test(i))).toBe(false);
+  });
+});

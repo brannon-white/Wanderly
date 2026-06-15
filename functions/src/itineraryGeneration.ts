@@ -525,7 +525,9 @@ RULES:
 7. Set category to "food" for all meals, "adventure" for hikes/trails, "nightlife" for bars.
 8. Google Maps URLs: https://www.google.com/maps/search/?api=1&query=Place+Name+City
 9. Use real coordinates for ${stopLocation}.
-10. ALL activities must be in ${stopLocation} and within ~15 km of each other (a single city/area). Do NOT place activities in different towns on the same day.`;
+10. ALL activities must be in ${stopLocation} and within ~15 km of each other (a single city/area). Do NOT place activities in different towns on the same day.
+11. At most ONE hike/trail for the whole day — vary the rest (culture, food, scenic, leisure). Never schedule multiple trails in one day.
+12. Never put two meals back-to-back; separate every "food" activity from the next with a non-food activity.`;
 
   const DAY_SCHEMA = {
     type: "object" as const,
@@ -811,10 +813,25 @@ export function applyMutations(
     if (mutation.op === "replace_activity") {
       const { activityIndex, activity } = mutation;
       if (locked.has(activityIndex)) continue;
-      if (!day.activities[activityIndex]) continue;
+      const old = day.activities[activityIndex];
+      if (!old) continue;
+      // Preserve verified trail data when the replacement is really the same trail
+      // (same normalized name) but came back without the OSM/Waymark metadata — e.g.
+      // a schedule/edit pass that re-emitted the trail as a plain AI activity. Without
+      // this the trail silently loses its distance / difficulty / duration.
+      let merged = activity;
+      if (old.trailDistanceMiles != null && activity.trailDistanceMiles == null &&
+          normalizeForMatch(old.name) === normalizeForMatch(activity.name ?? "")) {
+        merged = {
+          ...activity,
+          trailDistanceMiles: old.trailDistanceMiles,
+          trailDifficulty: old.trailDifficulty,
+          trailDurationHours: old.trailDurationHours,
+        };
+      }
       result = updateDayByIndex(result, mutation.dayIndex, {
         ...day,
-        activities: day.activities.map((a, ai) => (ai === activityIndex ? activity : a)),
+        activities: day.activities.map((a, ai) => (ai === activityIndex ? merged : a)),
       });
     } else if (mutation.op === "remove_activity") {
       const { activityIndex } = mutation;

@@ -69,7 +69,7 @@ describe("shapeDriveDays", () => {
     expect(out.stops[1].days[0].isDriveDay).toBeFalsy();
   });
 
-  it("appends a real arrival-city dinner when the drive day has none near the destination", () => {
+  it("appends a real arrival-city sight AND dinner when the drive day has neither", () => {
     const trip = twoStopTrip([
       activity({ name: "PDX Breakfast", category: "food", coordinates: { latitude: PORTLAND.lat, longitude: PORTLAND.lng } }),
       activity({ name: "PDX Lunch", category: "food", coordinates: { latitude: PORTLAND.lat, longitude: PORTLAND.lng } }),
@@ -79,10 +79,13 @@ describe("shapeDriveDays", () => {
     const last = acts[acts.length - 1];
     expect(last.category).toBe("food");
     expect(last.name).toBe("Bend-dinner");
-    // Dinner sits in the arrival city, not the departure city.
     expect(last.coordinates?.latitude).toBeCloseTo(BEND.lat, 1);
-    // The leg leading into it is marked as the drive.
-    expect(acts[acts.length - 2].transport?.[0]?.mode).toBe("car");
+    // A real non-food arrival-city sight is added so the day isn't just meals.
+    expect(acts.some((a) => a.name === "Bend-sight" && a.category !== "food")).toBe(true);
+    // The leg leading INTO the arrival city (the last departure-city activity) is the drive.
+    const firstArrivalIdx = acts.findIndex((a) => a.coordinates && Math.abs(a.coordinates.latitude - BEND.lat) < 0.5);
+    expect(firstArrivalIdx).toBeGreaterThan(0);
+    expect(acts[firstArrivalIdx - 1].transport?.[0]?.mode).toBe("car");
   });
 
   it("does not add a second dinner when the day already ends in the arrival city", () => {

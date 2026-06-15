@@ -44,7 +44,7 @@ import ReplaceSuggestionsSheet, { type ActivityAction, type SheetTarget } from '
 import ActivityDetailSheet from './ActivityDetailSheet';
 import SmartBanner from './SmartBanner';
 import DayOptimizeBar from './DayOptimizeBar';
-import { editItineraryWithLanguage, getSuggestedReplacements, optimizeDay, recalculateDayTransport } from '@/services/regenerateItinerary';
+import { editItineraryWithLanguage, getSuggestedReplacements, optimizeDay, recalculateDayTransport, reflowDaySchedule } from '@/services/regenerateItinerary';
 import { analyzeDay, estimateTransport, type ActivityInsight } from '@/utils/itineraryInsights';
 import ItineraryRefinementBar from './ItineraryRefinementBar';
 import DriveDayCard from './DriveDayCard';
@@ -1188,17 +1188,18 @@ export default function ItineraryScreen() {
                         }
                         const curr = activities[idx];
                         const next = activities[idx + 1];
-                        let message = '';
-                        if (actionType === 'rework_schedule' && curr && next) {
-                          message = `Fix the tight schedule conflict between "${curr.name}" and "${next.name}". Adjust the times so there is enough buffer for travel between them, or remove the less important activity.`;
-                        } else if (actionType === 'reduce_walking' && curr && next) {
-                          message = `Reduce the walking distance between "${curr.name}" and "${next.name}" by suggesting a closer alternative for one of them, or adding a transport step.`;
-                        }
-                        if (!message) return;
                         setAiBarLoading(true);
                         try {
-                          const { itinerary: updated } = await editItineraryWithLanguage({ itineraryId: id, message, dayIndex: selectedDay, forceScopeToDay: true });
-                          setRemoteItinerary(updated);
+                          if (actionType === 'rework_schedule') {
+                            // Deterministic: re-flow the day's clock so the schedule
+                            // is feasible — keeps every activity (and its trail data).
+                            const { itinerary: updated } = await reflowDaySchedule({ itineraryId: id, dayIndex: selectedDay });
+                            setRemoteItinerary(updated);
+                          } else if (actionType === 'reduce_walking' && curr && next) {
+                            const message = `Reduce the walking distance between "${curr.name}" and "${next.name}" by suggesting a closer alternative for one of them, or adding a transport step.`;
+                            const { itinerary: updated } = await editItineraryWithLanguage({ itineraryId: id, message, dayIndex: selectedDay, forceScopeToDay: true });
+                            setRemoteItinerary(updated);
+                          }
                         } catch {
                           Alert.alert('Could not apply changes', 'Please try again.');
                         } finally {

@@ -257,6 +257,20 @@ export function validateItinerary(
         (a) => a.category === "adventure" || a.category === "nature"
       );
 
+      // A "trail" = a real hike, by trail metadata or an unambiguous name. Scenic
+      // viewpoints / parks don't count, so a day can still have several of those.
+      const trailActivities = activities.filter(
+        (a) => a.trailDistanceMiles != null || /\b(trail|hike|hiking|trek|trekking)\b/i.test(a.name)
+      );
+      // Hard rule: at most ONE hike/trail per day. More than one is a broken day —
+      // flag it fatally so the day-scoped repair pass replaces the extras with
+      // varied, non-trail activities (contrast days, not a hiking boot camp).
+      if (trailActivities.length > 1) {
+        fatalIssues.push(
+          `${dayLabel}: ${trailActivities.length} hiking trails scheduled (${trailActivities.map((a) => `"${a.name}"`).join(", ")}) — only ONE hike/trail allowed per day; replace the extras with non-hiking activities`
+        );
+      }
+
       const majorHikeCount = hikingActivities.filter((a) => {
         const t = parseActivityTime(a.time);
         return t !== null && t.endMinutes - t.startMinutes >= 4 * 60;
