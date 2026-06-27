@@ -959,6 +959,41 @@ export const migrateUsersToSubscriptionSchema = functionsV1
     res.status(200).json({ migrated });
   });
 
+// ─── Delete account + all user data (GDPR / store requirement) ────────────────
+// Apple and Google both require an in-app way to delete the account. Wipes the
+// user's Firestore document and every subcollection under it (itineraries, saved
+// items, …) and then the Firebase Auth user, so re-signup starts clean. The caller
+// only deletes ITS OWN account — the uid comes from the verified ID token, never
+// from the request body.
+export const deleteAccountHttp = functionsV1
+  .region("us-central1")
+  .runWith({ maxInstances: 10, timeoutSeconds: 120, serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
+  .https.onRequest(async (req, res) => {
+    if (corsHandler(req, res)) return;
+    if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed." }); return; }
+    const token = extractBearer(req);
+    if (!token) { res.status(401).json({ error: "Missing bearer token." }); return; }
+    try {
+      const decodedToken = await getAuth().verifyIdToken(token);
+      if (!(await verifyAppCheck(req))) { res.status(401).json({ error: "App Check verification failed." }); return; }
+      const uid = decodedToken.uid;
+
+      const db = getFirestore();
+      // recursiveDelete removes the user doc AND all of its subcollections (deleting
+      // a doc alone would orphan them). Do this before deleting the auth user so a
+      // mid-way failure leaves the account recoverable rather than orphaning data.
+      await db.recursiveDelete(db.collection("users").doc(uid));
+      await getAuth().deleteUser(uid);
+
+      logger.info("deleteAccountHttp complete", { uid });
+      res.status(200).json({ deleted: true });
+    } catch (error) {
+      const e = classifyHttpError(error);
+      logger.error("deleteAccountHttp failed", { ...e, rawError: error });
+      res.status(e.status).json(e);
+    }
+  });
+
 // ─── Get suggested replacements for an activity ──────────────────────────────
 
 function corsHandler(req: any, res: any): boolean {

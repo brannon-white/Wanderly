@@ -29,6 +29,7 @@ import { useDemo } from '@/context/DemoContext';
 import { clearAllCache } from '@/utils/cache';
 import { styles } from '@/styles/profileScreenStyles';
 import { getUsageStatus, restorePurchases, type UsageStatus } from '@/services/purchases';
+import { deleteAccount } from '@/services/account';
 import PaywallModal from '@/components/PaywallModal';
 import { FREE_MONTHLY_GENERATION_LIMIT, FREE_MONTHLY_REGEN_LIMIT, PRO_MONTHLY_GENERATION_LIMIT } from '@/types/subscription';
 import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL } from '@/constants/legal';
@@ -53,6 +54,7 @@ export default function ProfileScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [usageStatus, setUsageStatus] = useState<UsageStatus | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
@@ -160,6 +162,51 @@ export default function ProfileScreen() {
         },
       },
     ]);
+  };
+
+  const performAccountDeletion = async () => {
+    setDeletingAccount(true);
+    try {
+      const uid = getAuth().currentUser?.uid;
+      await deleteAccount();
+      // Account is gone server-side; clear all local traces and return to auth.
+      await clearAllCache().catch(() => {});
+      if (uid) await AsyncStorage.removeItem(`userProfile_${uid}`).catch(() => {});
+      await getAuth().signOut().catch(() => {});
+      navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+    } catch {
+      Alert.alert('Could not delete account', 'Something went wrong. Please try again.');
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    if (isDemoMode) {
+      Alert.alert('Not available in Demo Mode', 'Sign in with a real account to manage it.');
+      return;
+    }
+    // Two-step confirmation — deletion is permanent and irreversible.
+    Alert.alert(
+      'Delete Account',
+      'This permanently deletes your account and all of your trips. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert(
+              'Are you absolutely sure?',
+              'All your data will be erased immediately and cannot be recovered.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete Forever', style: 'destructive', onPress: performAccountDeletion },
+              ]
+            ),
+        },
+      ]
+    );
   };
 
   const getInitials = (name: string) =>
@@ -313,6 +360,20 @@ export default function ProfileScreen() {
             Privacy Policy
           </Text>
         </View>
+
+        {/* ── Delete Account (required by App Store / Play) ── */}
+        <TouchableOpacity
+          style={subscriptionStyles.deleteAccountRow}
+          onPress={handleDeleteAccount}
+          activeOpacity={0.7}
+          disabled={deletingAccount}
+        >
+          {deletingAccount ? (
+            <ActivityIndicator size="small" color="#9AA0A6" />
+          ) : (
+            <Text style={subscriptionStyles.deleteAccountText}>Delete Account</Text>
+          )}
+        </TouchableOpacity>
       </ScrollView>
 
       <PaywallModal
@@ -425,6 +486,19 @@ const subscriptionStyles = StyleSheet.create({
   legalDot: {
     color: '#888',
     fontSize: 13,
+  },
+  deleteAccountRow: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    marginTop: 4,
+    marginBottom: 24,
+    minHeight: 44,
+  },
+  deleteAccountText: {
+    color: '#9AA0A6',
+    fontSize: 13,
+    textDecorationLine: 'underline',
   },
   proRow: {
     flexDirection: 'row',

@@ -4,29 +4,24 @@
 
 ## In-App Purchases (RevenueCat)
 
-- [ ] Create a RevenueCat account at revenuecat.com
-- [ ] In **App Store Connect**: create two auto-renewing subscription products
-  - `wanderly_pro_monthly` — $4.99/month
-  - `wanderly_pro_annual` — $39.99/year
-  - Add a subscription group (e.g. "Wanderly Pro") and set the correct free trial / intro offer if desired
+**Status: integration is built and live in the codebase** — `services/purchases.ts`,
+`PaywallModal`, `revenueCatWebhook` + `migrateUsersToSubscriptionSchema` Cloud Functions,
+`subscription`/`usage` schema, and credit-pack handling all exist. The items below that
+remain are the **external dashboard / store-side** steps that can't be verified from the repo.
+
+- [x] Create a RevenueCat account (iOS public key is wired in `StickerSmash/.env`)
+- [x] Create two auto-renewing subscription products (`wanderly_pro_monthly`, `wanderly_pro_annual`)
+- [x] In RevenueCat dashboard: create an **Entitlement** named `pro`, attach both products
+- [x] Add `react-native-purchases` plugin + iOS RevenueCat key
+- [ ] **Add the ANDROID RevenueCat key** — `.env` only has `EXPO_PUBLIC_REVENUECAT_IOS_KEY`; `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY` is still missing (needed for Play Store IAP)
 - [ ] In **Google Play Console**: create the same two subscription products (same identifiers)
-- [ ] In RevenueCat dashboard: create an **Entitlement** named `pro`, attach both products to it
-- [ ] Add RevenueCat API keys to `app.json` extra (or `.env`):
-  - `EXPO_PUBLIC_REVENUECAT_IOS_KEY`
-  - `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY`
-- [ ] Add `react-native-purchases` plugin to `app.json` plugins array (required for native build)
-- [ ] Set up **RevenueCat webhook** pointing to `https://us-central1-wanderly-dff52.cloudfunctions.net/revenueCatWebhook`
-  - Generate a shared secret in RevenueCat and store it as Firebase secret `REVENUECAT_WEBHOOK_SECRET`
-  - `firebase functions:secrets:set REVENUECAT_WEBHOOK_SECRET`
-- [ ] Deploy updated Cloud Functions: `firebase deploy --only functions`
-- [ ] Run the **one-time user migration** to initialize `subscription` and `usage` fields on all existing users
-  - Set `ADMIN_MIGRATION_SECRET` as an env var on the function or call it locally with the header
-  - `curl -X POST https://us-central1-wanderly-dff52.cloudfunctions.net/migrateUsersToSubscriptionSchema -H "x-admin-secret: <your-secret>"`
-- [ ] Test the full purchase flow in **iOS Sandbox** (TestFlight / Simulator)
-- [ ] Test the full purchase flow in **Google Play internal track**
-- [ ] Verify Firestore `subscription.tier` updates to `pro` after a sandbox purchase (via webhook)
-- [ ] Verify paywall appears correctly when a free user hits 3 generations
-- [ ] Add **Privacy Policy** and **Terms of Service** URLs to the paywall screen (Apple requires these for subscriptions)
+- [x] **RevenueCat webhook** built (`revenueCatWebhook`, auth via `REVENUECAT_WEBHOOK_SECRET`)
+- [x] **One-time user migration** function built (`migrateUsersToSubscriptionSchema`, gated by `ADMIN_MIGRATION_SECRET`)
+- [x] Add **Privacy Policy** and **Terms of Use** URLs to the paywall (`constants/legal.ts`, shown in `PaywallModal`)
+- [ ] (External) Confirm `REVENUECAT_WEBHOOK_SECRET` + `ADMIN_MIGRATION_SECRET` are set as Firebase secrets in prod and the migration has been run
+- [ ] (External) Test the full purchase flow in **iOS Sandbox** (TestFlight / Simulator)
+- [ ] (External) Test the full purchase flow in **Google Play internal track**
+- [ ] (External) Verify Firestore `subscription.tier` flips to `pro` after a sandbox purchase (via webhook)
 
 ---
 
@@ -81,7 +76,7 @@ deduped dataset (OSM + NPS + Geofabrik). Firestore `trails/` is just a fast cach
 
 ## Backend & Infrastructure
 
-- [~] Add **Firebase App Check** to protect Cloud Functions from abuse — CODE DONE (soft-enforce). Remaining: register apps in Firebase Console (App Attest/Play Integrity), add simulator debug token, `firebase deploy --only functions`, rebuild app, then set `APP_CHECK_ENFORCE=true` to hard-enforce
+- [~] Add **Firebase App Check** to protect Cloud Functions from abuse — CODE DONE (soft-enforce). App is registered in the Firebase Console (confirmed in Apps section). Remaining to HARD-enforce: confirm the attestation provider is set per platform (App Attest/DeviceCheck for iOS, Play Integrity for Android), add a debug token for simulator/dev builds, then set `APP_CHECK_ENFORCE=true` and `firebase deploy --only functions`
 - [x] Set **Google Cloud billing alerts** for the Places API — $50/mo budget "Wanderly Monthly" (alerts 50/90/100%) + hard daily quota caps: SearchNearby 5,000/day, SearchText 2,000/day
 - [ ] Add per-IP or per-user **rate limiting** on Cloud Functions (currently only `maxInstances: 10`)
 - [x] Review and tighten **Firestore security rules** — ensure `subscription` and `usage` fields can only be written by Cloud Functions, not the client
@@ -102,17 +97,17 @@ deduped dataset (OSM + NPS + Geofabrik). Firestore `trails/` is just a fast cach
 
 ## Legal & Compliance
 
-- [ ] Write a **Privacy Policy** and host it at a public URL (required by both stores and by Apple for subscriptions)
-- [ ] Write **Terms of Service** (required by Apple for subscriptions)
-- [ ] Add Privacy Policy and Terms links to the paywall modal and the profile/settings screen
-- [ ] Ensure **GDPR compliance** if serving EU users: allow data deletion from profile screen
+- [x] Write a **Privacy Policy** and host it at a public URL — live at `https://wanderly-dff52.web.app/privacy` (source in `legal/public/`)
+- [x] Write **Terms of Service / Use** — live at `https://wanderly-dff52.web.app/terms`
+- [x] Add Privacy Policy and Terms links to the paywall modal and the profile screen (`constants/legal.ts`, used in `PaywallModal` + `profileScreen`)
+- [x] Ensure **GDPR compliance**: in-app account + data deletion — `deleteAccountHttp` Cloud Function (recursive Firestore wipe + Auth user delete) and a "Delete Account" flow on the Profile screen (`services/account.ts`)
 - [ ] Review affiliate program terms for Booking.com, OpenTable, GYG — some prohibit certain ad types or require disclosure
 
 ---
 
 ## Product & Polish
 
-- [ ] Add a **"Restore Purchases"** link to the Profile screen (Apple requires this to be visible — already added to PaywallModal, confirm it's also accessible without triggering the paywall)
+- [x] Add a **"Restore Purchases"** link to the Profile screen — present in both `PaywallModal` and `profileScreen` (accessible without triggering the paywall)
 - [x] Show the **subscription reset date** in Profile (e.g. "Resets June 1")
 - [x] Add a **post-generation soft upsell snackbar** (e.g. "Love it? Upgrade for unlimited trips — $4.99/mo") — the plan described this but it wasn't implemented yet
 - [ ] Consider a **7-day free trial** for Pro to reduce friction on first purchase (configure in RevenueCat / App Store Connect)
