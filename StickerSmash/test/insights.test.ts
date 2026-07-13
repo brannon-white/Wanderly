@@ -49,4 +49,32 @@ describe("analyzeDay — tight schedule", () => {
     ]);
     expect(insights.find((i) => i.actionType === "rework_schedule")).toBeTruthy();
   });
+
+  it('parses "1 hr 20 min" transit as 80 minutes, not 1 minute', () => {
+    const insights = analyzeDay([
+      // ends 10:00, needs 1 hr 20 min travel, next starts 10:30 → impossible.
+      // A first-number-only parse would read 1 minute and miss this conflict.
+      act({ name: "A", time: "09:00 AM - 10:00 AM", coordinates: { latitude: 1, longitude: 1 }, transport: [{ mode: "car", time: "1 hr 20 min" }] }),
+      act({ name: "B", time: "10:30 AM - 11:30 AM", coordinates: { latitude: 1, longitude: 1 } }),
+    ]);
+    expect(insights.find((i) => i.actionType === "rework_schedule")).toBeTruthy();
+  });
+
+  it('parses a bare-hours label ("2 hr") without treating it as minutes', () => {
+    const insights = analyzeDay([
+      // ends 10:00, needs 2 hr travel, next starts 11:00 → impossible
+      act({ name: "A", time: "09:00 AM - 10:00 AM", coordinates: { latitude: 1, longitude: 1 }, transport: [{ mode: "car", time: "2 hr" }] }),
+      act({ name: "B", time: "11:00 AM - 12:00 PM", coordinates: { latitude: 1, longitude: 1 } }),
+    ]);
+    expect(insights.find((i) => i.actionType === "rework_schedule")).toBeTruthy();
+  });
+
+  it("does not flag when the gap comfortably fits the travel time", () => {
+    const insights = analyzeDay([
+      // ends 10:00, needs 15 min travel, next starts 11:00 → fine
+      act({ name: "A", time: "09:00 AM - 10:00 AM", coordinates: { latitude: 1, longitude: 1 }, transport: [{ mode: "walk", time: "15 min" }] }),
+      act({ name: "B", time: "11:00 AM - 12:00 PM", coordinates: { latitude: 1, longitude: 1 } }),
+    ]);
+    expect(insights.find((i) => i.actionType === "rework_schedule")).toBeFalsy();
+  });
 });

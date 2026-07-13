@@ -737,7 +737,11 @@ RULES:
 7. Image field: set to empty string`;
 
   const response = await client.messages.create({
-    model: MODEL_NAME,
+    // Fast model, same as editItineraryWithLanguage/optimizeDay: this is a
+    // user-facing interactive path, and the task (format the best ${count} of a
+    // supplied real-places list) doesn't need the heavyweight model. Candidates
+    // are still snapped to verified Google Places below.
+    model: FAST_MODEL_NAME,
     max_tokens: 2048,
     tools: [{
       name: "suggest_replacements",

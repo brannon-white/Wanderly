@@ -77,6 +77,7 @@ deduped dataset (OSM + NPS + Geofabrik). Firestore `trails/` is just a fast cach
 ## Backend & Infrastructure
 
 - [~] Add **Firebase App Check** to protect Cloud Functions from abuse — CODE DONE (soft-enforce). App is registered in the Firebase Console (confirmed in Apps section). Remaining to HARD-enforce: confirm the attestation provider is set per platform (App Attest/DeviceCheck for iOS, Play Integrity for Android), add a debug token for simulator/dev builds, then set `APP_CHECK_ENFORCE=true` and `firebase deploy --only functions`
+  - ⚠️ **App Check → APIs tab** (separate from the code flag above): **leave `Places API (New)` UNENFORCED** — it's called server-side from Cloud Functions with an API key, so enforcing it would reject those calls and **break itinerary generation**. The client uses the native Maps SDK only (not Places API directly). The ONLY candidates worth enforcing there are **Cloud Firestore** and **Cloud Storage** (the client hits them directly), and only after their App Check metrics show ~100% verified traffic. Leave everything else (Maps JS, Auth, RTDB, AI Logic, SQL Connect, Google Identity) Unenforced.
 - [x] Set **Google Cloud billing alerts** for the Places API — $50/mo budget "Wanderly Monthly" (alerts 50/90/100%) + hard daily quota caps: SearchNearby 5,000/day, SearchText 2,000/day
 - [ ] Add per-IP or per-user **rate limiting** on Cloud Functions (currently only `maxInstances: 10`)
 - [x] Review and tighten **Firestore security rules** — ensure `subscription` and `usage` fields can only be written by Cloud Functions, not the client
@@ -100,7 +101,7 @@ deduped dataset (OSM + NPS + Geofabrik). Firestore `trails/` is just a fast cach
 - [x] Write a **Privacy Policy** and host it at a public URL — live at `https://wanderly-dff52.web.app/privacy` (source in `legal/public/`)
 - [x] Write **Terms of Service / Use** — live at `https://wanderly-dff52.web.app/terms`
 - [x] Add Privacy Policy and Terms links to the paywall modal and the profile screen (`constants/legal.ts`, used in `PaywallModal` + `profileScreen`)
-- [x] Ensure **GDPR compliance**: in-app account + data deletion — `deleteAccountHttp` Cloud Function (recursive Firestore wipe + Auth user delete) and a "Delete Account" flow on the Profile screen (`services/account.ts`)
+- [x] Ensure **GDPR compliance**: in-app account + data deletion — `deleteAccountHttp` Cloud Function (recursive Firestore wipe + Auth user delete) and a "Delete Account" flow on the Profile screen (`services/account.ts`). ⚠️ **Must deploy `deleteAccountHttp` before App Store submission** — Apple tests account deletion during review, and the button errors until the function is live.
 - [ ] Review affiliate program terms for Booking.com, OpenTable, GYG — some prohibit certain ad types or require disclosure
 
 ---
@@ -117,8 +118,13 @@ deduped dataset (OSM + NPS + Geofabrik). Firestore `trails/` is just a fast cach
 
 ## Itinerary Generation
 - [x] Fix activity pills, some of them dont make sense
-- [x] Itinerary is sometimes reccomending random stores 
+- [x] Itinerary is sometimes reccomending random stores
+  - Hardened further: `isJunkVenue` filter drops gas stations / dollar stores / banks / pharmacies / gyms from candidate pools, nearby/text search, and the place-resolution match (`orchestration/placeQuality.ts`)
 - [x] Do we want to make activity cards clickable to get more info?
 - [x] Itinerary sometimes has activities halfway across the country if the city name is the same
 - [x] Make cards draggable so they can reorder if they want
 - [x] Images do not load on itinerary page sometimes
+- [x] **Multi-day road trips: fixed hallucinated/overlapping times across the inter-city drive** — drive days are re-timed deterministically so the clock is consistent and the drive happens in daylight, not at 8 PM (`orchestration/directions.ts`)
+- [x] **Cap hikes/trails at ONE per day** — more than one is flagged fatal and repaired (`orchestration/validation.ts`)
+- [x] **Drive days now include a real arrival-city sight + dinner** — no more "travel day = two restaurants back-to-back" (`orchestration/driveDayShaping.ts`)
+- [x] **"Rework Schedule" button fixed** — now deterministically re-flows the day's times AND preserves Waymark trail data (previously it regenerated the trail as a plain AI activity and didn't fix the timing). New `reflowDayScheduleHttp` endpoint + `reflowDaySchedule`.

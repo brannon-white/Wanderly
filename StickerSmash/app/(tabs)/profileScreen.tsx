@@ -382,7 +382,7 @@ export default function ProfileScreen() {
         onDismiss={() => setShowPaywall(false)}
         onSuccess={() => {
           setShowPaywall(false);
-          getUsageStatus().then(setUsageStatus).catch(() => {});
+          getUsageStatus({ force: true }).then(setUsageStatus).catch(() => {});
         }}
       />
 

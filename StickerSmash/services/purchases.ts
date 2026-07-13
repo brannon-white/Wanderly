@@ -90,6 +90,7 @@ export async function purchaseMonthly(): Promise<boolean> {
     );
     if (!monthly) return false;
     await Purchases.purchasePackage(monthly);
+    invalidateUsageStatus();
     return true;
   } catch (e: any) {
     if (e?.userCancelled) return false;
@@ -105,6 +106,7 @@ export async function purchaseAnnual(): Promise<boolean> {
     );
     if (!annual) return false;
     await Purchases.purchasePackage(annual);
+    invalidateUsageStatus();
     return true;
   } catch (e: any) {
     if (e?.userCancelled) return false;
@@ -115,6 +117,7 @@ export async function purchaseAnnual(): Promise<boolean> {
 export async function restorePurchases(): Promise<boolean> {
   try {
     const info = await Purchases.restorePurchases();
+    invalidateUsageStatus();
     return isPro(info);
   } catch {
     return false;
@@ -158,6 +161,7 @@ export async function purchaseCreditPack(productId: string): Promise<boolean> {
     const product = products[0];
     if (!product) return false;
     await Purchases.purchaseStoreProduct(product);
+    invalidateUsageStatus();
     return true;
   } catch (e: any) {
     if (e?.userCancelled) return false;
@@ -180,9 +184,24 @@ export interface UsageStatus {
   resetDate: Date;          // when the monthly quota resets
 }
 
-export async function getUsageStatus(): Promise<UsageStatus> {
+// Short-lived cache: the itinerary screen checks usage before every regen-style
+// tap, and each check was a full Firestore read the user waited on before the UI
+// responded. The check is advisory (the backend enforces the real limit and the
+// UI routes regen_limit_reached to the paywall), so 30s of staleness is safe.
+let usageStatusCache: { uid: string; value: UsageStatus; expires: number } | null = null;
+const USAGE_STATUS_TTL_MS = 30_000;
+
+export function invalidateUsageStatus() {
+  usageStatusCache = null;
+}
+
+export async function getUsageStatus(options?: { force?: boolean }): Promise<UsageStatus> {
   const user = getAuth().currentUser;
   if (!user) return { isPro: false, generationsLeft: FREE_MONTHLY_GENERATION_LIMIT, regensLeft: FREE_MONTHLY_REGEN_LIMIT, credits: 0, resetDate: nextMonthStart() };
+
+  if (!options?.force && usageStatusCache && usageStatusCache.uid === user.uid && Date.now() < usageStatusCache.expires) {
+    return usageStatusCache.value;
+  }
 
   try {
     const snap = await firestore().collection('users').doc(user.uid).get();
@@ -210,27 +229,30 @@ export async function getUsageStatus(): Promise<UsageStatus> {
     const monthlyLimit = isProTier ? PRO_MONTHLY_GENERATION_LIMIT : FREE_MONTHLY_GENERATION_LIMIT;
     const nextReset = isNewMonth ? nextMonthStart() : resetAt;
 
+    let status: UsageStatus;
     if (isProTier) {
-      return {
+      status = {
         isPro: true,
         generationsLeft: Math.max(0, monthlyLimit - generationsUsed),
         regensLeft: -1,
         credits,
         resetDate: nextReset,
       };
+    } else {
+      const regenResetAt = toDate(usage?.regenResetAt) ?? new Date(0);
+      const isRegenNewMonth = regenResetAt <= now;
+      const regensUsed = isRegenNewMonth ? 0 : (usage?.regenCount ?? 0);
+
+      status = {
+        isPro: false,
+        generationsLeft: Math.max(0, FREE_MONTHLY_GENERATION_LIMIT - generationsUsed),
+        regensLeft: Math.max(0, FREE_MONTHLY_REGEN_LIMIT - regensUsed),
+        credits,
+        resetDate: nextReset,
+      };
     }
-
-    const regenResetAt = toDate(usage?.regenResetAt) ?? new Date(0);
-    const isRegenNewMonth = regenResetAt <= now;
-    const regensUsed = isRegenNewMonth ? 0 : (usage?.regenCount ?? 0);
-
-    return {
-      isPro: false,
-      generationsLeft: Math.max(0, FREE_MONTHLY_GENERATION_LIMIT - generationsUsed),
-      regensLeft: Math.max(0, FREE_MONTHLY_REGEN_LIMIT - regensUsed),
-      credits,
-      resetDate: nextReset,
-    };
+    usageStatusCache = { uid: user.uid, value: status, expires: Date.now() + USAGE_STATUS_TTL_MS };
+    return status;
   } catch {
     // If Firestore fails, be permissive — backend will enforce the real limit
     return { isPro: false, generationsLeft: FREE_MONTHLY_GENERATION_LIMIT, regensLeft: FREE_MONTHLY_REGEN_LIMIT, credits: 0, resetDate: nextMonthStart() };

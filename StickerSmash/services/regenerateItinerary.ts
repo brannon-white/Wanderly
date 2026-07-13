@@ -7,12 +7,14 @@ const BASE_URL = 'https://us-central1-wanderly-dff52.cloudfunctions.net';
 async function getBearerToken(): Promise<string> {
   const currentUser = getAuth().currentUser;
   if (!currentUser) throw new Error('No Firebase auth user is currently signed in.');
-  return getIdToken(currentUser, true);
+  // No force-refresh: the SDK returns its cached ID token (auto-refreshed before
+  // expiry), so this resolves locally instead of adding a token-mint round trip
+  // to every regen/suggestion/optimize call.
+  return getIdToken(currentUser);
 }
 
 async function callEndpoint<T>(endpoint: string, body: Record<string, unknown>): Promise<T> {
-  const idToken = await getBearerToken();
-  const appCheckHeader = await getAppCheckHeader();
+  const [idToken, appCheckHeader] = await Promise.all([getBearerToken(), getAppCheckHeader()]);
   const response = await fetch(`${BASE_URL}/${endpoint}`, {
     method: 'POST',
     headers: {

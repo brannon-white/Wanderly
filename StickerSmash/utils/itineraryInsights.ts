@@ -61,8 +61,16 @@ function getTransitMinutes(activity: ItineraryActivity): number {
   if (!activity.transport?.length) return 0;
   let total = 0;
   for (const t of activity.transport) {
-    const numMatch = t.time.match(/(\d+)/);
-    if (numMatch) total += parseInt(numMatch[1], 10);
+    // Handle "1 hr 20 min", "2 hours", "45 min" — grabbing only the first number
+    // would read "1 hr 20 min" as 1 minute and miss real schedule conflicts.
+    const h = t.time.match(/(\d+)\s*h(?:r|our)?s?/i);
+    const m = t.time.match(/(\d+)\s*m(?:in)?/i);
+    if (h || m) {
+      total += (h ? parseInt(h[1], 10) * 60 : 0) + (m ? parseInt(m[1], 10) : 0);
+    } else {
+      const numMatch = t.time.match(/(\d+)/);
+      if (numMatch) total += parseInt(numMatch[1], 10); // bare number → assume minutes
+    }
   }
   return total;
 }

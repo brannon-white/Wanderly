@@ -181,7 +181,7 @@ export default function ActivityDetailSheet({
           onPress={() => Linking.openURL(buildExperienceUrl(activity.name, destinationName))}
         >
           <Ionicons name="compass-outline" size={16} color={PURPLE} />
-          <Text style={styles.linkRowText}>Find Experiences on Viator</Text>
+          <Text style={styles.linkRowText}>Find Experiences on GetYourGuide</Text>
           <Ionicons name="chevron-forward" size={14} color={PURPLE} />
         </TouchableOpacity>
       );

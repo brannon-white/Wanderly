@@ -429,7 +429,11 @@ export default function ItineraryScreen() {
   const [sheetTarget, setSheetTarget] = useState<SheetTarget | null>(null);
   const sheetRef = useRef<BottomSheet>(null);
   const [detailActivity, setDetailActivity] = useState<{ activity: ItineraryActivity; dayIndex: number; activityIndex: number } | null>(null);
+  // Keyed by activity id (not day/position): indexes shift when an activity is
+  // removed, reordered, or replaced, and a positional key would then serve
+  // suggestions computed for a different activity.
   const [preloadedSuggestions, setPreloadedSuggestions] = useState<Record<string, ItineraryActivity[]>>({});
+  const preloadInflight = useRef(new Set<string>());
   const [aiBarMessage, setAiBarMessage] = useState('');
   const [aiBarLoading, setAiBarLoading] = useState(false);
   const shareCardRef = useRef<View>(null);
@@ -481,7 +485,9 @@ export default function ItineraryScreen() {
             .doc(id)
             .get();
 
-          if (userSnapshot.exists) {
+          // exists is a method in RN Firebase v22 — the bare property is always
+          // truthy, which silently disabled the prebuilt fallback below.
+          if (userSnapshot.exists()) {
             const data = userSnapshot.data() as GeneratedItinerary | undefined;
             if (!cancelled && data) {
               setRemoteLoadError(null);
@@ -497,7 +503,7 @@ export default function ItineraryScreen() {
           .doc(id)
           .get();
 
-        if (!prebuiltSnapshot.exists) {
+        if (!prebuiltSnapshot.exists()) {
           if (!cancelled) {
             setRemoteItinerary(null);
             setRemoteLoadError(`No itinerary found for id "${id}".`);
@@ -638,15 +644,16 @@ export default function ItineraryScreen() {
   // there's no loading delay when the user taps the Similar button.
   useEffect(() => {
     if (!detailActivity || !id || isBrowsing) return;
-    const { dayIndex, activityIndex } = detailActivity;
-    const key = `${dayIndex}-${activityIndex}`;
-    if (preloadedSuggestions[key]) return; // already cached
+    const { activity, dayIndex, activityIndex } = detailActivity;
+    if (preloadedSuggestions[activity.id] || preloadInflight.current.has(activity.id)) return;
+    preloadInflight.current.add(activity.id);
     getSuggestedReplacements({ itineraryId: id, dayIndex, activityIndex, reason: 'similar_nearby', count: 3 })
       .then(({ candidates }) => {
-        setPreloadedSuggestions((prev) => ({ ...prev, [key]: candidates }));
+        setPreloadedSuggestions((prev) => ({ ...prev, [activity.id]: candidates }));
       })
-      .catch(() => {}); // silent — will fetch normally on tap if this fails
-  }, [detailActivity?.dayIndex, detailActivity?.activityIndex, id]);
+      .catch(() => {}) // silent — will fetch normally on tap if this fails
+      .finally(() => preloadInflight.current.delete(activity.id));
+  }, [detailActivity?.activity.id, id]);
 
   // Light preload: when the user opens a day, warm the "Similar" suggestions for
   // every activity on it (concurrency-capped to respect Places quota) so tapping
@@ -657,28 +664,34 @@ export default function ItineraryScreen() {
     let cancelled = false;
     const CONCURRENCY = 2;
     const pending = activities
-      .map((_, activityIndex) => activityIndex)
-      .filter((activityIndex) => !preloadedSuggestions[`${selectedDay}-${activityIndex}`]);
+      .map((act, activityIndex) => ({ act, activityIndex }))
+      .filter(({ act }) => !preloadedSuggestions[act.id] && !preloadInflight.current.has(act.id));
 
     (async () => {
+      // Don't warm anything for a free user who is out of regen credits —
+      // every call would just 402 and the sheet is paywalled anyway.
+      const usage = await getUsageStatus().catch(() => null);
+      if (cancelled || (usage && !usage.isPro && usage.regensLeft <= 0)) return;
       for (let i = 0; i < pending.length; i += CONCURRENCY) {
         if (cancelled) return;
         await Promise.all(
-          pending.slice(i, i + CONCURRENCY).map((activityIndex) =>
-            getSuggestedReplacements({ itineraryId: id, dayIndex: selectedDay, activityIndex, reason: 'similar_nearby', count: 3 })
+          pending.slice(i, i + CONCURRENCY).map(({ act, activityIndex }) => {
+            preloadInflight.current.add(act.id);
+            return getSuggestedReplacements({ itineraryId: id, dayIndex: selectedDay, activityIndex, reason: 'similar_nearby', count: 3 })
               .then(({ candidates }) => {
                 if (!cancelled) {
-                  setPreloadedSuggestions((prev) => ({ ...prev, [`${selectedDay}-${activityIndex}`]: candidates }));
+                  setPreloadedSuggestions((prev) => ({ ...prev, [act.id]: candidates }));
                 }
               })
-              .catch(() => {}),
-          ),
+              .catch(() => {})
+              .finally(() => preloadInflight.current.delete(act.id));
+          }),
         );
       }
     })();
 
     return () => { cancelled = true; };
-  }, [id, selectedDay, isBrowsing, activities.length]);
+  }, [id, selectedDay, isBrowsing, activities]);
 
   const getDayLabel = (index: number): string => {
     if (isBrowsing || !committedTrip) return (itinerary ? getItineraryDays(itinerary)[index]?.label : null) ?? `Day ${index + 1}`;
@@ -715,8 +728,21 @@ export default function ItineraryScreen() {
   };
 
   const handleDeleteTrip = () => {
-    if (committedTripId) removeTrip(committedTripId);
-    navigation.navigate('Index' as any, { screen: 'MyTrips' } as any);
+    Alert.alert(
+      'Delete Trip',
+      'Remove this trip from My Trips? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            if (committedTripId) removeTrip(committedTripId);
+            navigation.navigate('Index' as any, { screen: 'MyTrips' } as any);
+          },
+        },
+      ],
+    );
   };
 
   const handleRemoveActivity = useCallback(async (dayIndex: number, activityIndex: number) => {
@@ -762,7 +788,7 @@ export default function ItineraryScreen() {
     }
 
     logRegenAttempted('activity');
-    setSheetTarget({ dayIndex, activityIndex, activityName: activity.name, action });
+    setSheetTarget({ dayIndex, activityIndex, activityId: activity.id, activityName: activity.name, action });
     sheetRef.current?.expand();
   }, [handleRemoveActivity]);
 
@@ -1200,8 +1226,12 @@ export default function ItineraryScreen() {
                             const { itinerary: updated } = await editItineraryWithLanguage({ itineraryId: id, message, dayIndex: selectedDay, forceScopeToDay: true });
                             setRemoteItinerary(updated);
                           }
-                        } catch {
-                          Alert.alert('Could not apply changes', 'Please try again.');
+                        } catch (err) {
+                          if (err instanceof Error && /regen_limit_reached/i.test(err.message)) {
+                            setShowRegenPaywall(true);
+                          } else {
+                            Alert.alert('Could not apply changes', err instanceof Error ? err.message : 'Please try again.');
+                          }
                         } finally {
                           setAiBarLoading(false);
                         }
@@ -1340,7 +1370,7 @@ export default function ItineraryScreen() {
           target={sheetTarget}
           preloadedCandidates={
             sheetTarget?.action === 'similar_nearby'
-              ? preloadedSuggestions[`${sheetTarget.dayIndex}-${sheetTarget.activityIndex}`]
+              ? preloadedSuggestions[sheetTarget.activityId]
               : undefined
           }
           onConfirmed={handleConfirmed}

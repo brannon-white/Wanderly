@@ -28,7 +28,7 @@ export function useFeaturedItinerary() {
         // collection for safety if rotation hasn't seeded it yet.
         let featuredData: any = null;
         const currentDoc = await firestore().collection('featuredTrips').doc('current').get();
-        if (currentDoc.exists) {
+        if (currentDoc.exists()) {
           featuredData = currentDoc.data();
         } else {
           const featuredSnap = await firestore().collection('featuredTrips').limit(1).get();
@@ -41,7 +41,7 @@ export function useFeaturedItinerary() {
           .collection('prebuiltItineraries')
           .doc(featuredData.tripId)
           .get();
-        if (!itinerarySnap.exists) throw new Error('Itinerary not found');
+        if (!itinerarySnap.exists()) throw new Error('Itinerary not found');
         const itineraryData = itinerarySnap.data();
         setItinerary(itineraryData);
 

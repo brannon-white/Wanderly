@@ -20,8 +20,12 @@ export async function generateItinerary(
     throw new Error('No Firebase auth user is currently signed in.');
   }
 
-  const idToken = await getIdToken(currentUser, true);
-  const appCheckHeader = await getAppCheckHeader();
+  // Cached ID token (auto-refreshed by the SDK) — forcing a refresh here added a
+  // full token-mint round trip before the generation request even started.
+  const [idToken, appCheckHeader] = await Promise.all([
+    getIdToken(currentUser),
+    getAppCheckHeader(),
+  ]);
   const response = await fetch(
     'https://us-central1-wanderly-dff52.cloudfunctions.net/generateItineraryHttp',
     {

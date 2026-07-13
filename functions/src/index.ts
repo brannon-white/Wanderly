@@ -138,6 +138,30 @@ async function consumeGenerationCredit(state: GenerationCreditState): Promise<vo
   );
 }
 
+// Read-only gate: throws REGEN_LIMIT_REACHED when a free user is out of regens,
+// without consuming a credit. Used by read endpoints (suggestion fetches) so
+// browsing candidates never spends the credit — only a confirmed change does.
+async function assertRegenCreditAvailable(uid: string): Promise<void> {
+  const db = getFirestore();
+  const snap = await db.collection("users").doc(uid).get();
+  const data = snap.data() ?? {};
+
+  const tier: string = data.subscription?.tier ?? "free";
+  const expiresAt: Timestamp | null = data.subscription?.expiresAt ?? null;
+  const isPro = tier === "pro" && expiresAt !== null && expiresAt.toDate() > new Date();
+  if (isPro) return;
+
+  const now = new Date();
+  const regenResetAt: Date = data.usage?.regenResetAt
+    ? (data.usage.regenResetAt as Timestamp).toDate()
+    : new Date(0);
+  const isNewMonth = regenResetAt <= now;
+  const currentRegens: number = isNewMonth ? 0 : (data.usage?.regenCount ?? 0);
+  if (currentRegens >= FREE_MONTHLY_REGEN_LIMIT) {
+    throw Object.assign(new Error("Monthly regeneration limit reached"), { code: "REGEN_LIMIT_REACHED" });
+  }
+}
+
 async function checkAndConsumeRegenCredit(uid: string): Promise<void> {
   const db = getFirestore();
   const userRef = db.collection("users").doc(uid);
@@ -191,6 +215,7 @@ import {
   PROMPT_VERSION,
 } from "./itineraryGeneration";
 import { extractSeedDays, type SeedDay } from "./orchestration/tripPlanning";
+import { TtlCache, buildSuggestionKey, withInflightDedupe } from "./orchestration/suggestionCache";
 import { FAST_MODEL_NAME } from "./constants";
 import {
   callableGenerateItineraryResponseSchema,
@@ -225,6 +250,13 @@ getFirestore().settings({ ignoreUndefinedProperties: true });
 const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
 const googlePlacesApiKey = defineSecret("GOOGLE_PLACES_API_KEY");
 const pexelsApiKey = defineSecret("PEXELS_API_KEY");
+
+// Per-instance cache for replacement suggestions (the endpoint keeps one warm
+// instance via minInstances, so this covers the preload → tap double-fetch and
+// repeat day-opens without a second Anthropic/Places round trip).
+type SuggestionCandidates = Awaited<ReturnType<typeof getSuggestedReplacements>>;
+const suggestionCache = new TtlCache<SuggestionCandidates>(15 * 60 * 1000, 300);
+const suggestionInflight = new Map<string, Promise<SuggestionCandidates>>();
 
 type HttpErrorDetails = {
   status: number;
@@ -1030,11 +1062,34 @@ export const getSuggestedReplacementsHttp = functionsV1
       const parsed = getSuggestedReplacementsRequestSchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.message }); return; }
       const { itineraryId, dayIndex, activityIndex, reason, count } = parsed.data;
-      await checkAndConsumeRegenCredit(uid);
+      // Read-only: browsing candidates costs no regen credit (the credit is
+      // consumed when a replacement is confirmed). Still gate on having a
+      // credit so out-of-quota users can't run unlimited LLM suggestion calls.
+      await assertRegenCreditAvailable(uid);
       const snap = await getFirestore().collection("users").doc(uid).collection("itineraries").doc(itineraryId).get();
       if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }
+      const itineraryData = snap.data() as GeneratedItinerary & { updatedAt?: Timestamp };
+      const cacheKey = buildSuggestionKey({
+        uid,
+        itineraryId,
+        dayIndex,
+        activityIndex,
+        reason,
+        count,
+        activityName: getAllDays(itineraryData)[dayIndex]?.activities?.[activityIndex]?.name,
+        updatedAtMs: itineraryData.updatedAt?.toMillis?.() ?? 0,
+      });
+      const cached = suggestionCache.get(cacheKey);
+      if (cached) {
+        logger.info("getSuggestedReplacementsHttp cache hit", { uid, itineraryId, dayIndex, activityIndex, reason });
+        res.status(200).json({ candidates: cached });
+        return;
+      }
       logger.info("getSuggestedReplacementsHttp", { uid, itineraryId, dayIndex, activityIndex, reason });
-      const candidates = await getSuggestedReplacements({ itinerary: snap.data() as any, dayIndex, activityIndex, reason, count, googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY });
+      const candidates = await withInflightDedupe(suggestionInflight, cacheKey, () =>
+        getSuggestedReplacements({ itinerary: itineraryData, dayIndex, activityIndex, reason, count, googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY })
+      );
+      suggestionCache.set(cacheKey, candidates);
       res.status(200).json({ candidates });
     } catch (error) {
       const e = classifyHttpError(error);
@@ -1060,6 +1115,9 @@ export const confirmActivityReplacementHttp = functionsV1
       const parsed = confirmActivityReplacementRequestSchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.message }); return; }
       const { itineraryId, dayIndex, activityIndex, candidateActivity } = parsed.data;
+      // The regen credit is charged here — on the confirmed change — not on the
+      // read-only suggestion fetches that precede it.
+      await checkAndConsumeRegenCredit(uid);
       const itineraryRef = getFirestore().collection("users").doc(uid).collection("itineraries").doc(itineraryId);
       const snap = await itineraryRef.get();
       if (!snap.exists) { res.status(404).json({ error: "Itinerary not found." }); return; }

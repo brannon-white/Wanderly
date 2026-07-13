@@ -47,6 +47,7 @@ const REASON_FOR_ACTION: Record<ActivityAction, string | undefined> = {
 export interface SheetTarget {
   dayIndex: number;
   activityIndex: number;
+  activityId: string;
   activityName: string;
   action: ActivityAction;
 }
@@ -145,7 +146,13 @@ export default function ReplaceSuggestionsSheet({
     } catch (err) {
       setState('ready');
       setConfirmingIndex(null);
-      Alert.alert('Could not replace activity', err instanceof Error ? err.message : 'Please try again.');
+      // The regen credit is charged on confirm, so the limit can surface here.
+      if (err instanceof Error && /regen_limit_reached/i.test(err.message)) {
+        sheetRef.current?.close();
+        onPaywallNeeded?.();
+      } else {
+        Alert.alert('Could not replace activity', err instanceof Error ? err.message : 'Please try again.');
+      }
     }
   }, [target, state, itineraryId, onConfirmed, sheetRef]);
 

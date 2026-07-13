@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
+  Alert,
 } from 'react-native';
 import { Utensils, Car, Map, Coffee, Leaf, Music2, Mountain, DollarSign } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
@@ -60,8 +61,14 @@ export default function ItineraryRefinementBar({ itineraryId, dayIndex, onUpdate
         forceScopeToDay: true,
       });
       onUpdated(updated);
-    } catch {
-      // Silently fail — the AI bar below can show errors
+    } catch (err) {
+      // A tap that ends with no visible change and no message reads as a dead
+      // button — surface the failure like the other regen actions do.
+      if (err instanceof Error && /regen_limit_reached/i.test(err.message)) {
+        onPaywallNeeded();
+      } else {
+        Alert.alert('Could not refine day', err instanceof Error ? err.message : 'Please try again.');
+      }
     } finally {
       setLoadingPill(null);
     }
