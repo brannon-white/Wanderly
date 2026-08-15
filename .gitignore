@@ -25,7 +25,9 @@ ios/Pods/
 
 # Firebase/Google config (if you have these)
 google-services.json
-GoogleService-Info.plist
+# GoogleService-Info.plist is intentionally NOT ignored: the iOS build needs it
+# at ios/Wanderly/GoogleService-Info.plist, and ignoring it kept it out of every
+# EAS upload (see the 2026-06-10 untrack commit that broke the build).
 serviceAccountKey.json
 scripts/serviceAccount.json
 seedFirestore.js
