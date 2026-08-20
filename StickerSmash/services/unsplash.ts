@@ -1,10 +1,14 @@
 import { cacheGet, cacheSet } from '@/utils/cache';
 
-const ACCESS_KEY = 'REDACTED_ROTATED_KEY';
+// Set EXPO_PUBLIC_UNSPLASH_KEY to enable stock-photo lookups. When it's absent
+// every lookup resolves to null and the UI falls back to its category-icon
+// placeholders, so the app degrades cleanly rather than breaking.
+const ACCESS_KEY = process.env.EXPO_PUBLIC_UNSPLASH_KEY ?? '';
 const BASE = 'https://api.unsplash.com/search/photos';
 const PHOTO_TTL_DAYS = 30;
 
 export async function searchPhoto(query: string): Promise<string | null> {
+  if (!ACCESS_KEY) return null;
   const key = `photo:${query}`;
   const cached = await cacheGet<string>(key);
   if (cached) return cached;
@@ -24,6 +28,7 @@ export async function searchPhoto(query: string): Promise<string | null> {
 }
 
 export async function searchPhotos(query: string, count = 4): Promise<string[]> {
+  if (!ACCESS_KEY) return [];
   const key = `photos:${query}:${count}`;
   const cached = await cacheGet<string[]>(key);
   if (cached) return cached;

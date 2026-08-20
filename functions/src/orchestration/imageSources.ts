@@ -2,13 +2,11 @@ import * as logger from "firebase-functions/logger";
 
 // Stock-photo sources for imagery we can't get a real photo for (city heroes, and
 // venues without a Google Places photo such as trailheads). Pexels is primary —
-// Unsplash-grade quality, far higher free limits, permissive license — with the
-// existing public Unsplash demo key as a last-resort fallback.
+// Unsplash-grade quality, far higher free limits, permissive license — with
+// Unsplash as an optional last-resort fallback.
 
 const PEXELS_SEARCH = "https://api.pexels.com/v1/search";
 const UNSPLASH_SEARCH = "https://api.unsplash.com/search/photos";
-// Already public in the client bundle; only used as a fallback when Pexels misses.
-const UNSPLASH_ACCESS_KEY = "REDACTED_ROTATED_KEY";
 
 // A beautiful, landscape stock photo for `query`, or null. Pexels src URLs are
 // permanent CDN links, safe to store directly.
@@ -32,8 +30,10 @@ export async function pexelsImage(query: string): Promise<string | null> {
 }
 
 export async function unsplashImage(query: string): Promise<string | null> {
+  const accessKey = process.env.UNSPLASH_ACCESS_KEY;
+  if (!accessKey) return null; // not configured — Pexels already covers this path
   try {
-    const url = `${UNSPLASH_SEARCH}?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape&client_id=${UNSPLASH_ACCESS_KEY}`;
+    const url = `${UNSPLASH_SEARCH}?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape&client_id=${accessKey}`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const data = await res.json() as { results?: Array<{ urls: { regular: string } }> };

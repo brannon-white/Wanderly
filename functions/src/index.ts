@@ -250,6 +250,8 @@ getFirestore().settings({ ignoreUndefinedProperties: true });
 const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
 const googlePlacesApiKey = defineSecret("GOOGLE_PLACES_API_KEY");
 const pexelsApiKey = defineSecret("PEXELS_API_KEY");
+// Optional fallback behind Pexels; unset simply disables the Unsplash lookup.
+const unsplashAccessKey = defineSecret("UNSPLASH_ACCESS_KEY");
 
 // Per-instance cache for replacement suggestions (the endpoint keeps one warm
 // instance via minInstances, so this covers the preload → tap double-fetch and
@@ -450,7 +452,7 @@ export const generateItineraryV1 = functionsV1
   .runWith({
     maxInstances: 10,
     timeoutSeconds: 300,
-    secrets: [anthropicApiKey, googlePlacesApiKey, pexelsApiKey],
+    secrets: [anthropicApiKey, googlePlacesApiKey, pexelsApiKey, unsplashAccessKey],
     serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
   })
   .https.onCall(async (data, context): Promise<CallableGenerateItineraryResponse> => {
@@ -477,7 +479,7 @@ export const generateItineraryHttp = functionsV1
     // top of the initial Sonnet call; the pipeline self-imposes a tighter wall-clock
     // budget (REPAIR_DEADLINE_MS) so it ships best-effort well before this hard cap.
     timeoutSeconds: 540,
-    secrets: [anthropicApiKey, googlePlacesApiKey, pexelsApiKey],
+    secrets: [anthropicApiKey, googlePlacesApiKey, pexelsApiKey, unsplashAccessKey],
     serviceAccount: "588805144943-compute@developer.gserviceaccount.com",
   })
   .https.onRequest(async (req, res) => {
@@ -1470,7 +1472,7 @@ export const placePhotoHttp = functionsV1
 // this instead of hitting a stock API per view — each destination is fetched once.
 export const destinationHeroHttp = functionsV1
   .region("us-central1")
-  .runWith({ maxInstances: 10, timeoutSeconds: 30, secrets: [pexelsApiKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
+  .runWith({ maxInstances: 10, timeoutSeconds: 30, secrets: [pexelsApiKey, unsplashAccessKey], serviceAccount: "588805144943-compute@developer.gserviceaccount.com" })
   .https.onRequest(async (req, res) => {
     res.set("Access-Control-Allow-Origin", "*");
     if (req.method === "OPTIONS") { res.set("Access-Control-Allow-Headers", "Content-Type"); res.status(204).send(""); return; }
