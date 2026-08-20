@@ -4,19 +4,7 @@
 complete, day-by-day itinerary built from real, verified venues — then reshape it by just
 saying what you want changed.
 
-<!--  DEMO VIDEO  ────────────────────────────────────────────────────────────
-  To turn the still below into an inline player:
-    1. Open  https://github.com/brannon-white/Wanderly/issues/new
-    2. Drag  ~/Repos/Portfolio/assets/wanderly-demo.mp4  into the comment box
-    3. Wait for it to finish uploading — GitHub inserts a URL like
-             https://github.com/user-attachments/assets/xxxxxxxx
-    4. Replace the whole <p align="center">…</p> block below with that bare URL
-       on its own line. GitHub renders it as a video player.
-    5. Close the issue tab WITHOUT submitting — the upload persists.
-──────────────────────────────────────────────────────────────────────────── -->
-<p align="center">
-  <img src="docs/demo-poster.jpg" alt="Wanderly — generated Tokyo itinerary" width="300">
-</p>
+https://github.com/user-attachments/assets/efee370b-62e1-4747-b981-27aa6044d97b
 
 <p align="center">
   <a href="./ARCHITECTURE.md"><strong>Architecture &amp; AI pipeline →</strong></a>
